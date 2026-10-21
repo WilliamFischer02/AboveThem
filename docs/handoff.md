@@ -3,79 +3,71 @@
 > Update this file at the end of **every** session. Future-you (or the next
 > Claude Code session) reads this first.
 
-## State (2026-10-21, end of session 1, ~10:25)
+## State (2026-10-21, session 3, evening)
 
-Phases 0–2 done, Phase 3 core (chat reading + claim parsing) live, parts of
-Phase 4/5 UI (ghost mode, overlay) in. Everything below was verified in
-William's live public lobbies tonight (Skeld and Polus), from the NDJSON logs.
+Phases 0–3 core live. Session 3 fixed the things William listed from play: phases no
+longer snap back to the lobby, the vote grid is matched by identity (headshots stay with
+their player), role reads cannot be flipped by chat, marks persist on the cards, chat is
+a game-styled dock with live translation, and the UI lost its diagnostic clutter.
+Everything below was verified in William's live public lobbies (Skeld) from the NDJSON
+logs unless marked UNVERIFIED.
 
 ### What runs automatically now (zero clicks)
 | Signal | Source | Event → effect |
 |---|---|---|
 | Game window | `capture.rs` (Windows Graphics Capture) | auto-start capture + watcher every 8 s |
-| Lobby code, map name, lobby settings ("X set to Y") | lobby settings panel + announcements | `game://lobby`, `game://map`, `game://settings` → match settings |
-| Lobby roster | floating names over crewmates (`lobby.rs`) | match created in the lobby (needs 2 consecutive sightings of a name) |
-| Already in a game | task bar / role card | provisional match with a placeholder "me", filled at the next meeting |
-| Role card | "CREWMATE"/"IMPOSTOR" (both layouts) | my role |
-| Round / meeting / vote / eject / game over | task bar, header, eject text, VICTORY/DEFEAT | phases with hysteresis |
-| Meeting reason | red banner | body vs button |
-| Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, slots, dead, reporter, colours (voted over 3 reads), headshots |
-| "DEAD" header | meeting screen when I'm dead | ghost mode |
-| Room popup | bottom-centre room name on entry | my room (anchors "with me" and auto-sightings) |
-| Nearby names | floating names during the round | sightings in my room, 1 per player per room per 20 s |
-| My task list | top-left | enables the common-task rule; "Fake Tasks" → impostor |
-| Chat | `chat.rs` whenever the panel is open and changed | chat lines + **claims** via `src/engine/chatClaims.ts` (location, companion, sighting, accusation w/ reason, clear, defense, task, body) |
-| Chat sender colour | crewmate icon beside the bubble (plain palette) | new players discovered from chat |
+| Lobby code, map name, lobby settings | lobby panel + announcements | `game://lobby`, `game://map`, `game://settings` |
+| Lobby roster | floating names (`lobby.rs`) | match created in the lobby (2 consecutive sightings) |
+| Phase | task bar **or** USE/REPORT/KILL/SABOTAGE = round; header **or** voting timer = meeting (sticky under chat); eject text; room code = lobby; VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
+| Role | CREWMATE/IMPOSTOR word, or teal/red letters on the black role screen; KILL/SABOTAGE buttons; red floating names; "Fake Tasks:" header (round only) | `game://role`; user toggle locks it (`myRoleLocked`) |
+| Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, colours (voted), dead (X **or** greyed plain card), headshots, **icon dHash**, dim ratio |
+| Grid → roster | `src/engine/rosterMatch.ts` | name × icon hash × colour × same-meeting slot; slots re-read every meeting; roster confidence dot |
+| "DEAD" header, room popup, nearby names, my task list, chat → claims | as before | task list not read under meetings / chat |
+| Chat translation | `translate/google.rs` (keyless) after an English-word heuristic | `chatPatch {translated, lang}` under the bubble |
+| New game | role card after a played match, or the lobby | roll-over keeps names/colours/headshots, wipes the slate |
 
 ### Detection facts measured on real frames (don't re-derive)
-- Vote-grid icons render ≈ 0.75·palette + 60 (25 % white lift); dead cards ≈ 0.45·that + 20
-  under a dark overlay. Chat/lobby sprites use the plain palette.
-- Dead X: dim orange-red band (R 100–175, G 40–100, B 25–90, R−G ≥ 35) along the icon
-  diagonals; score ≥ 700 (1080p-normalised) = dead. Exact on 5/5 dead cards across 3 frames.
-- Level badge (teal-green "Lv" circle, top-left of the card) = occupancy; names on busy
-  cosmetic cards need the white-text binarisation fallback; 2-letter names may come back
-  as "#slot" placeholders.
-- Colour: 25/25 alive correct on fixtures except a player holding a sign over the body.
-  Warm colours remain the weak spot; the user's colour picks are stored as calibration
-  samples (`%APPDATA%\AboveThem\color_calibration.json`) and matched first.
-- Chat panel open: "Send" button OR the "N/100" counter. Grid reads under chat are junk —
-  both the watcher and `read_roster` refuse when either is visible.
-- Room popup OCR region (600,950,720,60); role card (300,60,1320,460) at 1×; task list at 3×.
+- Vote-grid icons ≈ 0.75·palette + 60; dead cards ≈ 0.45·that + 20; dead X = dim orange-red
+  band on the icon diagonals (score ≥ 700). Plain dead card strip ≈ 0.53 of the brightest
+  card (threshold 0.74, only when the strip is neutral: cosmetic nameplates are coloured).
+- Icon dHash (cell-local 6..134 × 2..90): same card across the fade-in frames ≤ 12 bits apart
+  and always closer than any other card (test on `meeting_vote_grid` / `_2`).
+- Role screen: ≥ 75 % black in the role-card region with ≥ 300 sampled teal pixels on both
+  role-card fixtures; lobby/round/meeting/eject/vote frames never look dark.
+- Chat panel open: "Send" button or the "N/100" counter. The panel covers the meeting header
+  but not the voting timer (1300,915,430,60).
+- Grid cells fill without gaps: a lone later cell is UI text (the frontend drops it).
 - Only `en-US` OCR is installed on this PC.
 
-### UI (meeting-tablet look)
-Vote card first (big, red when confident), "Room momentum" tally (who pushes whom vs.
-the evidence), Say/Ask, chat feed with parsed tags, claim entry, vote result. Roster
-cards: in-game headshot (cropped from the vote grid), slot digit, quick `here` /
-`with me` / `sus`, menu with room grid, colour picker (locks + calibrates), rename,
-remove. Ghost mode when dead (killer pick → certain impostor; signal helper for the
-image role, uncalibrated). Overlay window: clock, my room, slot legend with prime/clear
-marks. Setup screen leads with auto status; manual setup folded away. "Rescan names".
+### UI (meeting-tablet look, thin window)
+Top bar: brand, role pill, alive/imp, phase pill (CREWMATE teal / IMPOSTOR red at round
+start, VICTORY blue / DEFEAT red at the end). Then: meeting panel (vote card, room
+momentum, Say / Ask with a copy button per line, watch-for folded, manual claim/vote
+folded), roster (headshot cards with `here` / `with me` and `sus` / `clear` / `hard`
+toggles; marks recolour the card and persist until the game ends; confidence dot), then
+folded Timeline / Controls / Screen reading / Hotkeys. Chat dock pinned at the bottom
+(white outlined bubbles, headshot outside, translation line); click = full window, click
+the bar = shrink. Ghost and impostor panels unchanged apart from removed explainer text.
 
 ### Known gaps / next
-- Game-over detection relies on VICTORY/DEFEAT text in the role-card region — never
-  seen live yet. Matches stay open; a new lobby creates a new match.
-- Every Rust rebuild restarts the app and loses the in-memory match (log persists);
-  frontend-only edits hot-reload and *also* reset the store when `store.ts`
-  dependents change. Don't edit during William's games unless asked.
-- Ejection name match still misses sometimes (animated text); loosened to alive
-  players ≥ 0.4 similarity. Candidate fix: also read the ejected crewmate's colour
-  on the eject screen.
-- Chat: OCR drops the last letter under the icon on right bubbles ("hell"); vote-grid
-  names bleed through the translucent panel (filtered by line height); names with
-  diacritics vary between reads (fuzzy snap handles most).
-- Signal helper (ghost image role) and sabotage banner: no frames yet.
-- Translation (Phase 3b) not started; `whatlang` + DeepL scaffolding exists in Rust.
-- Accessory database idea: every headshot PNG we crop is a labelled sample; not stored
-  yet (avatars live in memory only).
-- MIRA/Airship/Fungle map data still stubs; Polus wiki-verified (durations guessed).
+1. **Victory / defeat screen never seen live.** Colour fallback is UNVERIFIED; once a frame
+   exists add it to the fixtures and a `screen_accent` test. Impostor-side "Victory" is
+   assumed red (mapped to victory when myRole = impostor).
+2. Chat dock expanded view not visually checked yet (only the collapsed state was seen live).
+3. Translation only exercised on English lines (detected `en`, no change); a non-English
+   lobby will show the first real translations — watch for the endpoint rate-limiting.
+4. Many lobby-created players show grey/"(Black)" until the grid colour-votes settle;
+   consider taking the chat-icon colour on the first read when the card colour is a placeholder.
+5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
+   now resume from `avatars_<id>.json`).
+6. Signal helper (ghost image role) and sabotage banner: still no frames.
 
-## Toolchain (unchanged, see git history): Node 24.19, Rust 1.97.1, Tauri 2.12.4,
-windows 0.62.2, windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489,
-1920×1080 borderless on the primary monitor; app on the left monitor (−1900,100).
-Tests: Vitest 41, Rust 26 (OCR against 20 real frames in `src-tauri/fixtures/`).
+## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
+windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless
+on the primary monitor; app on the left monitor. Tests: Vitest 53, Rust 28 (OCR against the
+20 real frames in `src-tauri/fixtures/`).
 
 ## Open questions for William
-- Does the overlay show on top of the game? Do chords work in-game? (Both unverified.)
-- When dead with the image-sending role, leave that panel open ~5 s so it can be calibrated.
-- A victory/defeat screen frame is still missing (stay on it a few seconds once).
+- Stay on the victory/defeat screen a few seconds once so a frame can be captured.
+- Does the copy button paste cleanly into the game chat? (Clipboard via WebView2.)
+- Is the collapsed chat dock the right height (168 px) for the thin window?

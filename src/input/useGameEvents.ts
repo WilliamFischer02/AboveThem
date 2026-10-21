@@ -218,9 +218,18 @@ export function useGameEvents() {
 
       guard(await listen<{ source: 'lobby' | 'grid'; entries: RosterEntry[] }>('game://roster', async e => {
         const s = useMatch.getState();
-        const { source, entries } = e.payload;
+        const { source } = e.payload;
+        let entries = e.payload.entries;
         // A grid read with several unreadable cells is occluded (chat panel, fade) — ignore it.
         if (source === 'grid' && entries.filter(x => x.name.startsWith('#')).length >= 3) return;
+        // The grid fills without gaps: a lone card after a gap is UI text misread as a card.
+        if (source === 'grid') {
+          const sorted = [...entries].sort((a, b) => a.index - b.index);
+          const keep: RosterEntry[] = [];
+          for (const en of sorted) { if (en.index !== keep.length) break; keep.push(en); }
+          entries = keep;
+          if (entries.length < 3) return;
+        }
         const fromLobby = source === 'lobby';
         const meetingNow = s.match?.phase.meeting ?? 0;
         if (!s.match) {
@@ -441,7 +450,7 @@ export function useGameEvents() {
           // Re-reads of the same bubble can lose the name line: a long identical text seen recently is a duplicate.
           const recent = m.chat.slice(-25);
           const nt = norm(msg.text);
-          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || nt.startsWith(o) && o.length >= 12; })) continue;
+          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || (nt.startsWith(o) && o.length >= 12) || similarity(nt, o) >= 0.85; })) continue;
           const others = Object.values(m.players).filter(p => !p.isMe);
           // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
           if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;

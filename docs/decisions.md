@@ -161,3 +161,62 @@ are refused while the panel is open (Send button or "N/100" counter visible).
 **Why:** colours from icons are unreliable under cosmetics; the vote-grid order is
 what the player sees every meeting. `Ctrl+Alt+<digit>` targets slot N; colour
 letters remain. Re-reads match by slot before name.
+
+## ADR-017 — Phases move only on positive evidence
+**Date:** 2026-10-21 (session 3)
+**Status:** accepted (live-tested in one public lobby)
+**Why:** the watcher used to fall back to Lobby whenever no marker was visible,
+so the map screen, settings, the task-bar-off setting or an open chat panel (which
+covers the meeting header) reset the match mid-game. Now each phase needs its own
+marker: room code = lobby, role card = round start, task bar *or* USE/REPORT/KILL/
+SABOTAGE buttons = round, header *or* voting timer = meeting (and a meeting stays a
+meeting while chat is open), VICTORY/DEFEAT = game over. "Nothing recognisable"
+keeps the current phase for up to 120 s before counting as the lobby.
+**Consequences:** a role card seen after a played game means "new game" (the lobby
+roll-over no longer depends on seeing the lobby). Quitting to the main menu looks like
+"round" for two minutes; Close match is the manual exit.
+
+## ADR-018 — Role reveal and end screen are read by colour as well as text
+**Date:** 2026-10-21 (session 3)
+**Status:** accepted for the role card (fixtures); UNVERIFIED for victory/defeat
+**Why:** both screens are large coloured letters on black. `screen_accent` counts
+teal / blue / red text pixels on a ≥ 75 % dark region; teal = crewmate, red =
+impostor (at game start) or defeat (in game), blue = victory. OCR words win when read;
+the colour stands in when they are not. The user's manual role toggle locks the role
+for the match so automatic reads cannot flip it back.
+**Consequences:** `game://game_over` carries `{outcome, accent}`; the phase pill shows
+VICTORY (blue) / DEFEAT (red). The "Fake Tasks" role signal only fires on the real
+header during a round (chat about "faking" overlaps the task-list region in meetings).
+
+## ADR-019 — Vote-grid cards are matched by identity, slots are per meeting
+**Date:** 2026-10-21 (session 3)
+**Status:** accepted (unit-tested on real-frame hashes; live-tested)
+**Why:** the meeting grid re-sorts every meeting (alive first, dead last), so slot-based
+matching across meetings swapped headshots and death marks between players. Each card
+now carries a dHash of its icon (stable across slots, dimming and the fade-in) and a
+dim ratio; `src/engine/rosterMatch.ts` scores name × icon × colour × same-meeting slot
+and assigns greedily. A greyed plain card counts as dead even without the X. Headshots,
+hashes and body samples are cached per match on disk so restarts keep the faces.
+**Consequences:** `Player.slotMeeting`; hotkey slot digits always follow the current
+grid. A roster-confidence dot replaces the diagnostic status line.
+
+## ADR-020 — User marks are first-class and persistent; hard clear is a hard fact
+**Date:** 2026-10-21 (session 3)
+**Status:** accepted
+**Why:** William wants to see at a glance how he judged each player in earlier
+meetings. Every card has sus / round clear / hard clear toggles (latest mark wins,
+toggling again unmarks); the card's look changes per mark and stays until the game ends.
+`hardClear` joins certain-crew in `hardFacts` (the user saw it themselves); `clear` stays
+the soft weight. Say/Ask lines are plain sentences with a copy button so nothing but the
+sentence reaches the clipboard.
+
+## ADR-021 — Translation: keyless Google endpoint by default
+**Date:** 2026-10-21 (session 3)
+**Status:** accepted (works live; unofficial endpoint)
+**Why:** LibreTranslate needs a server and DeepL a key; neither was configured, so
+translation never ran. `translate_a/single?client=gtx` needs nothing, returns the
+detected language (whatlang cannot on 20-character lines) and handles the volume of a
+meeting. A quick English-word heuristic keeps most lines local. DeepL / Libre remain
+selectable in settings.json (`translate.provider`, `deeplKey`, `libreEndpoint`).
+**Consequences:** the endpoint may change without notice; the UI degrades to the
+original text.
