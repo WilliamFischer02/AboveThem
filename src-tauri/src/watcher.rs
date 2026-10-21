@@ -175,7 +175,9 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
             .map(|w| if fuzzy_best(w, ["IMPOSTOR"]).unwrap().1 > fuzzy_best(w, ["CREWMATE"]).unwrap().1 { "impostor" } else { "crew" });
-        let role_card = !meeting && role_word.is_some() && !role_text.contains("WHO IS");
+        // A role card can only appear coming out of the lobby or an ejection, never mid-round.
+        let in_round = matches!(detector.current, Some(Phase::Round));
+        let role_card = !meeting && !in_round && role_word.is_some() && !role_text.contains("WHO IS");
         let eject = parse_eject(&text("eject_text"));
         let lobby_code = lobby_code_of(&text("lobby_code"));
 
