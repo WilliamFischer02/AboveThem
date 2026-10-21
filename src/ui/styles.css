@@ -312,3 +312,9 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .panel.hero h2 { color: #fff; text-shadow: 0 2px 0 #1a1d23; }
 
 .chip { grid-template-columns: 62px 1fr; }
+
+.vote-card.big { padding: 12px; margin-bottom: 8px; animation: phasepop 200ms ease-out; }
+.vote-card.big.go { background: #7a1a20; box-shadow: 0 0 0 3px #d8232a, 0 4px 0 #1a1d23; }
+.tl.push.agree { border-color: #2bd45a; }
+.tl.push.disagree { border-color: #d8232a; }
+.tl.push.neutral { border-color: #f5b54b; }

@@ -3,6 +3,8 @@ import type { ClaimType, EvidenceItem, MeetingScript, PlayerId, SuspectScore } f
 import { useMatch } from '../../state/store';
 import { newId } from '../../state/events';
 import { verifyClaims } from '../../engine/contradictions';
+import { pushTally } from '../../engine/chatClaims';
+import { PlayerIcon } from './Crewmate';
 import { Crewmate } from './Crewmate';
 
 function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceItem> }) {
@@ -31,6 +33,14 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
       <h3>Meeting {script.meeting + 1}</h3>
       <div className="headline" style={{ marginBottom: 8 }}>{script.headline}</div>
       {ghost && <div className="muted small">You can't talk or vote. The ranking keeps updating from what you log; use it to pick your signal.</div>}
+      <div className={`vote-card big ${target === 'skip' ? 'skip' : 'go'}`}>
+        {target !== 'skip' && <PlayerIcon id={target} color={match.players[target]?.color ?? 'unknown'} size={48} />}
+        <div className="col" style={{ gap: 2 }}>
+          <div style={{ fontWeight: 800, fontSize: 22 }}>{target === 'skip' ? 'SKIP' : `VOTE ${name(target)}`} <span className="muted" style={{ fontSize: 14 }}>({Math.round(script.vote.confidence * 100)}%)</span></div>
+          <div className="small">{script.vote.reason}</div>
+        </div>
+      </div>
+      <PushTally recommended={target} />
       {!ghost && <div className="col">
         <h3>Say</h3>
         {script.say.map((s, i) => <div key={i} className="script-line"><span className="text">{s.text}</span><Why ids={s.why} evidence={evidence} /></div>)}
@@ -41,15 +51,7 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
             <Why ids={q.why} evidence={evidence} />
           </div>
         ))}
-        <h3>Vote</h3>
-        <div className={`vote-card ${target === 'skip' ? 'skip' : 'go'}`}>
-          {target !== 'skip' && <Crewmate color={match.players[target]?.color ?? 'unknown'} size={40} />}
-          <div className="col" style={{ gap: 2 }}>
-            <div style={{ fontWeight: 700, fontSize: 17 }}>{target === 'skip' ? 'SKIP' : `Vote ${name(target)}`} <span className="muted">({Math.round(script.vote.confidence * 100)}%)</span></div>
-            <div className="small">{script.vote.reason}</div>
-            {script.vote.alternative && <div className="small muted">alt: {name(script.vote.alternative)}</div>}
-          </div>
-        </div>
+        {script.vote.alternative && <div className="small muted">alternative: {name(script.vote.alternative)}</div>}
         {script.watch.length > 0 && (
           <>
             <h3>Watch for</h3>
@@ -61,6 +63,31 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
       {!ghost && <ClaimEntry />}
       {!ghost && <VoteOutcome />}
     </section>
+  );
+}
+
+/** Who the room is pushing right now vs. what the evidence says. Updates live as chat is read. */
+function PushTally({ recommended }: { recommended: string }) {
+  const match = useMatch(s => s.match)!;
+  const meeting = match.phase.meeting ?? 0;
+  const tally = pushTally(match, meeting);
+  if (tally.length === 0) return null;
+  const name = (id: string) => match.players[id]?.name ?? id;
+  return (
+    <div className="col" style={{ gap: 4 }}>
+      <h3>Room momentum</h3>
+      {tally.slice(0, 4).map(t => {
+        const agree = t.target === recommended;
+        const skipRec = recommended === 'skip';
+        return (
+          <div key={t.target} className={`tl push ${agree ? 'agree' : skipRec ? 'neutral' : 'disagree'}`}>
+            <span className="t"><PlayerIcon id={t.target} color={match.players[t.target]?.color ?? 'unknown'} size={22} /></span>
+            <span><b>{name(t.target)}</b> · pushed by {t.accusers.map(name).join(', ') || '—'}{t.defenders.length ? ` · defended by ${t.defenders.map(name).join(', ')}` : ''}</span>
+            <span className="small" style={{ fontWeight: 700 }}>{agree ? '✓ matches evidence' : skipRec ? 'no evidence either way' : '✗ evidence says otherwise'}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

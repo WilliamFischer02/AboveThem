@@ -6,7 +6,7 @@ import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
 
-type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color';
+type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color' | 'rename';
 
 export function Roster({ scores }: { scores: SuspectScore[] }) {
   const match = useMatch(s => s.match);
@@ -197,6 +197,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); done(); }}>Disconnected</button>}
             {p.status !== 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'alive' } }); done(); }}>Mark alive</button>}
             <button className="btn sm ghost" onClick={() => setMode('color')}><Crewmate color={p.color} size={16} /> colour…</button>
+            <button className="btn sm ghost" onClick={() => setMode('rename')}>✎ rename</button>
             <button className="btn sm ghost" title="Not a real player (OCR junk)" onClick={() => { dispatch({ kind: 'removePlayer', payload: { id: p.id } }); done(); }}>✕ remove</button>
           </div>
           <div className="row">
@@ -220,6 +221,13 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
           {rooms(r => { observe({ type: 'bodyFound', victim: p.id, room: r }, `Body: ${p.name} in ${roomName(match, r)}`); done(); })}
           <button className="btn xs" onClick={() => setMode('main')}>back</button>
         </>
+      )}
+      {mode === 'rename' && (
+        <form className="row" onSubmit={e => { e.preventDefault(); const v = (new FormData(e.currentTarget).get('n') as string).trim(); if (v) dispatch({ kind: 'player', payload: { id: p.id, name: v } }); done(); }}>
+          <input className="input" name="n" defaultValue={p.name} autoFocus />
+          <button className="btn sm primary" type="submit">Save</button>
+          <button className="btn xs" type="button" onClick={() => setMode('main')}>back</button>
+        </form>
       )}
       {mode === 'color' && (
         <>

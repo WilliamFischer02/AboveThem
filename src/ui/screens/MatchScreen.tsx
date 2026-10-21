@@ -13,6 +13,7 @@ import { PALETTE, COLOR_IDS } from '../palette';
 import { useOverlay } from '../overlay/useOverlay';
 import { CapturePanel } from '../components/CapturePanel';
 import { AutoStatus } from '../components/AutoStatus';
+import { useAuto } from '../App';
 import { GhostPanel } from '../components/GhostPanel';
 
 function useNow(ms = 500) {
@@ -29,6 +30,7 @@ export function MatchScreen() {
   const matchId = useMatch(s => s.matchId);
   const hk = useHotkeys();
   const ov = useOverlay(hk.pending);
+  const auto = useAuto();
   useNow();
 
   const scores = useMemo(() => scoreAll(match), [match]);
@@ -61,7 +63,8 @@ export function MatchScreen() {
           {phase === 'round' && <button className="btn warn" onClick={() => setPhase('meetingDiscussion', { reason: 'button' })}>🔔 Emergency meeting</button>}
           {inMeeting && <button className="btn" onClick={() => setPhase('ejection')}>Voting done</button>}
           {phase !== 'gameOver' && phase !== 'lobby' && <button className="btn ghost sm" onClick={() => setPhase('gameOver')}>Game over</button>}
-          <button className={`btn sm right ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
+          <button className="btn sm right" title="Re-read the vote grid and fix names (works while the meeting screen is up)" onClick={async () => { const msg = await auto?.rescanNames(); if (msg) useMatch.getState().showToast(msg); }}>↻ Rescan names</button>
+          <button className={`btn sm ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
           <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
         </div>
         <AutoStatus />

@@ -285,6 +285,13 @@ export function useGameEvents() {
           s.dispatch({ kind: 'chat', payload: { id: newId('ch'), meeting, stamp, sender, original: msg.text, source: 'ocr' } });
           if (sender === 'unknown' || sender === m.me) continue;
           const parsed = parseChatClaims(msg.text, sender, m);
+          for (const b of parsed.filter(x => x.type === 'body' && x.room)) {
+            const live = useMatch.getState().match!;
+            const round = Math.max(0, live.phase.round);
+            if (!live.observations.some(o => o.type === 'bodyFound' && o.stamp.round === round)) {
+              useMatch.getState().observe({ type: 'bodyFound', victim: 'unknown', room: b.room!, source: 'ocr', confidence: 0.6 }, `Body in ${live.map.rooms.find(r => r.id === b.room)?.name ?? b.room} (chat)`);
+            }
+          }
           const claims = toClaims(parsed, { meeting, stamp, by: sender }, msg.text, () => newId('c'));
           for (const c of claims) {
             s.dispatch({ kind: 'claim', payload: c });
@@ -382,5 +389,31 @@ export function useGameEvents() {
     return () => { cancelled = true; unlisten.forEach(u => u()); };
   }, [settings, lobbyCode]);
 
-  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode };
+  const rescanNames = async (): Promise<string> => {
+    if (!isTauri()) return 'needs the Tauri window';
+    const s = useMatch.getState();
+    const m = s.match;
+    if (!m) return 'no match open';
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const r = await invoke<{ entries: RosterEntry[] }>('read_roster', { knownNames: [] });
+      if (r.entries.length < 3) return 'vote grid not visible — rescan during a meeting';
+      let changed = 0;
+      for (const en of r.entries) {
+        if (en.name.startsWith('#')) continue;
+        const p = Object.values(m.players).find(x => x.slot === en.index + 1);
+        if (p) { if (p.name !== en.name) { s.dispatch({ kind: 'player', payload: { id: p.id, name: en.name } }); changed++; } }
+        else {
+          const { players } = playersFromRoster([en], '');
+          const np = { ...players[0], id: `slot${en.index + 1}` };
+          if (!m.players[np.id]) { s.dispatch({ kind: 'addPlayer', payload: { ...np, isMe: false } }); changed++; }
+        }
+        if (en.avatar_png && !en.dead && p) s.setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);
+      }
+      invoke('watcher_set_names', { names: r.entries.map(e => e.name) }).catch(() => {});
+      return `rescanned ${r.entries.length} cards, ${changed} updated`;
+    } catch (e) { return String(e); }
+  };
+
+  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames };
 }
