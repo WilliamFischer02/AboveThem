@@ -167,6 +167,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 2. Markers from text.
         let task_bar = fuzzy_best(&text("task_bar"), ["TOTAL TASKS COMPLETED"]).map(|b| b.1 > 0.6).unwrap_or(false);
+        let eject = parse_eject(&text("eject_text"));
         let header = text("meeting_header");
         let meeting = fuzzy_best(&header, ["Who Is The Impostor?", "Emergency Meeting", "Dead Body Reported"]).map(|b| b.1 > 0.65).unwrap_or(false);
         // Role card: a standalone CREWMATE / IMPOSTOR word (either layout), never while the meeting
@@ -175,10 +176,10 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
             .map(|w| if fuzzy_best(w, ["IMPOSTOR"]).unwrap().1 > fuzzy_best(w, ["CREWMATE"]).unwrap().1 { "impostor" } else { "crew" });
-        // A role card can only appear coming out of the lobby or an ejection, never mid-round.
-        let in_round = matches!(detector.current, Some(Phase::Round));
-        let role_card = !meeting && !in_round && role_word.is_some() && !role_text.contains("WHO IS");
-        let eject = parse_eject(&text("eject_text"));
+        // A role card appears once per game, coming out of the lobby — never mid-round and never
+        // right after an ejection ("X was An Impostor" touches the bottom of this region).
+        let at_game_start = matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver));
+        let role_card = !meeting && at_game_start && eject.is_none() && role_word.is_some() && !role_text.contains("WHO IS");
         let lobby_code = lobby_code_of(&text("lobby_code"));
 
         // 3. Role (once per card appearance).
