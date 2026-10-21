@@ -322,6 +322,8 @@ export function useGameEvents() {
           const recent = m.chat.slice(-25);
           if (msg.text.length >= 12 && recent.some(c => norm(c.original) === norm(msg.text))) continue;
           const others = Object.values(m.players).filter(p => !p.isMe);
+          // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
+          if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;
           let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
             const byColor = others.filter(p => p.color === msg.color);
