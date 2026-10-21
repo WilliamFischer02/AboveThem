@@ -43,6 +43,7 @@ describe('chat → claims', () => {
   it('from-phrases, stretched colour words, body proximity', () => {
     expect(p('I was coming out from 02', 'black')).toEqual([{ type: 'location', room: 'o2' }]);
     expect(p('i came from elec', 'black')).toEqual([{ type: 'location', room: 'electrical' }]);
+    expect(p('I was heading to coms', 'black')).toEqual([{ type: 'location', room: 'communications' }]);
     expect(p('i saw green walk away from body', 'white')).toEqual([{ type: 'accusation', about: 'green', reason: 'left body' }]);
     expect(p('purpleeee is sus', 'white')).toEqual([{ type: 'accusation', about: 'purple', reason: undefined }]);
     expect(p('blue was near the body', 'white')).toEqual([{ type: 'accusation', about: 'blue', reason: 'near body' }]);

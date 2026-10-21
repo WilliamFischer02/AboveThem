@@ -253,6 +253,9 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
   });
 
   // 10. My location (subject must be me): "i was in X", "im in X", "i went to X", "was in X" at sentence start, "in X the whole time".
+  run(new RegExp(`(?:^|\\s)(?:i was heading to|i was going to|heading to|going to|on my way to|headed to|i was walking to) ${ROOM}`, 'g'), mm => {
+    const room = resolveRoom(mm[1], m); if (room) { add({ type: 'location', room }); return true; } return false;
+  });
   run(new RegExp(`(?:^|\\s)(?:i was coming out from|i was coming from|i came from|coming from|came from|i just left|i left|leaving) ${ROOM}`, 'g'), mm => {
     const room = resolveRoom(mm[1], m); if (room) { add({ type: 'location', room }); return true; } return false;
   });
