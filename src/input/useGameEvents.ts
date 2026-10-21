@@ -280,8 +280,9 @@ export function useGameEvents() {
           if (!task && body.length < 4) continue;
           tasks.push({ id: task?.id ?? body, name: task?.name ?? body, room: room?.id, progress, matched: !!task });
         }
-        const prev = JSON.stringify(m.myTasks ?? []);
-        if (tasks.length && JSON.stringify(tasks) !== prev) s.dispatch({ kind: 'myTasks', payload: tasks });
+        // Compare on normalised content so OCR jitter in unmatched lines doesn't spam the log.
+        const sig = (ts: MyTask[]) => ts.map(t => `${t.matched ? t.id : norm(t.name).slice(0, 10)}|${t.progress ?? ''}`).sort().join(';');
+        if (tasks.length && sig(tasks) !== sig(m.myTasks ?? [])) s.dispatch({ kind: 'myTasks', payload: tasks });
       }));
     })();
     return () => { cancelled = true; unlisten.forEach(u => u()); };
