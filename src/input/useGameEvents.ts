@@ -151,8 +151,11 @@ export function useGameEvents() {
       guard(await listen<string>('game://role', e => {
         role = e.payload === 'impostor' ? 'impostor' : 'crew';
         const s = useMatch.getState();
-        if (s.match && s.match.myRole !== role) s.dispatch({ kind: 'myRole', payload: { role } });
-        s.showToast(`You are ${role === 'impostor' ? 'IMPOSTOR' : 'crew'} (read from the role card)`);
+        if (s.match && s.match.myRole !== role) {
+          s.dispatch({ kind: 'myRole', payload: { role } });
+          s.dispatch({ kind: 'player', payload: { id: s.match.me, knownRole: role } });
+        }
+        s.showToast(`You are ${role === 'impostor' ? 'IMPOSTOR' : 'crew'} (read from the screen)`);
       }));
 
       guard(await listen<{ source: 'lobby' | 'grid'; entries: RosterEntry[] }>('game://roster', async e => {

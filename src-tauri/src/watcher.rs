@@ -91,7 +91,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons"];
 
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
@@ -173,6 +173,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_banner = String::new();
     let mut last_map = String::new();
     let mut last_settings = String::new();
+    let mut impostor_buttons_seen = false;
     let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     let mut last_chat_read = Instant::now() - Duration::from_secs(60);
     let mut me_dead_meeting: Option<u32> = None;
@@ -221,7 +222,9 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
             .map(|w| if fuzzy_best(w, ["IMPOSTOR"]).unwrap().1 > fuzzy_best(w, ["CREWMATE"]).unwrap().1 { "impostor" } else { "crew" });
-        let at_game_start = matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver));
+        // Previous game may never have reached GameOver (no victory frame yet), so accept a role card from any
+        // non-round, non-meeting state as long as no ejection text is up.
+        let at_game_start = !matches!(detector.current, Some(Phase::Round) | Some(Phase::MeetingDiscussion) | Some(Phase::MeetingVoting));
         let role_card = !meeting && at_game_start && eject.is_none() && role_word.is_some() && !role_text.contains("WHO IS");
         let game_over = role_text.split_whitespace().any(|w| fuzzy_best(w, ["VICTORY", "DEFEAT"]).map(|b| b.1 > 0.85).unwrap_or(false));
         let banner_text = text("meeting_banner").to_uppercase();
@@ -234,6 +237,14 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             let _ = app.emit(EV_ROLE, role_word.unwrap_or("crew"));
         }
         if !role_card { last_role_text.clear(); }
+
+        // 3b. Impostor buttons (KILL / SABOTAGE) — visible all round, so this catches a missed role card.
+        if task_bar && !meeting {
+            let ab = text("action_buttons").to_uppercase();
+            let imp = ab.split_whitespace().any(|w| fuzzy_best(w, ["KILL", "SABOTAGE"]).map(|b| b.1 > 0.8).unwrap_or(false));
+            if imp && !impostor_buttons_seen { impostor_buttons_seen = true; let _ = app.emit(EV_ROLE, "impostor"); }
+        }
+        if matches!(next_phase_hint(task_bar, meeting, role_card, eject.is_some(), game_over), Phase::Lobby | Phase::GameOver) { impostor_buttons_seen = false; }
 
         // 4. Phase with hysteresis.
         let next = if game_over { Phase::GameOver }
@@ -404,6 +415,10 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         }
     }
     shared.lock().unwrap().status.running = false;
+}
+
+fn next_phase_hint(task_bar: bool, meeting: bool, role_card: bool, eject: bool, game_over: bool) -> Phase {
+    if game_over { Phase::GameOver } else if eject { Phase::Ejection } else if meeting { Phase::MeetingDiscussion } else if role_card { Phase::RoundStart } else if task_bar { Phase::Round } else { Phase::Lobby }
 }
 
 fn phase_name(p: Phase) -> &'static str {
