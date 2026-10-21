@@ -3,118 +3,79 @@
 > Update this file at the end of **every** session. Future-you (or the next
 > Claude Code session) reads this first.
 
-## State (2026-10-21, end of session 1 — Phases 0, 1 and most of 2)
+## State (2026-10-21, end of session 1, ~10:25)
 
-**Phase 0: DONE.** **Phase 1: DONE** (manual input, engine, meeting script).
-**Phase 2: WORKING LIVE** — during William's second real lobby the app, with no
-clicks, started capture, saw the meeting, read the vote grid (13 names, 9 dead)
-and created the match by itself. Verified from the NDJSON log and a screenshot.
+Phases 0–2 done, Phase 3 core (chat reading + claim parsing) live, parts of
+Phase 4/5 UI (ghost mode, overlay) in. Everything below was verified in
+William's live public lobbies tonight (Skeld and Polus), from the NDJSON logs.
 
-### How the automatic layer works (read this before touching it)
-- `capture.rs` keeps only the *latest* BGRA frame from Windows Graphics Capture
-  (`windows-capture`), throttled to 200 ms. Nothing is stored or streamed.
-- `watcher.rs` polls that frame at 5 Hz. For 5 small marker regions it keeps a
-  dhash; when a region changes and holds for one poll it OCRs it (≈ 40 ms).
-  Markers → `PhaseDetector` with hysteresis → `game://phase`. Meeting + 1.2 s →
-  `roster.rs` reads the vote grid → `game://roster` (re-read every 4 s while
-  changed). Ejection text that stopped animating → `game://eject`. Role card →
-  `game://role`. Lobby code → `game://lobby`.
-- `src/input/useGameEvents.ts` turns those into store events: first roster with
-  no match → `newMatch` (me = `settings.myName` fuzzy-matched, else a picker);
-  phases → `setPhase`; ejections → `ejection` event; later rosters → dead flags
-  + new players. `settings.json` (`myName`, `autoCapture`) lives next to the
-  match logs.
-- Everything manual still works and is the fallback (hotkeys, chips, buttons).
+### What runs automatically now (zero clicks)
+| Signal | Source | Event → effect |
+|---|---|---|
+| Game window | `capture.rs` (Windows Graphics Capture) | auto-start capture + watcher every 8 s |
+| Lobby code, map name, lobby settings ("X set to Y") | lobby settings panel + announcements | `game://lobby`, `game://map`, `game://settings` → match settings |
+| Lobby roster | floating names over crewmates (`lobby.rs`) | match created in the lobby (needs 2 consecutive sightings of a name) |
+| Already in a game | task bar / role card | provisional match with a placeholder "me", filled at the next meeting |
+| Role card | "CREWMATE"/"IMPOSTOR" (both layouts) | my role |
+| Round / meeting / vote / eject / game over | task bar, header, eject text, VICTORY/DEFEAT | phases with hysteresis |
+| Meeting reason | red banner | body vs button |
+| Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, slots, dead, reporter, colours (voted over 3 reads), headshots |
+| "DEAD" header | meeting screen when I'm dead | ghost mode |
+| Room popup | bottom-centre room name on entry | my room (anchors "with me" and auto-sightings) |
+| Nearby names | floating names during the round | sightings in my room, 1 per player per room per 20 s |
+| My task list | top-left | enables the common-task rule; "Fake Tasks" → impostor |
+| Chat | `chat.rs` whenever the panel is open and changed | chat lines + **claims** via `src/engine/chatClaims.ts` (location, companion, sighting, accusation w/ reason, clear, defense, task, body) |
+| Chat sender colour | crewmate icon beside the bubble (plain palette) | new players discovered from chat |
 
-### Verified on real frames (fixtures in `src-tauri/fixtures/screens/1920x1080/`)
-- OCR: names, room code (`PFRXRG`), role card (both layouts), task list, eject
-  text, meeting header. 35–60 ms per region at 2×. Only `en-US` OCR language
-  is installed on William's PC (non-Latin chat needs a Windows language pack).
-- Vote grid: 10/10 and 13/13 names read; dead X detected (cards are dimmed, X ≈
-  R132 G61 B53); reporter badge. **Colour from icons is only reliable for strong
-  hues** (blue, cyan, red…); warm colours blur (orange/yellow/banana/brown).
-  Names are the identity key; the user fixes a colour with one click.
-- Hotkeys with the prefix held for both keys reach the app from another window.
-  Still **UNVERIFIED while Among Us itself is focused** (William has not pressed
-  a chord in-game yet; the auto layer made it less urgent).
+### Detection facts measured on real frames (don't re-derive)
+- Vote-grid icons render ≈ 0.75·palette + 60 (25 % white lift); dead cards ≈ 0.45·that + 20
+  under a dark overlay. Chat/lobby sprites use the plain palette.
+- Dead X: dim orange-red band (R 100–175, G 40–100, B 25–90, R−G ≥ 35) along the icon
+  diagonals; score ≥ 700 (1080p-normalised) = dead. Exact on 5/5 dead cards across 3 frames.
+- Level badge (teal-green "Lv" circle, top-left of the card) = occupancy; names on busy
+  cosmetic cards need the white-text binarisation fallback; 2-letter names may come back
+  as "#slot" placeholders.
+- Colour: 25/25 alive correct on fixtures except a player holding a sign over the body.
+  Warm colours remain the weak spot; the user's colour picks are stored as calibration
+  samples (`%APPDATA%\AboveThem\color_calibration.json`) and matched first.
+- Chat panel open: "Send" button OR the "N/100" counter. Grid reads under chat are junk —
+  both the watcher and `read_roster` refuse when either is visible.
+- Room popup OCR region (600,950,720,60); role card (300,60,1320,460) at 1×; task list at 3×.
+- Only `en-US` OCR is installed on this PC.
 
-### Known gaps / bugs to fix next
-- Role was read as IMPOSTOR during a meeting because "Who Is The Impostor?" sits
-  inside the (now larger) role-card region. Fixed in code at the end of the
-  session (`role_card = !meeting && standalone word`), **not yet seen live**.
-- Two `init` lines were written for one match (listener registered twice under
-  React StrictMode + two roster events racing). Guarded in code, not yet seen live.
-- No game-over detection (victory/defeat screen never captured). After a game
-  the match stays open; "Close match" is manual.
-- Chat OCR (Phase 3) not started; `meeting_chat.png` fixture exists. Chat
-  bubbles are white with black text, names above text; the panel covers the vote
-  grid when open (so roster reads must skip frames with chat open — not handled).
-- Overlay window (`overlay.rs`, `Overlay.tsx`) builds and is wired to the
-  "Overlay" button, **never seen on top of the game yet**.
-- Sabotage banner / map-open / task minigame screens are not classified; a
-  minigame hides the task list, which the watcher reads as "not round" — the
-  Lobby hysteresis (6 polls ≈ 1.5 s) covers short tasks only.
-- Vote-grid read while the chat panel is open returns garbage names (chat text
-  lands in cells) — needs a "chat open" marker (chat input box is bright green).
-- `windows-capture` `WithoutBorder` fallback is UNVERIFIED (the yellow capture
-  border was not observed; it may simply be off on this Windows build).
+### UI (meeting-tablet look)
+Vote card first (big, red when confident), "Room momentum" tally (who pushes whom vs.
+the evidence), Say/Ask, chat feed with parsed tags, claim entry, vote result. Roster
+cards: in-game headshot (cropped from the vote grid), slot digit, quick `here` /
+`with me` / `sus`, menu with room grid, colour picker (locks + calibrates), rename,
+remove. Ghost mode when dead (killer pick → certain impostor; signal helper for the
+image role, uncalibrated). Overlay window: clock, my room, slot legend with prime/clear
+marks. Setup screen leads with auto status; manual setup folded away. "Rescan names".
 
-## Toolchain versions that worked (2026-10-21)
+### Known gaps / next
+- Game-over detection relies on VICTORY/DEFEAT text in the role-card region — never
+  seen live yet. Matches stay open; a new lobby creates a new match.
+- Every Rust rebuild restarts the app and loses the in-memory match (log persists);
+  frontend-only edits hot-reload and *also* reset the store when `store.ts`
+  dependents change. Don't edit during William's games unless asked.
+- Ejection name match still misses sometimes (animated text); loosened to alive
+  players ≥ 0.4 similarity. Candidate fix: also read the ejected crewmate's colour
+  on the eject screen.
+- Chat: OCR drops the last letter under the icon on right bubbles ("hell"); vote-grid
+  names bleed through the translucent panel (filtered by line height); names with
+  diacritics vary between reads (fuzzy snap handles most).
+- Signal helper (ghost image role) and sabotage banner: no frames yet.
+- Translation (Phase 3b) not started; `whatlang` + DeepL scaffolding exists in Rust.
+- Accessory database idea: every headshot PNG we crop is a labelled sample; not stored
+  yet (avatars live in memory only).
+- MIRA/Airship/Fungle map data still stubs; Polus wiki-verified (durations guessed).
 
-| Tool | Version |
-|---|---|
-| Windows | 11 Home 10.0.26200 |
-| Node / npm | v24.19.0 / 12.0.2 |
-| Rust (stable-x86_64-pc-windows-msvc) | rustc 1.97.1, cargo 1.97.1 |
-| Tauri CLI | `@tauri-apps/cli` 2.12.3 (npm devDep) |
-| VS Build Tools | 2026 (18.3.11520.95) with VC x64 tools |
-| Windows SDK | 10.0.26100.0 |
-| WebView2 runtime | 155.0.4283.62 |
-| Among Us | v19s (build 7489), 1920×1080 borderless fullscreen-windowed on the primary monitor |
-
-Pinned npm: `@tauri-apps/api` 2.12.4 · `@tauri-apps/cli` 2.12.3 · `react` 18.3.1 ·
-`zustand` 5.0.15 · `typescript` 5.9.3 · `vite` 8.3.5 · `vitest` 5.0.5 ·
-`@vitejs/plugin-react` 6.1.2. Pinned crates: `tauri` 2.12.4 · `tauri-build` 2.7.3 ·
-`tauri-plugin-global-shortcut` 2.4.1 · `tauri-plugin-clipboard-manager` 2.5.0 ·
-`serde` 1.0.229 · `serde_json` 1.0.154 · `thiserror` 2.0.21 · `anyhow` 1.0.104 ·
-`tokio` 1.54.0 · `reqwest` 0.12.28 · `whatlang` 0.16.4 · `windows` 0.62.2 ·
-`windows-capture` 2.0.1 · `image` 0.25.10 · `base64` 0.22.1.
-
-Monitors: primary 1920×1080 at 0,0 (game); DISPLAY1 1920×1080 at −1920,82
-(the app opens there: `tauri.conf.json` x −1900 y 100); DISPLAY2 720×1280 portrait.
-
-### Dev recipes
-- Demo lobby without the game: setup screen → "dev: start demo lobby".
-- Frame capture loop (PowerShell, saves a PNG when the screen changes) and the
-  WinRT OCR probe used this session are in the session scratchpad; the useful
-  outputs are the fixtures. `cargo test --lib` runs OCR against them.
-- Smoke test chords: focus Notepad, press `Ctrl+Alt+R` then `Ctrl+Alt+E`.
-
-## Next 3 tasks
-
-1. **Play one more lobby with the fixed build** and watch `game://role`,
-   duplicate `init`, phase transitions across a full game (round → meeting →
-   eject → round). Add a "chat open" marker (green input box) so roster reads
-   skip those frames. Capture the victory/defeat screen and add game-over.
-2. **Phase 3 chat OCR**: bubbles in `chat_panel` (meeting + lobby), dedupe by
-   (sender, text), sender = name line above the text, language detect with
-   `whatlang`, then the translator panel. Fixture: `meeting_chat.png`,
-   `lobby_chat.png`.
-3. **Streamline further**: auto-open the overlay on match start
-   (`settings.autoOverlay`), hide prior-only % on chips, "found dead" from the
-   roster read should also log a `bodyFound` when the reporter is known, kill
-   chord victim picker.
+## Toolchain (unchanged, see git history): Node 24.19, Rust 1.97.1, Tauri 2.12.4,
+windows 0.62.2, windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489,
+1920×1080 borderless on the primary monitor; app on the left monitor (−1900,100).
+Tests: Vitest 41, Rust 26 (OCR against 20 real frames in `src-tauri/fixtures/`).
 
 ## Open questions for William
-
-- Does the overlay show on top of the game? (Click "Overlay" on the match
-  screen during a round.) If not, we need `transparent` + `alwaysOnTop` checks
-  on borderless-fullscreen.
-- Do chords work while the game is focused? (`Ctrl+Alt+R` then `Ctrl+Alt+E`
-  mid-round; the overlay/toast should show "Red in Electrical".)
-- Set your in-game name in the settings box on the setup screen so the
-  auto-roster picks "me" without the picker.
-- Public lobbies seem to be your mode (two public games tonight) → translation
-  (Phase 3) is next. DeepL free key OK?
-- Font: Fredoka is a stand-in; the real UI face is tall/condensed. If you want
-  it closer, I can swap headings to a condensed OFL face (e.g. Barlow Condensed).
+- Does the overlay show on top of the game? Do chords work in-game? (Both unverified.)
+- When dead with the image-sending role, leave that panel open ~5 s so it can be calibrated.
+- A victory/defeat screen frame is still missing (stay on it a few seconds once).

@@ -134,3 +134,30 @@ can correct with one click, and the engine never depends on colour.
 **Why:** William plays with WASD; registering bare letters even for 1.5 s was a
 risk. Both keys now carry `Ctrl+Alt`; the same physical shortcut is a colour
 as first key and a room as second, disambiguated by the pending state.
+
+## ADR-014 — Vote-grid rendering model + diagonal dead-X detector
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** measured on three real meeting frames: icons render ≈ 0.75·palette + 60,
+dead cards ≈ 0.45·that + 20, the X is a dim orange-red band on the icon diagonals.
+Classifying body pixels against the *rendered* palette (plain RGB distance) beats
+every perceptual-space trick tried earlier; counting X-band pixels near the
+diagonals separates the X from red bodies and card art. User colour picks are
+stored as calibration samples and matched first.
+
+## ADR-015 — Chat is read into claims; chat bubbles are a roster source
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** OCR of the open chat panel at 2× gives clean bubbles (name line + text).
+`chatClaims.ts` turns the formulaic Among Us phrasing into typed claims (with
+colour-word → player resolution and room/task aliases); the contradiction engine
+then verifies them like hand-entered claims. The icon beside a bubble gives the
+sender's colour (plain palette), so unknown senders become players. Grid reads
+are refused while the panel is open (Send button or "N/100" counter visible).
+
+## ADR-016 — Roster slots are a first-class hotkey target
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** colours from icons are unreliable under cosmetics; the vote-grid order is
+what the player sees every meeting. `Ctrl+Alt+<digit>` targets slot N; colour
+letters remain. Re-reads match by slot before name.
