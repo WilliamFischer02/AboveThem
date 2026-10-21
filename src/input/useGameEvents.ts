@@ -24,6 +24,12 @@ export interface WatcherStatus { running: boolean; phase: string | null; round: 
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+/** UI words the lobby reader can mistake for names when a settings panel is open. */
+const NOT_NAMES = /^(roles?|role amounts?|crewmate roles?|impostor roles?|scientist|engineer|guardian angel|noisemaker|tracker|shapeshifter|phantom|detective|viper|% ?chance|chance|amount|cosmetics|host|back|close|apply|reset|general|chat|filters?|map|skeld|mira hq|polus|airship|fungle|waiting for host|starting in \d+)$/i;
+const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.test(n) && n.trim().length >= 2;
+/** Lobby names must be seen in two consecutive reads before they become players. */
+const lobbySeen = new Map<string, number>();
+
 function fuzzyFind<T extends { name: string }>(name: string, list: T[]): T | undefined {
   const n = norm(name);
   let best: { item: T; score: number } | null = null;
@@ -134,7 +140,8 @@ export function useGameEvents() {
           const { players, me, meGuessed } = playersFromRoster(entries, settings.myName);
           setMeGuessed(meGuessed);
           const fromLobby = source === 'lobby';
-          const ps = fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players;
+          if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
+          const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           s.newMatch({ settings: preset?.settings ?? DEFAULT_SETTINGS, map: (preset?.settings ?? DEFAULT_SETTINGS).map, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
           if (!fromLobby) useMatch.getState().setPhase('meetingDiscussion', { reason: 'body' });
           useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
@@ -146,7 +153,13 @@ export function useGameEvents() {
         const existing = Object.values(m.players);
         const fromLobby = source === 'lobby';
         if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
+        if (fromLobby) {
+          const now = new Set(entries.map(x => norm(x.name)));
+          for (const k of [...lobbySeen.keys()]) if (!now.has(k)) lobbySeen.delete(k);
+          for (const k of now) lobbySeen.set(k, (lobbySeen.get(k) ?? 0) + 1);
+        }
         for (const en of entries) {
+          if (fromLobby && (!plausibleName(en.name) || (lobbySeen.get(norm(en.name)) ?? 0) < 2)) continue;
           // Same vote-grid slot = same player, whatever OCR made of the name this time.
           let p = (fromLobby ? undefined : existing.find(x => x.slot === en.index + 1)) ?? fuzzyFind(en.name, existing);
           if (!p && existing.length >= entries.length) {

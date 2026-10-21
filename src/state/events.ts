@@ -40,6 +40,8 @@ export type MatchEvent =
   | { kind: 'me'; wall: number; payload: { id: PlayerId } }
   /** Add a player discovered mid-match (auto-roster). */
   | { kind: 'addPlayer'; wall: number; payload: Player }
+  /** Drop a junk entry (OCR picked up a UI word as a name). */
+  | { kind: 'removePlayer'; wall: number; payload: { id: PlayerId } }
   /** Removes the most recent not-yet-undone undoable event. */
   | { kind: 'undo'; wall: number };
 
@@ -115,6 +117,12 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       return { ...m, me: e.payload.id, players };
     }
     case 'addPlayer': return m.players[e.payload.id] ? m : { ...m, players: { ...m.players, [e.payload.id]: e.payload } };
+    case 'removePlayer': {
+      if (!m.players[e.payload.id] || e.payload.id === m.me) return m;
+      const players = { ...m.players };
+      delete players[e.payload.id];
+      return { ...m, players };
+    }
   }
 }
 

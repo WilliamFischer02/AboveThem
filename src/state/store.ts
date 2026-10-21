@@ -185,5 +185,6 @@ export function describe(e: MatchEvent): string {
     case 'myRole': return `my role: ${e.payload.role}`;
     case 'me': return `me = ${e.payload.id}`;
     case 'addPlayer': return `player ${e.payload.name} joined`;
+    case 'removePlayer': return `removed ${e.payload.id}`;
   }
 }

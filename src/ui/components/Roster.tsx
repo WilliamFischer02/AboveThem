@@ -197,6 +197,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); done(); }}>Disconnected</button>}
             {p.status !== 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'alive' } }); done(); }}>Mark alive</button>}
             <button className="btn sm ghost" onClick={() => setMode('color')}><Crewmate color={p.color} size={16} /> colour…</button>
+            <button className="btn sm ghost" title="Not a real player (OCR junk)" onClick={() => { dispatch({ kind: 'removePlayer', payload: { id: p.id } }); done(); }}>✕ remove</button>
           </div>
           <div className="row">
             <span className="muted small">Chord: prefix + <span className="key">{PALETTE[p.color as keyof typeof PALETTE]?.key}</span> then room</span>
