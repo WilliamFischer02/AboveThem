@@ -6,7 +6,7 @@
 //! of strongly red pixels in the icon box (the X is #E8232A-ish on a grey card).
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame};
-use crate::colors::{classify, PlayerColor};
+use crate::colors::{PlayerColor, PALETTE};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::regions::{Rect, VoteCell, REF_H, REF_W};
 
@@ -33,54 +33,87 @@ fn cell_in_frame(index: u32, f: &Frame) -> Rect {
     VoteCell::rect(index).scaled(sx, sy)
 }
 
-/// A cell is "occupied" when its green level badge ("Lv N", top-left of the card) is present.
-/// Card backgrounds vary with cosmetics (space, dark), so the badge is the stable marker.
+/// A cell is "occupied" when its level badge ("Lv N", a teal-green circle at the card's top-left)
+/// is present. Measured share of badge-coloured pixels: 0.20–0.33 alive, ~0.10 dead (dimmed), 0.00 empty.
 fn cell_occupied(f: &Frame, cell: Rect) -> bool {
     let sx = f.width as f32 / REF_W as f32;
     let r = Rect::new(cell.x + (8.0 * sx) as u32, cell.y + (6.0 * sx) as u32, (44.0 * sx) as u32, (44.0 * sx) as u32);
     let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
-    let green = buf.chunks_exact(4).filter(|p| { let (b, g, rr) = (p[0] as i32, p[1] as i32, p[2] as i32); g > 110 && g > rr + 40 && g > b + 40 }).count() as f32;
-    green / (w * h) as f32 > 0.12
+    let green = buf.chunks_exact(4).filter(|p| { let (b, g, rr) = (p[0] as i32, p[1] as i32, p[2] as i32); g > 100 && g > rr + 30 && g > b + 10 }).count() as f32;
+    green / (w * h) as f32 > 0.05
 }
 
-/// Share of "red X" pixels in the icon box.
-fn red_share(f: &Frame, cell: Rect) -> f32 {
+/// Names are white (grey when dead) with a black outline over arbitrary card art. Keep pixels that
+/// are bright relative to the crop's brightest and nearly neutral; render them black on white.
+fn white_text_mask(bgra: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut max_l = 0u32;
+    for px in bgra.chunks_exact(4) { let l = (px[0] as u32 + px[1] as u32 + px[2] as u32) / 3; if l > max_l { max_l = l; } }
+    let thr = (max_l as f32 * 0.78) as u32;
+    let mut out = vec![255u8; (w * h * 4) as usize];
+    for (i, px) in bgra.chunks_exact(4).enumerate() {
+        let (b, g, r) = (px[0] as i32, px[1] as i32, px[2] as i32);
+        let l = ((b + g + r) / 3) as u32;
+        let neutral = (r - g).abs() < 28 && (g - b).abs() < 28 && (r - b).abs() < 28;
+        if l >= thr && neutral { out[i * 4] = 0; out[i * 4 + 1] = 0; out[i * 4 + 2] = 0; }
+    }
+    out
+}
+
+/// The dead X: a dim orange-red band (R≈128 G≈64 B≈48 on real frames) drawn along the two
+/// diagonals of the icon box. Counting band pixels *near the diagonals* separates it from red
+/// bodies, hats and card art (measured: dead ≥ 1500, alive ≤ ~150 at 1080p).
+fn dead_x_score(f: &Frame, cell: Rect) -> u32 {
     let (ix, iy, iw, ih) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
     let r = Rect::new(cell.x + (ix as f32 * sx) as u32, cell.y + (iy as f32 * sx) as u32, (iw as f32 * sx) as u32, (ih as f32 * sx) as u32);
     let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
-    // Dead cards are drawn with a dark overlay: the X measures ~R132 G61 B53 on William's
-    // frames, while alive icons have ~0 pixels with R>110 and R − max(G,B) > 45 (hat glints ≤ 0.5 %).
-    let mut red = 0u32;
-    for px in buf.chunks_exact(4) {
-        let (b, g, rr) = (px[0] as i32, px[1] as i32, px[2] as i32);
-        if rr > 110 && rr - g.max(b) > 45 { red += 1; }
+    let mut diag = 0u32;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let (b, g, rr) = (buf[i] as i32, buf[i + 1] as i32, buf[i + 2] as i32);
+            if !(100..=175).contains(&rr) || !(40..=100).contains(&g) || !(25..=90).contains(&b) || rr - g < 35 { continue; }
+            let u = x as f32 / w as f32;
+            let v = y as f32 / h as f32;
+            if (u - v).abs() < 0.09 || (u - (1.0 - v)).abs() < 0.09 { diag += 1; }
+        }
     }
-    red as f32 / (w * h) as f32
+    // Normalise to the reference icon area so other resolutions use the same threshold.
+    ((diag as f32) / (sx * sx)) as u32
 }
 
-/// Dominant saturated colour in the icon box, excluding the red X and near-grey pixels.
+/// How the game renders palette colours on vote-grid icons (measured on real frames):
+/// alive ≈ 0.75·palette + 60 (a 25 % white lift); dead cards are dimmed to ≈ 0.6 of that.
+fn grid_expected(p: [u8; 3], dead: bool) -> [f32; 3] {
+    let alive = [0.75 * p[0] as f32 + 60.0, 0.75 * p[1] as f32 + 60.0, 0.75 * p[2] as f32 + 60.0];
+    if !dead { return alive; }
+    // Dead cards sit under a dark semi-transparent overlay: measured red (208,64,80) → (128,48,64).
+    [0.45 * alive[0] + 20.0, 0.45 * alive[1] + 20.0, 0.45 * alive[2] + 20.0]
+}
+
+/// Body colour from the icon's body patch (below the visor, right of the backpack), by plain
+/// RGB distance to the grid-rendered palette. Skips the X band on dead cards and outlines.
 fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
-    let (ix, iy, iw, ih) = VoteCell::ICON;
+    let (ix, iy, _, _) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
-    let r = Rect::new(cell.x + (ix as f32 * sx) as u32, cell.y + (iy as f32 * sx) as u32, (iw as f32 * sx) as u32, (ih as f32 * sx) as u32);
+    let r = Rect::new(cell.x + ((ix + 25) as f32 * sx) as u32, cell.y + ((iy + 35) as f32 * sx) as u32, (50.0 * sx) as u32, (50.0 * sx) as u32);
     let (buf, _, _) = crop_bgra(f, r.x, r.y, r.w, r.h);
-    // Vote by classified palette colour, weighted by closeness; the visor (#9ACAD5) and outlines are skipped by ΔE.
     let mut votes: std::collections::HashMap<PlayerColor, (u32, f32)> = Default::default();
     for px in buf.chunks_exact(4) {
-        // Undo the dead-card dimming (~50 % black overlay) before classifying.
-        let boost = |v: u8| if dead { (v as u16 * 2).min(255) as u8 } else { v };
-        let rgb = [boost(px[2]), boost(px[1]), boost(px[0])];
-        let max = rgb.iter().max().copied().unwrap() as i32;
-        let min = rgb.iter().min().copied().unwrap() as i32;
-        if max - min < 40 && max > 60 { continue; } // grey card / outlines (keeps black/white crewmates via ΔE below)
-        if dead && (rgb[0] as i32) - (rgb[1].max(rgb[2]) as i32) > 90 && rgb[1] > 90 { continue; } // the X (orange-red), keeps #C51111 red bodies
-        let (c, d) = classify(rgb);
-        if d > 35.0 || c == PlayerColor::Unknown { continue; }
-        let e = votes.entry(c).or_insert((0, 0.0));
-        e.0 += 1; e.1 += d;
+        let (b, g, rr) = (px[0] as f32, px[1] as f32, px[2] as f32);
+        if rr.max(g).max(b) < 35.0 { continue; } // outline
+        if dead && (100.0..=175.0).contains(&rr) && (40.0..=100.0).contains(&g) && (25.0..=90.0).contains(&b) && rr - g >= 35.0 { continue; } // the X
+        let mut best = (PlayerColor::Unknown, f32::MAX);
+        for (c, p) in PALETTE {
+            let e = grid_expected(*p, dead);
+            let d = ((rr - e[0]).powi(2) + (g - e[1]).powi(2) + (b - e[2]).powi(2)).sqrt();
+            if d < best.1 { best = (*c, d); }
+        }
+        if best.1 > 42.0 { continue; } // hats, skins, card art, visor
+        let e = votes.entry(best.0).or_insert((0, 0.0));
+        e.0 += 1; e.1 += best.1;
     }
-    votes.into_iter().max_by_key(|(_, (n, _))| *n).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
+    votes.into_iter().max_by_key(|(_, (n, _))| *n).filter(|(_, (n, _))| *n >= 25).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
 }
 
 fn color_name(c: PlayerColor) -> &'static str {
@@ -106,15 +139,24 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
         let (crop, cw, ch) = crop_bgra(f, name_rect.x, name_rect.y, name_rect.w, name_rect.h);
         let (up, uw, uh) = upscale_bgra(&crop, cw, ch, 2);
         let ocr = ocr_bgra(&up, uw, uh, None)?;
-        let raw = ocr.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ").trim().to_string();
-        // Occupancy = a name was read (empty cells are flat panel grey and OCR to nothing).
-        if raw.chars().filter(|c| c.is_alphanumeric()).count() < 2 { continue; }
-        let _ = cell_occupied(f, cell); // secondary signal, kept for the calibration UI
+        let mut raw = ocr.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ").trim().to_string();
+        if raw.chars().filter(|c| c.is_alphanumeric()).count() < 2 {
+            // Busy cosmetic card art behind the name: keep only the (near-)white outlined glyphs.
+            let bin = white_text_mask(&up, uw, uh);
+            let ocr2 = ocr_bgra(&bin, uw, uh, None)?;
+            raw = ocr2.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ").trim().to_string();
+        }
+        // Occupancy: the level badge, or a readable name (single-letter names like "U" exist).
+        let occupied = cell_occupied(f, cell);
+        let readable = raw.chars().filter(|c| c.is_alphanumeric()).count() >= 1;
+        if !occupied && !readable { continue; }
+        if !readable { raw = format!("#{}", index + 1); }
+        let placeholder = raw.starts_with('#');
         let (name, name_confidence) = match fuzzy_best(&raw, known_names.iter().map(String::as_str)) {
-            Some((n, score)) if score >= 0.6 => (n.to_string(), score),
-            _ => (raw.clone(), if known_names.is_empty() { 0.8 } else { 0.4 }),
+            Some((n, score)) if !placeholder && score >= 0.6 => (n.to_string(), score),
+            _ => (raw.clone(), if placeholder { 0.2 } else if known_names.is_empty() { 0.8 } else { 0.4 }),
         };
-        let dead = red_share(f, cell) > 0.10;
+        let dead = dead_x_score(f, cell) >= 700;
         let (color, delta) = icon_color(f, cell, dead);
         entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false });
     }
@@ -155,18 +197,36 @@ mod tests {
         let dead: Vec<&str> = r.entries.iter().filter(|e| e.dead).map(|e| e.name.as_str()).collect();
         assert_eq!(dead.len(), 2, "dead = {dead:?}");
         assert!(dead.iter().any(|n| n.contains("Bonsainew")));
+        assert!(dead.iter().any(|n| n.contains("sekt")), "{dead:?}");
         assert!(r.entries.iter().any(|e| e.reporter && e.name.contains("Big")), "reporter badge: {:?}", r.entries.iter().map(|e| (e.name.clone(), e.reporter)).collect::<Vec<_>>());
         // Colours: use the fully faded-in frame (frame 1 is mid fade-in and uniformly dim).
         let f2 = load_fixture("meeting_vote_grid_2");
         let r2 = read_vote_grid(&f2, &[]).expect("read");
-        let by = |n: &str| r2.entries.iter().find(|e| e.name.contains(n)).unwrap();
+        let by = |n: &str| r2.entries.iter().find(|e| fuzzy_best(&e.name, [n]).unwrap().1 > 0.7).unwrap_or_else(|| panic!("{n} missing in {:?}", r2.entries.iter().map(|e| (e.name.clone(), e.color.clone(), e.dead)).collect::<Vec<_>>()));
         assert_eq!(by("SHUSH").color, "blue");
         assert_eq!(by("Timetrast").color, "cyan");
-        // Vote-grid icons are shaded half-bodies behind hats/pets: only strong hues are reliable.
-        // Warm colours (orange/yellow/banana/brown) blur together here — names stay the identity key
-        // and the user fixes a colour with one click (see docs/handoff.md, Phase 2 gaps).
-        assert!(by("Waxscarce").color != "unknown");
-        assert!(["red", "maroon", "coral"].contains(&by("Bonsainew").color.as_str()), "dead card colour is best-effort: {}", by("Bonsainew").color);
+        assert_eq!(by("Waxscarce").color, "orange", "{:?}", r2.entries);
+        assert_eq!(by("Flushbevy").color, "rose", "{:?}", r2.entries);
+        assert_eq!(by("BASHOLI").color, "white", "{:?}", r2.entries);
+        assert!(["red", "maroon"].contains(&by("Bonsainew").color.as_str()), "dead card (dark overlay, best-effort): {:?}", r2.entries);
+        assert_eq!(by("BigBingus").color, "maroon", "{:?}", r2.entries);
+
+        // 15-player frame from the second game, with heavy cosmetics and three dead.
+        let f3 = load_fixture("meeting_vote_grid_3");
+        let r3 = read_vote_grid(&f3, &[]).expect("read");
+        assert_eq!(r3.entries.len(), 15, "{:?}", r3.entries.iter().map(|e| e.name.clone()).collect::<Vec<_>>());
+        let dead3: Vec<&str> = r3.entries.iter().filter(|e| e.dead).map(|e| e.name.as_str()).collect();
+        assert_eq!(dead3.len(), 3, "dead = {dead3:?}");
+        for n in ["Nigabut", "kenze", "Oakutter"] { assert!(dead3.iter().any(|d| fuzzy_best(d, [n]).unwrap().1 > 0.7), "{n} not dead in {dead3:?}"); }
+        let by3 = |n: &str| r3.entries.iter().find(|e| fuzzy_best(&e.name, [n]).unwrap().1 > 0.7).unwrap_or_else(|| panic!("{n} missing"));
+        assert_eq!(by3("Alkylraven").color, "red");
+        assert_eq!(by3("Bean").color, "orange");
+        assert_eq!(by3("Grain Rain").color, "purple");
+        assert_eq!(by3("BRATZY").color, "rose");
+        assert_eq!(by3("LJ").color, "banana");
+        assert_eq!(by3("Caramel").color, "white");
+        assert_eq!(by3("BigBingus").color, "maroon");
+        assert_eq!(by3("heaven").color, "cyan");
     }
 
     #[test]

@@ -1,9 +1,677 @@
 {
   "id": "polus",
-  "name": "TODO",
-  "_verified": { "rooms": false, "vents": false, "tasks": false, "durations": false },
-  "_note": "Stub. Fill from the live game in Phase 5 using skeld.json as the template. The engine refuses to use a map whose rooms are empty.",
-  "rooms": [],
-  "vents": [],
-  "tasks": []
+  "name": "Polus",
+  "_verified": {
+    "rooms": true,
+    "vents": true,
+    "tasks": true,
+    "durations": false
+  },
+  "_note": "Rooms/doors, the four vent systems and the 23-task table (rooms, kind, visual, stages) were checked against among-us.fandom.com on 2026-10-21: https://among-us.fandom.com/wiki/Polus, /wiki/Vent_(object), /wiki/Tasks, /wiki/Visual_tasks, /wiki/Outside, /wiki/Decontamination and the per-task pages (Fix_Wiring, Upload_Data, Fix_Weather_Node, Open_Waterways, Replace_Water_Jug, Reboot_Wifi, Record_Temperature, Fuel_Engines, Empty_Garbage, Submit_Scan, Clear_Asteroids, Inspect_Sample, ...). Visual tasks on Polus are Submit Scan and Clear Asteroids only; Empty Garbage is not visual here. Clean Vent and Divert Power do not exist on Polus. MODELLING CHOICES (not wiki facts): the single wiki location \"Outside\" is split into three zones - Outside (Left) x, Outside (Right) r, Lava Pit h - with the dividing line through the Dropship exit and Weapons; which zone each door, weather node and outdoor vent falls in is my reading of the wiki descriptions, not something the wiki states. Dropship, Weapons and Office are adjacent to both zones. MedBay is kept as its own room (wiki treats it as a Laboratory section); the in-game region label may read Laboratory. OPEN DOUBTS: zone of the outdoor Record Temperature panel (placed at lava), zone of node PD and the Open Waterways valve (placed right), whether \"Outside (Admin)\" vent is in the right zone, exact in-game labels for the decontamination rooms. Travel seconds are eyeballed at speed 1.0x, room-centre to room-centre, and outdoor zones are large so they are rough. Task durations: Replace Water Jug (~6 s/stage), Reboot Wifi (60 s wait), Inspect Sample (59-60 s), Submit Scan (~10 s) and Download/Upload (>= 8 s/stage) are sourced; the rest are guesses or copied from skeld.json. Room keys are single characters so a sighting chord is exactly two keypresses; q = Communications matches skeld.json, f = Office (o is O2), n = Lower Decontamination, u = Upper Decontamination, x = Outside (Left), r = Outside (Right), h = Lava Pit are the non-mnemonic ones; v, k and z are reserved action keys.",
+  "rooms": [
+    {
+      "id": "dropship",
+      "name": "Dropship",
+      "key": "d",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "outsideLeft",
+          "sec": 8
+        },
+        {
+          "room": "outsideRight",
+          "sec": 8
+        }
+      ]
+    },
+    {
+      "id": "outsideLeft",
+      "name": "Outside (Left)",
+      "key": "x",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "dropship",
+          "sec": 8
+        },
+        {
+          "room": "electrical",
+          "sec": 8
+        },
+        {
+          "room": "o2",
+          "sec": 9
+        },
+        {
+          "room": "communications",
+          "sec": 7
+        },
+        {
+          "room": "weapons",
+          "sec": 6
+        },
+        {
+          "room": "office",
+          "sec": 10
+        },
+        {
+          "room": "outsideRight",
+          "sec": 10
+        }
+      ],
+      "_note": "West/south-west outdoor area: Dropship exit, Electrical and O2 doors, Fix Lights panel, Communications pod, Dropship left engine, nodes TB/IRO/GI, vents south and east of Electrical and below Communications."
+    },
+    {
+      "id": "outsideRight",
+      "name": "Outside (Right)",
+      "key": "r",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "dropship",
+          "sec": 8
+        },
+        {
+          "room": "weapons",
+          "sec": 6
+        },
+        {
+          "room": "storage",
+          "sec": 5
+        },
+        {
+          "room": "office",
+          "sec": 8
+        },
+        {
+          "room": "laboratory",
+          "sec": 8
+        },
+        {
+          "room": "lava",
+          "sec": 8
+        },
+        {
+          "room": "outsideLeft",
+          "sec": 10
+        }
+      ],
+      "_note": "Central/east outdoor area: Dropship right engine, Storage pod, Office west door and the Open Waterways valve beside Admin, Laboratory door, east Seismic Stabilizer path, nodes CA/PD, vents west of Laboratory and below the valve."
+    },
+    {
+      "id": "lava",
+      "name": "Lava Pit",
+      "key": "h",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "office",
+          "sec": 6
+        },
+        {
+          "room": "outsideRight",
+          "sec": 8
+        }
+      ],
+      "_note": "Outdoor area east of Office / south of Laboratory where ejected players land. Node MLG and the lava vent (to Admin and the Laboratory bathroom) are here."
+    },
+    {
+      "id": "electrical",
+      "name": "Electrical",
+      "key": "e",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "outsideLeft",
+          "sec": 8
+        },
+        {
+          "room": "security",
+          "sec": 4
+        },
+        {
+          "room": "o2",
+          "sec": 6
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "key": "s",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "electrical",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "o2",
+      "name": "O2",
+      "key": "o",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "electrical",
+          "sec": 6
+        },
+        {
+          "room": "boilerRoom",
+          "sec": 5
+        },
+        {
+          "room": "outsideLeft",
+          "sec": 9
+        }
+      ]
+    },
+    {
+      "id": "boilerRoom",
+      "name": "Boiler Room",
+      "key": "b",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "o2",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "weapons",
+      "name": "Weapons",
+      "key": "w",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "outsideLeft",
+          "sec": 6
+        },
+        {
+          "room": "outsideRight",
+          "sec": 6
+        }
+      ]
+    },
+    {
+      "id": "communications",
+      "name": "Communications",
+      "key": "q",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "outsideLeft",
+          "sec": 7
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "name": "Storage",
+      "key": "t",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "outsideRight",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "office",
+      "name": "Office",
+      "key": "f",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "outsideRight",
+          "sec": 8
+        },
+        {
+          "room": "outsideLeft",
+          "sec": 10
+        },
+        {
+          "room": "lava",
+          "sec": 6
+        },
+        {
+          "room": "admin",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "admin",
+      "name": "Admin",
+      "key": "a",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "office",
+          "sec": 5
+        },
+        {
+          "room": "lowerDecon",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "lowerDecon",
+      "name": "Lower Decontamination",
+      "key": "n",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "admin",
+          "sec": 5
+        },
+        {
+          "room": "specimen",
+          "sec": 9
+        }
+      ],
+      "_note": "Travel time includes the door delay and vapour cycle."
+    },
+    {
+      "id": "specimen",
+      "name": "Specimen Room",
+      "key": "p",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "lowerDecon",
+          "sec": 9
+        },
+        {
+          "room": "upperDecon",
+          "sec": 9
+        }
+      ]
+    },
+    {
+      "id": "upperDecon",
+      "name": "Upper Decontamination",
+      "key": "u",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "specimen",
+          "sec": 9
+        },
+        {
+          "room": "laboratory",
+          "sec": 7
+        }
+      ],
+      "_note": "Travel time includes the door delay and vapour cycle."
+    },
+    {
+      "id": "laboratory",
+      "name": "Laboratory",
+      "key": "l",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "upperDecon",
+          "sec": 7
+        },
+        {
+          "room": "medbay",
+          "sec": 4
+        },
+        {
+          "room": "outsideRight",
+          "sec": 8
+        }
+      ]
+    },
+    {
+      "id": "medbay",
+      "name": "MedBay",
+      "key": "m",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "laboratory",
+          "sec": 4
+        }
+      ],
+      "_note": "Scanner/beds section inside Laboratory; the in-game region label is probably Laboratory."
+    }
+  ],
+  "vents": [
+    {
+      "id": "outside-top",
+      "rooms": [
+        "outsideLeft",
+        "outsideRight"
+      ],
+      "_note": "Two outdoor vents at the top of the map near the Seismic Stabilizers / Dropship engines: one east of Electrical (left zone), one west of Laboratory (right zone). They connect only to each other."
+    },
+    {
+      "id": "elec-o2-outside",
+      "rooms": [
+        "electrical",
+        "o2",
+        "outsideLeft"
+      ],
+      "_note": "Electrical vent, O2 tree-room vent, and the outdoor vent south of Electrical."
+    },
+    {
+      "id": "office-storage-comms",
+      "rooms": [
+        "office",
+        "storage",
+        "outsideLeft"
+      ],
+      "_note": "Office hallway vent (by the Fix Wiring panel), Storage vent, and the outdoor vent below Communications."
+    },
+    {
+      "id": "admin-lava-lab",
+      "rooms": [
+        "admin",
+        "lava",
+        "laboratory",
+        "outsideRight"
+      ],
+      "_note": "Chain, not a clique: outdoor vent below the Open Waterways valve beside Admin <-> Admin <-> outdoor vent south of Laboratory (lava) <-> Laboratory bathroom. Admin reaches both outdoor vents; Laboratory reaches only the lava vent."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "fixWiring",
+      "name": "Fix Wiring",
+      "rooms": [
+        "electrical",
+        "o2",
+        "office",
+        "upperDecon",
+        "laboratory"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 3,
+      "stageDurationSec": 4,
+      "_note": "Six panels, three assigned in fixed order: Electrical > O2 > Office > Upper Decontamination > Laboratory (right) > Laboratory bathroom (left)."
+    },
+    {
+      "id": "swipeCard",
+      "name": "Swipe Card",
+      "rooms": [
+        "office"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4
+    },
+    {
+      "id": "insertKeys",
+      "name": "Insert Keys",
+      "rooms": [
+        "dropship"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 3,
+      "_note": "Becomes a short task when common tasks are set to 0. Duration is a guess."
+    },
+    {
+      "id": "scanBoardingPass",
+      "name": "Scan Boarding Pass",
+      "rooms": [
+        "office"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "chartCourse",
+      "name": "Chart Course",
+      "rooms": [
+        "dropship"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4
+    },
+    {
+      "id": "clearAsteroids",
+      "name": "Clear Asteroids",
+      "rooms": [
+        "weapons"
+      ],
+      "kind": "short",
+      "visual": true,
+      "stages": 1,
+      "stageDurationSec": 12,
+      "_note": "Short on Polus per the wiki (Long on The Skeld). Visual: the cannon outside fires per shot. 20 asteroids; progress persists if closed."
+    },
+    {
+      "id": "emptyGarbage",
+      "name": "Empty Garbage",
+      "rooms": [
+        "o2"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "One stage, NOT visual on Polus."
+    },
+    {
+      "id": "fillCanisters",
+      "name": "Fill Canisters",
+      "rooms": [
+        "o2"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "monitorTree",
+      "name": "Monitor Tree",
+      "rooms": [
+        "o2"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "alignTelescope",
+      "name": "Align Telescope",
+      "rooms": [
+        "laboratory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "repairDrill",
+      "name": "Repair Drill",
+      "rooms": [
+        "laboratory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "recordTemperature",
+      "name": "Record Temperature",
+      "rooms": [
+        "laboratory",
+        "lava"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "One of two panels: Laboratory (lower the number) or Outside (raise it). The outdoor panel is placed in the lava zone here (east of Office) - confirm in-game. Duration is a guess."
+    },
+    {
+      "id": "storeArtifacts",
+      "name": "Store Artifacts",
+      "rooms": [
+        "specimen"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "unlockManifolds",
+      "name": "Unlock Manifolds",
+      "rooms": [
+        "specimen"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "submitScan",
+      "name": "Submit Scan",
+      "rooms": [
+        "medbay"
+      ],
+      "kind": "short",
+      "visual": true,
+      "stages": 1,
+      "stageDurationSec": 10,
+      "_note": "Short on Polus per the wiki (Long on The Skeld)."
+    },
+    {
+      "id": "fixWeatherNode",
+      "name": "Fix Weather Node",
+      "rooms": [
+        "outsideLeft",
+        "outsideRight",
+        "lava",
+        "laboratory"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 6,
+      "_note": "Stage 1 at one of six outdoor nodes (task list shows Node_XX, not Outside): TB (west of Comms), IRO (south entrance of O2), GI (north of Comms) in the left zone; CA (path to east stabilizer), PD (south of Office west door) in the right zone; MLG north of the lava pit. Stage 2 is a switch in Laboratory. Long for TB/IRO/PD/GI, SHORT for CA/MLG. Polus has no Divert Power. Durations are guesses."
+    },
+    {
+      "id": "openWaterways",
+      "name": "Open Waterways",
+      "rooms": [
+        "boilerRoom",
+        "outsideRight"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 3,
+      "stageDurationSec": 5,
+      "_note": "Three valves in any order: two in Boiler Room, one Outside near the Office west door beside the Admin wall. Task list always says Boiler Room. Duration is a guess."
+    },
+    {
+      "id": "replaceWaterJug",
+      "name": "Replace Water Jug",
+      "rooms": [
+        "boilerRoom",
+        "office"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 6,
+      "_note": "Stage 1 Boiler Room, stage 2 Office. Wiki: about six seconds per stage."
+    },
+    {
+      "id": "rebootWifi",
+      "name": "Reboot Wifi",
+      "rooms": [
+        "communications"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 60,
+      "_note": "Pull lever, wait 60 s (timer runs through meetings), return and pull it back (+2.5 s)."
+    },
+    {
+      "id": "inspectSample",
+      "name": "Inspect Sample",
+      "rooms": [
+        "medbay"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 60,
+      "_note": "Start, wait 59-60 s, return."
+    },
+    {
+      "id": "startReactor",
+      "name": "Start Reactor",
+      "rooms": [
+        "specimen"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 20,
+      "_note": "No Reactor room on Polus; the panel is in Specimen Room."
+    },
+    {
+      "id": "fuelEngines",
+      "name": "Fuel Engines",
+      "rooms": [
+        "storage",
+        "outsideRight",
+        "outsideLeft"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 4,
+      "stageDurationSec": 5,
+      "_note": "Storage > Outside engine right of Dropship > Storage > Outside engine left of Dropship."
+    },
+    {
+      "id": "downloadUpload",
+      "name": "Download / Upload Data",
+      "rooms": [
+        "electrical",
+        "o2",
+        "office",
+        "specimen",
+        "weapons",
+        "communications"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 9,
+      "_note": "Long on Polus per the wiki. Download in Electrical, O2, Office, Specimen Room or Weapons; upload in Communications. >= 8 s per stage."
+    }
+  ]
 }
