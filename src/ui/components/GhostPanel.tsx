@@ -38,7 +38,13 @@ function dirDist(a: [number, number, number], b: [number, number, number]): numb
 export function GhostPanel() {
   const match = useMatch(s => s.match)!;
   const observe = useMatch(s => s.observe);
+  const dispatch = useMatch(s => s.dispatch);
+  const showToast = useMatch(s => s.showToast);
   const me = match.players[match.me];
+  const notDead = () => {
+    dispatch({ kind: 'player', payload: { id: match.me, status: 'alive', aliveLockMeeting: match.phase.meeting ?? 0 } });
+    showToast('Back to alive — death reads ignored until the next meeting', true);
+  };
   const killObs = [...match.observations].reverse().find(o => o.type === 'sawKill' && o.victim === match.me);
   const killer: Player | undefined = killObs && killObs.type === 'sawKill' ? match.players[killObs.killer] : undefined;
   const alive = slotOrder(match).map(id => match.players[id]).filter(p => p.status === 'alive' && !p.isMe);
@@ -49,6 +55,7 @@ export function GhostPanel() {
       <div className="row" style={{ marginBottom: 6 }}>
         <Crewmate color={me?.color ?? 'unknown'} size={40} state="dead" />
         <h2 style={{ margin: 0 }}>You're dead.</h2>
+        <button className="btn sm primary right" onClick={notDead} title="The screen read was wrong: mark me alive">I'm not dead</button>
 
       </div>
       {!killer ? (

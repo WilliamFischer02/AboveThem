@@ -38,6 +38,8 @@ export interface Player {
   colorLocked?: boolean;
   /** Meeting index the slot was read in (slots re-sort every meeting: alive first, dead last). */
   slotMeeting?: number;
+  /** User said "not dead" during this meeting: automatic death reads are ignored until the next one. */
+  aliveLockMeeting?: number;
 }
 
 // ---------------------------------------------------------------------------

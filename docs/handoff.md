@@ -61,6 +61,9 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
 5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
    now resume from `avatars_<id>.json`).
 6. Signal helper (ghost image role) and sabotage banner: still no frames.
+7. "I'm not dead" (ghost panel) marks me alive and ignores death reads for the rest of that
+   meeting (`Player.aliveLockMeeting`); the DEAD header now needs a still frame with no banner.
+   William was falsely read dead once tonight — if it recurs, log which signal fired.
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
 windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless

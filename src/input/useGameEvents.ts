@@ -354,7 +354,7 @@ export function useGameEvents() {
             }
           }
           // The card went grey / got the X: they died since the last meeting.
-          if (en.dead && p.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } }); if (!p.isMe) s.showToast(`${p.name} is dead (vote grid)`); }
+          if (en.dead && p.status === 'alive' && p.aliveLockMeeting !== meetingNow) { s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } }); if (!p.isMe) s.showToast(`${p.name} is dead (vote grid)`); }
         }
       }));
 
@@ -509,7 +509,7 @@ export function useGameEvents() {
           for (const d of parsed.filter(x => x.type === 'dead' && x.about)) {
             const live = useMatch.getState().match!;
             const pl = live.players[d.about!];
-            if (pl && pl.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: pl.id, status: 'dead' } }); s.showToast(`${pl.name} is dead (chat)`); }
+            if (pl && pl.status === 'alive' && pl.aliveLockMeeting !== meeting) { s.dispatch({ kind: 'player', payload: { id: pl.id, status: 'dead' } }); s.showToast(`${pl.name} is dead (chat)`); }
           }
           const claims = toClaims(parsed, { meeting, stamp, by: sender }, msg.text, () => newId('c'));
           for (const c of claims) {
@@ -553,7 +553,7 @@ export function useGameEvents() {
       guard(await listen<number>('game://me_dead', () => {
         const s = useMatch.getState();
         const me = s.match?.players[s.match.me];
-        if (me && me.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: me.id, status: 'dead' } }); s.showToast('You died (read from the meeting screen) — ghost mode'); }
+        if (me && me.status === 'alive' && me.aliveLockMeeting !== (s.match!.phase.meeting ?? 0)) { s.dispatch({ kind: 'player', payload: { id: me.id, status: 'dead' } }); s.showToast('You died (read from the meeting screen) — ghost mode'); }
       }));
 
       guard(await listen<string>('game://room', e => {

@@ -358,7 +358,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         if let Some(reason) = banner {
             if banner_text != last_banner { last_banner = banner_text.clone(); let _ = app.emit(EV_BANNER, reason); }
         } else { last_banner.clear(); }
-        if me_dead_header && me_dead_meeting != Some(detector.meeting) {
+        // "DEAD" must sit still (the sliding "DEAD BODY REPORTED" banner can read as "DEAD" for a frame).
+        if me_dead_header && banner.is_none() && stable("meeting_header", 2) && me_dead_meeting != Some(detector.meeting) {
             me_dead_meeting = Some(detector.meeting);
             let _ = app.emit(EV_ME_DEAD, detector.meeting);
         }
