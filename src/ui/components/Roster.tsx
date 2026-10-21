@@ -15,14 +15,14 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
   const [open, setOpen] = useState<PlayerId | null>(null);
   if (!match) return null;
   if (auto?.meGuessed) {
-    const pick = (id: PlayerId) => { dispatch({ kind: 'me', payload: { id } }); auto.setMeGuessed(false); };
+    const pick = (id: PlayerId) => { dispatch({ kind: 'me', payload: { id } }); if (id !== 'me' && match.players['me']) dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); auto.setMeGuessed(false); };
     return (
       <section className="panel">
         <h3>Which crewmate is you?</h3>
         <div className="roster">
-          {Object.values(match.players).map(p => (
+          {Object.values(match.players).filter(p => p.id !== 'me').map(p => (
             <div key={p.id} className="chip" onClick={() => pick(p.id)}>
-              <Crewmate color={p.color} size={46} state={p.status === 'alive' ? 'alive' : 'dead'} />
+              <PlayerIcon id={p.id} color={p.color} size={46} state={p.status === 'alive' ? 'alive' : 'dead'} />
               <div className="name">{p.name}</div>
             </div>
           ))}

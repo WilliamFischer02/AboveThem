@@ -88,6 +88,13 @@ export function resolveRoom(phrase: string, m: MatchState): RoomId | undefined {
 
 const PLAYER_RE = '([a-z0-9_]+(?: [a-z0-9_]+)?)';
 
+/** The captured phrase may be "blue is" or "saw purple": try the words from the end. */
+function resolveAny(phrase: string, m: MatchState, exclude?: PlayerId): PlayerId | undefined {
+  const words = phrase.trim().split(' ').filter(Boolean);
+  for (let i = words.length - 1; i >= 0; i--) { const p = resolvePlayer(words[i], m, exclude); if (p) return p; }
+  return undefined;
+}
+
 export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): ParsedClaim[] {
   const t = norm(text);
   const out: ParsedClaim[] = [];
@@ -99,36 +106,36 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
     if (room) add({ type: 'location', room });
   }
   for (const mm of t.matchAll(new RegExp(`\\b${PLAYER_RE} (?:was|is|went|came|were) (?:in|at|to|from) ([a-z0-9 ]{2,20})`, 'g'))) {
-    const about = resolvePlayer(mm[1], m, sender);
+    const about = resolveAny(mm[1], m, sender);
     const room = resolveRoom(mm[2], m);
     if (about && room) add({ type: 'sighting', about, room });
   }
   // Companion: "with X", "X was with me", "me and X"
   for (const mm of t.matchAll(new RegExp(`\\bwith ${PLAYER_RE}`, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ')[0], m, sender);
+    const about = resolveAny(mm[1], m, sender);
     if (about) add({ type: 'companion', about });
   }
   for (const mm of t.matchAll(new RegExp(`\\b${PLAYER_RE} (?:was|is) with me`, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ').pop() ?? '', m, sender);
+    const about = resolveAny(mm[1], m, sender);
     if (about) add({ type: 'companion', about });
   }
   // Clear: "X is clear/safe", "i saw X scan/do task", "X scanned"
   for (const mm of t.matchAll(new RegExp(`\\b${PLAYER_RE} (?:is |was )?(?:clear|safe|cleared|scanned|did (?:a )?visual)`, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ').pop() ?? '', m, sender);
+    const about = resolveAny(mm[1], m, sender);
     if (about) add({ type: 'clear', about });
   }
   for (const mm of t.matchAll(new RegExp(`\\b(?:i )?(?:saw|watched) ${PLAYER_RE} (?:scan|do|did|doing) `, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ').pop() ?? '', m, sender);
+    const about = resolveAny(mm[1], m, sender);
     if (about) add({ type: 'clear', about });
   }
   // Accusation: "X is sus", "X sus", "vote X", "it s X", "X vented/killed/faked", "X self report"
   for (const mm of t.matchAll(new RegExp(`\\b${PLAYER_RE} (?:is |was |100 |definitely )?(sus|the imp|the impostor|imp|impostor|vented|vent|killed|kill|faked|faking|self report|self reported)`, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ').pop() ?? '', m, sender);
+    const about = resolveAny(mm[1], m, sender);
     const verb = mm[2];
     if (about) add({ type: 'accusation', about, reason: /vent|kill|fake|self/.test(verb) ? verb : undefined });
   }
   for (const mm of t.matchAll(new RegExp(`\\b(?:vote|its|it s|it is) ${PLAYER_RE}`, 'g'))) {
-    const about = resolvePlayer(mm[1].split(' ')[0], m, sender);
+    const about = resolveAny(mm[1], m, sender);
     if (about) add({ type: 'accusation', about });
   }
   return out;

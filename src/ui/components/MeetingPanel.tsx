@@ -57,9 +57,35 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
           </>
         )}
       </div>}
+      <ChatFeed />
       {!ghost && <ClaimEntry />}
       {!ghost && <VoteOutcome />}
     </section>
+  );
+}
+
+function ChatFeed() {
+  const match = useMatch(s => s.match)!;
+  const meeting = match.phase.meeting ?? 0;
+  const lines = match.chat.filter(c => c.meeting === meeting).slice(-8);
+  if (lines.length === 0) return null;
+  const name = (id: string) => match.players[id]?.name ?? (id === 'unknown' ? '?' : id);
+  return (
+    <div className="col" style={{ marginTop: 10 }}>
+      <h3>Chat (read from screen)</h3>
+      <div className="col" style={{ gap: 3 }}>
+        {lines.map(c => {
+          const claims = match.claims.filter(k => k.by === c.sender && k.meeting === c.meeting && k.text?.startsWith(c.original.slice(0, 20)) || false);
+          return (
+            <div key={c.id} className="tl">
+              <span className="t">{name(c.sender)}</span>
+              <span>{c.original}</span>
+              <span className="muted small">{claims.map(k => k.type).join(' ') || ''}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

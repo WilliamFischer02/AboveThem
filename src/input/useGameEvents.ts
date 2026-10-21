@@ -16,6 +16,8 @@ import { loadSettings, type AppSettings } from '../state/settings';
 import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
+import { parseChatClaims, toClaims } from '../engine/chatClaims';
+import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId } from '../types/game';
 
@@ -166,6 +168,16 @@ export function useGameEvents() {
         const existing = Object.values(m.players);
         const fromLobby = source === 'lobby';
         if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
+        if (m.players['me'] && !fromLobby) {
+          // Provisional match: add everyone from the grid, then point "me" at my name (or ask).
+          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName);
+          for (const p of players) if (!useMatch.getState().match!.players[p.id]) s.dispatch({ kind: 'addPlayer', payload: { ...p, isMe: false } });
+          for (const en of entries) { const p = players.find(x => x.slot === en.index + 1); if (p && en.avatar_png) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); }
+          if (!meGuessed) { s.dispatch({ kind: 'me', payload: { id: me } }); s.dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); }
+          else setMeGuessed(true);
+          invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
+          return;
+        }
         if (fromLobby) {
           const now = new Set(entries.map(x => norm(x.name)));
           for (const k of [...lobbySeen.keys()]) if (!now.has(k)) lobbySeen.delete(k);
@@ -212,14 +224,27 @@ export function useGameEvents() {
 
       guard(await listen<PhaseEvent>('game://phase', e => {
         const s = useMatch.getState();
-        if (!s.match) return;
+        if (!s.match) {
+          // Already in a game (app started mid-match): open a provisional match with a placeholder "me";
+          // the next vote-grid read fills the roster and re-points "me" by name.
+          if (!['round', 'roundStart', 'meetingDiscussion', 'ejection'].includes(e.payload.phase)) return;
+          if (creating) return;
+          creating = true;
+          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
+          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: role ?? 'crew', lobbyCode: lobbyCode ?? undefined,
+            players: [{ id: 'me', name: settings.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: role ?? 'crew' }] });
+          creating = false;
+          useMatch.getState().showToast('Game in progress detected — roster fills at the next meeting');
+        }
+        const s2 = useMatch.getState();
+        if (!s2.match) return;
         const map: Record<string, Phase> = { lobby: 'lobby', roundStart: 'roundStart', round: 'round', meetingDiscussion: 'meetingDiscussion', meetingVoting: 'meetingVoting', ejection: 'ejection', gameOver: 'gameOver' };
         const phase = map[e.payload.phase];
-        if (!phase || s.match.phase.phase === phase) return;
-        if (phase === 'lobby' && s.match.phase.phase !== 'gameOver') return; // never bounce a live match back to lobby on a missed frame
-        s.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
+        if (!phase || s2.match.phase.phase === phase) return;
+        if (phase === 'lobby' && s2.match.phase.phase !== 'gameOver') return; // never bounce a live match back to lobby on a missed frame
+        s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
         if (phase === 'meetingDiscussion') bannerReason = null;
-        s.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
+        s2.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
       }));
 
       guard(await listen<EjectEvent>('game://eject', e => {
@@ -246,6 +271,26 @@ export function useGameEvents() {
         if (!MAPS[id] || MAPS[id].rooms.length === 0) { s.showToast(`Map ${id} detected — no map data yet, room features off`); pendingMap = null; return; }
         pendingMap = id;
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
+      }));
+
+      guard(await listen<{ sender: string; text: string; mine: boolean; system: boolean; y: number }[]>('game://chat', e => {
+        const s = useMatch.getState();
+        const m = s.match;
+        if (!m) return;
+        const meeting = m.phase.meeting ?? 0;
+        for (const msg of e.payload) {
+          if (msg.system) continue;
+          const sender = msg.mine ? m.me : (fuzzyFind(msg.sender, Object.values(m.players))?.id ?? 'unknown');
+          const stamp = s.stamp();
+          s.dispatch({ kind: 'chat', payload: { id: newId('ch'), meeting, stamp, sender, original: msg.text, source: 'ocr' } });
+          if (sender === 'unknown' || sender === m.me) continue;
+          const parsed = parseChatClaims(msg.text, sender, m);
+          const claims = toClaims(parsed, { meeting, stamp, by: sender }, msg.text, () => newId('c'));
+          for (const c of claims) {
+            s.dispatch({ kind: 'claim', payload: c });
+          }
+          if (claims.length) s.showToast(`${m.players[sender]?.name ?? sender}: ${claims.map(c => c.type + (c.room ? ' ' + c.room : '') + (c.about ? ' ' + (m.players[c.about]?.name ?? c.about) : '')).join(', ')} (chat)`);
+        }
       }));
 
       guard(await listen<string[]>('game://settings', e => {

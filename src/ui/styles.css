@@ -310,3 +310,5 @@ details.fold[open] > summary { margin-bottom: 8px; }
 
 .panel.hero { background: #2b303a; border-color: var(--mint); }
 .panel.hero h2 { color: #fff; text-shadow: 0 2px 0 #1a1d23; }
+
+.chip { grid-template-columns: 62px 1fr; }

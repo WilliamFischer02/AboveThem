@@ -126,12 +126,12 @@ fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
     votes.into_iter().max_by_key(|(_, (n, _))| *n).filter(|(_, (n, _))| *n >= 25).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
 }
 
-/// Headshot crop of the card icon: icon-local (14..110, 0..74) covers hat, visor and shoulders.
+/// Portrait crop of the card icon: the whole icon area (hat, visor, body, backpack) plus a margin,
+/// as the player appears on the vote grid.
 fn headshot_png(f: &Frame, cell: Rect) -> Option<String> {
     use base64::Engine;
-    let (ix, iy, _, _) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
-    let r = Rect::new(cell.x + ((ix + 4) as f32 * sx) as u32, cell.y.saturating_sub((2.0 * sx) as u32) + (iy as f32 * sx) as u32, (96.0 * sx) as u32, (76.0 * sx) as u32);
+    let r = Rect::new(cell.x + (2.0 * sx) as u32, cell.y, (138.0 * sx) as u32, (107.0 * sx) as u32);
     let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
     let mut rgba = buf;
     for px in rgba.chunks_exact_mut(4) { px.swap(0, 2); px[3] = 255; }

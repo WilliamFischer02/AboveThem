@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch } from '../../state/store';
 import { isTauri } from '../../state/persist';
-import { Crewmate } from './Crewmate';
+import { Crewmate, PlayerIcon } from './Crewmate';
 import { PALETTE, swatch } from '../palette';
 import type { Player, PlayerColor } from '../../types/game';
 import { myRoomNow, roomName, slotOrder } from '../../input/useHotkeys';
@@ -57,7 +57,7 @@ export function GhostPanel() {
           <div className="roster">
             {alive.map(p => (
               <div key={p.id} className="chip" onClick={() => observe({ type: 'sawKill', killer: p.id, victim: match.me, room: here }, `${p.name} killed you in ${roomName(match, here)}`)}>
-                <Crewmate color={p.color} size={40} />
+                <PlayerIcon id={p.id} color={p.color} size={40} />
                 <div className="name">{p.name}</div>
               </div>
             ))}
@@ -67,7 +67,7 @@ export function GhostPanel() {
         <>
           <div className="row" style={{ marginBottom: 8 }}>
             <span className="badge imp">KILLER</span>
-            <Crewmate color={killer.color} size={44} />
+            <PlayerIcon id={killer.id} color={killer.color} size={44} />
             <span className="name" style={{ fontSize: 20, fontWeight: 700 }}>{killer.name}</span>
             <span className="muted small">{PALETTE[killer.color as keyof typeof PALETTE]?.label ?? killer.color}</span>
           </div>
