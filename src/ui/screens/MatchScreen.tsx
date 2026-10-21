@@ -7,6 +7,7 @@ import { Roster } from '../components/Roster';
 import { Timeline } from '../components/Timeline';
 import { MeetingPanel } from '../components/MeetingPanel';
 import { Toast } from '../components/Toast';
+import { ChatDock } from '../components/ChatDock';
 import { useHotkeys, myRoomNow } from '../../input/useHotkeys';
 import { buildConfig, keyLabel, ACTION_KEYS, FIRST_SPECIAL } from '../../input/hotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
@@ -28,7 +29,6 @@ export function MatchScreen() {
   const setPhase = useMatch(s => s.setPhase);
   const closeMatch = useMatch(s => s.closeMatch);
   const diskError = useMatch(s => s.diskError);
-  const matchId = useMatch(s => s.matchId);
   const hk = useHotkeys();
   const ov = useOverlay(hk.pending);
   const auto = useAuto();
@@ -46,6 +46,13 @@ export function MatchScreen() {
   const myRoom = myRoomId ? match.map.rooms.find(r => r.id === myRoomId)?.name ?? myRoomId : null;
   const alive = Object.values(match.players).filter(p => p.status === 'alive').length;
   const impLeft = match.settings.impostorCount - match.ejections.filter(e => e.wasImpostor).length;
+  const outcome = match.phase.outcome;
+
+  // Phase pill: the game's own colours — teal/red role reveal, blue victory, red defeat.
+  const pill = phase === 'lobby' ? ['lobby', '⌂ LOBBY']
+    : phase === 'gameOver' ? [outcome === 'victory' ? 'victory' : outcome === 'defeat' ? 'defeat' : 'over', outcome === 'victory' ? '★ VICTORY' : outcome === 'defeat' ? '✖ DEFEAT' : 'GAME OVER']
+    : phase === 'roundStart' ? [impostor ? 'roleimp' : 'rolecrew', impostor ? 'IMPOSTOR' : 'CREWMATE']
+    : inMeeting ? ['meeting', '🔔 MEETING'] : phase === 'ejection' ? ['ejection', '🗳 VOTED'] : ['round', '▶ ROUND'];
 
   return (
     <div className={`shell ${impostor ? 'impostor' : ''}`}>
@@ -53,48 +60,44 @@ export function MatchScreen() {
         <div className="brand">Above<span>Them</span></div>
         {impostor && <span className="badge imp role-pill">IMPOSTOR</span>}
         <span className="muted small">{match.map.name} · {alive} alive · {impLeft} imp</span>
-        <span className={`phase-pill right ${phase === 'lobby' ? 'lobby' : phase === 'gameOver' ? 'over' : inMeeting ? 'meeting' : phase === 'ejection' ? 'ejection' : 'round'}`} key={phase}>
-          {phase === 'lobby' ? '⌂ LOBBY' : phase === 'gameOver' ? 'GAME OVER' : inMeeting ? '🔔 MEETING' : phase === 'ejection' ? '🗳 VOTED' : '▶ ROUND'}
+        <span className={`phase-pill right ${pill[0]}`} key={phase + (outcome ?? '')}>
+          {pill[1]}
           {phase !== 'lobby' && phase !== 'gameOver' && <span className="clock">R{st.round + 1} {fmt(st.t)}</span>}
           {myRoom && <span className="muted small">· {myRoom}</span>}
         </span>
       </header>
-      <div className="content">
-        <div className="row">
-          {(phase === 'lobby' || phase === 'ejection' || phase === 'roundStart') && <button className="btn primary" onClick={() => setPhase('round')}>▶ Round start</button>}
-          {phase === 'round' && <button className="btn danger" onClick={() => setPhase('meetingDiscussion', { reason: 'body' })}>☠ Body reported</button>}
-          {phase === 'round' && <button className="btn warn" onClick={() => setPhase('meetingDiscussion', { reason: 'button' })}>🔔 Emergency meeting</button>}
-          {inMeeting && <button className="btn" onClick={() => setPhase('ejection')}>Voting done</button>}
-          {phase !== 'gameOver' && phase !== 'lobby' && <button className="btn ghost sm" onClick={() => setPhase('gameOver')}>Game over</button>}
-          <button className="btn sm right" title="Re-read the vote grid and fix names (works while the meeting screen is up)" onClick={async () => { const msg = await auto?.rescanNames(); if (msg) useMatch.getState().showToast(msg); }}>↻ Rescan names</button>
-          <button className={`btn sm ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
-          <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
-        </div>
-        <AutoStatus />
-        {match.myTasks && match.myTasks.length > 0 && (
+      <div className="content with-dock">
+        {auto && (auto.captureOk === false || auto.meGuessed) && <AutoStatus />}
+        {diskError && <div className="status-line">disk: {diskError}</div>}
+        {hk.error && <div className="status-line">hotkeys: {hk.error}</div>}
+        {match.myTasks && match.myTasks.length > 0 && !ghost && (
           <div className="row small tasks-line">
-            <span className="muted">my tasks:</span>
             {match.myTasks.map((t, i) => <span key={i} className={`badge ${t.matched ? 'dim' : ''}`} title={t.room}>{t.name}{t.progress ? ' ' + t.progress : ''}</span>)}
           </div>
         )}
-        <div className="row small">
-          <span className={hk.registered === 'global' ? 'status-ok' : 'muted'}>
-            hotkeys: {hk.registered === 'global' ? 'global (work while Among Us is focused)' : hk.registered === 'window' ? 'window only' : 'off'}
-          </span>
-          {hk.error && <span className="status-err">{hk.error}</span>}
-          {ov.error && <span className="status-err">overlay: {ov.error}</span>}
-          {diskError && <span className="status-err">disk: {diskError}</span>}
-          {matchId && <span className="muted right">log: matches/{matchId}.ndjson</span>}
-        </div>
         {ghost && <GhostPanel />}
         {impostor && !ghost && <ImpostorPanel scores={scores} inMeeting={inMeeting} />}
         {script && !impostor && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
         {script && impostor && !ghost && <details className="fold panel tight"><summary>What the crew engine sees (their likely vote)</summary><MeetingPanel script={script} scores={scores} ghost={true} /></details>}
         <Roster scores={scores} />
-        <Timeline />
-        <details className="fold panel tight"><summary>Screen reading (auto)</summary><CapturePanel knownNames={Object.values(match.players).map(p => p.name)} /></details>
+        <details className="fold panel tight"><summary>Timeline</summary><Timeline /></details>
+        <details className="fold panel tight"><summary>Controls</summary>
+          <div className="toolrow" style={{ marginTop: 6 }}>
+            {(phase === 'lobby' || phase === 'ejection' || phase === 'roundStart' || phase === 'gameOver') && <button className="btn sm primary" onClick={() => setPhase('round')}>▶ Round start</button>}
+            {phase === 'round' && <button className="btn sm danger" onClick={() => setPhase('meetingDiscussion', { reason: 'body' })}>☠ Body reported</button>}
+            {phase === 'round' && <button className="btn sm warn" onClick={() => setPhase('meetingDiscussion', { reason: 'button' })}>🔔 Emergency</button>}
+            {inMeeting && <button className="btn sm" onClick={() => setPhase('ejection')}>Voting done</button>}
+            {phase !== 'gameOver' && phase !== 'lobby' && <button className="btn ghost sm" onClick={() => setPhase('gameOver')}>Game over</button>}
+            <button className="btn sm" title="Re-read the vote grid and fix names (works while the meeting screen is up)" onClick={async () => { const msg = await auto?.rescanNames(); if (msg) useMatch.getState().showToast(msg); }}>↻ Rescan names</button>
+            <button className={`btn sm ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
+            <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
+          </div>
+          {ov.error && <div className="status-line">overlay: {ov.error}</div>}
+        </details>
+        <details className="fold panel tight"><summary>Screen reading</summary><CapturePanel knownNames={Object.values(match.players).map(p => p.name)} /></details>
         {!ghost && <CheatSheet />}
       </div>
+      <ChatDock />
       <Toast pending={hk.pending} />
     </div>
   );
@@ -102,10 +105,11 @@ export function MatchScreen() {
 
 function CheatSheet() {
   const match = useMatch(s => s.match)!;
+  const hk = useHotkeys();
   const cfg = buildConfig(match.map);
   return (
     <details className="cheat panel tight">
-      <summary>Hotkeys ({cfg.prefix} + key, then key)</summary>
+      <summary>Hotkeys ({cfg.prefix} + key, then key) · {hk.registered === 'global' ? 'global' : hk.registered === 'window' ? 'window only' : 'off'}</summary>
       <div className="cheat-grid">
         {COLOR_IDS.map(c => <span key={c}><span className="key">{PALETTE[c].key}</span> {PALETTE[c].label}</span>)}
       </div>

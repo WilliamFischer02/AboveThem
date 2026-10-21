@@ -35,7 +35,7 @@ export type MatchEvent =
   /** Patch a player (status, name, knownRole, isPartner). */
   | { kind: 'player'; wall: number; payload: Partial<Player> & { id: PlayerId } }
   | { kind: 'settings'; wall: number; payload: Partial<LobbySettings> }
-  | { kind: 'myRole'; wall: number; payload: { role: Role } }
+  | { kind: 'myRole'; wall: number; payload: { role: Role; locked?: boolean; auto?: boolean } }
   /** Re-point "me" at another player (auto-roster could not tell which crewmate is the user). */
   | { kind: 'me'; wall: number; payload: { id: PlayerId } }
   /** Add a player discovered mid-match (auto-roster). */
@@ -44,13 +44,15 @@ export type MatchEvent =
   | { kind: 'removePlayer'; wall: number; payload: { id: PlayerId } }
   /** My task list, read from the top-left of the screen. */
   | { kind: 'myTasks'; wall: number; payload: MyTask[] }
+  /** Translation / language detected for a chat line (arrives after the line itself). */
+  | { kind: 'chatPatch'; wall: number; payload: { id: string; translated?: string; lang?: string; langConfidence?: number } }
   /** Removes the most recent not-yet-undone undoable event. */
   | { kind: 'undo'; wall: number };
 
 export type EventKind = MatchEvent['kind'];
 
 /** `init` can't be undone; everything else can. */
-export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo';
+export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo' && e.kind !== 'chatPatch';
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -112,7 +114,12 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
     case 'chat': return { ...m, chat: [...m.chat, e.payload] };
     case 'player': return patchPlayer(m, e.payload.id, e.payload);
     case 'settings': return { ...m, settings: { ...m.settings, ...e.payload }, map: e.payload.map ? MAPS[e.payload.map] : m.map };
-    case 'myRole': return { ...m, myRole: e.payload.role };
+    case 'myRole': {
+      if (e.payload.auto && m.myRoleLocked) return m; // the user said otherwise
+      const me = m.players[m.me];
+      const players = me ? { ...m.players, [m.me]: { ...me, knownRole: e.payload.role } } : m.players;
+      return { ...m, myRole: e.payload.role, myRoleLocked: e.payload.locked ? true : m.myRoleLocked, players };
+    }
     case 'me': {
       const players: Record<PlayerId, Player> = {};
       for (const p of Object.values(m.players)) players[p.id] = { ...p, isMe: p.id === e.payload.id, knownRole: p.id === e.payload.id ? m.myRole : p.id === m.me ? 'unknown' : p.knownRole };
@@ -120,6 +127,7 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
     }
     case 'addPlayer': return m.players[e.payload.id] ? m : { ...m, players: { ...m.players, [e.payload.id]: e.payload } };
     case 'myTasks': return { ...m, myTasks: e.payload };
+    case 'chatPatch': return { ...m, chat: m.chat.map(c => c.id === e.payload.id ? { ...c, ...e.payload, id: c.id } : c) };
     case 'removePlayer': {
       if (!m.players[e.payload.id] || e.payload.id === m.me) return m;
       const players = { ...m.players };

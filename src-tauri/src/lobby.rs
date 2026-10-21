@@ -90,7 +90,7 @@ pub fn read_lobby(f: &Frame) -> anyhow::Result<RosterRead> {
         let red = lab.chunks_exact(4).filter(|p| p[2] > 170 && p[1] < 90 && p[0] < 90).count() as f32 / (lw * lh) as f32;
         let white = lab.chunks_exact(4).filter(|p| p[2] > 200 && p[1] > 200 && p[0] > 200).count() as f32 / (lw * lh) as f32;
         let red_name = red > 0.03 && red > white * 0.6;
-        entries.push(RosterEntry { index: entries.len() as u32, name, name_confidence: 0.7, color: color_name(if n < 20 { PlayerColor::Unknown } else { c }).to_string(), color_delta_e: d, dead: false, reporter: false, avatar_png: None, body_rgb: None, red_name });
+        entries.push(RosterEntry { index: entries.len() as u32, name, name_confidence: 0.7, color: color_name(if n < 20 { PlayerColor::Unknown } else { c }).to_string(), color_delta_e: d, dead: false, reporter: false, avatar_png: None, body_rgb: None, red_name, icon_hash: 0, dim: 1.0 });
     }
     // Left→right order so slots are stable while the lobby fills.
     entries.sort_by_key(|e| e.index);

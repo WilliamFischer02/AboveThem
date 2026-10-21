@@ -71,7 +71,7 @@ export function SetupScreen() {
             <Crewmate color="cyan" size={56} />
             <div className="col" style={{ gap: 2 }}>
               <h2 style={{ margin: 0 }}>Waiting for a lobby</h2>
-              <span className="muted small">Join a lobby in Among Us. The roster, map, settings, rounds, meetings and ejections are read from the screen; nothing to click.</span>
+              <span className="muted small">Join a lobby in Among Us. Everything fills in from the screen.</span>
             </div>
           </div>
           <AutoStatus />
@@ -86,10 +86,9 @@ export function SetupScreen() {
               </label>
               <label className="check"><input type="checkbox" checked={auto.settings.autoCapture} onChange={e => { const n = { ...auto.settings!, autoCapture: e.target.checked }; auto.setSettings(n); saveSettings(n); }} /> read the game automatically</label>
             </div>
-            <div className="muted small">With this on, the first meeting fills the roster by itself; round start, meetings and ejections are detected from the screen. Manual setup below is the fallback.</div>
           </section>
         )}
-        <details className="fold panel"><summary>Manual setup (only if automatic reading is off or wrong)</summary>
+        <details className="fold panel"><summary>Manual setup</summary>
         <section className="panel" style={{ marginTop: 6 }}>
           <h3>Lobby</h3>
           <div className="row">
@@ -169,7 +168,7 @@ export function SetupScreen() {
         </section>
         </details>
 
-        <details className="fold panel tight"><summary>Screen reading (auto) — details</summary><CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
+        <details className="fold panel tight"><summary>Screen reading</summary><CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
           const used = new Set<string>();
           const next: PresetPlayer[] = [];
           for (const e of entries) {

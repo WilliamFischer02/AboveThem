@@ -19,12 +19,25 @@ const isAlone = (s: SightingObs) => s.alone ?? (!s.withPlayers || s.withPlayers.
 // Manual
 // ---------------------------------------------------------------------------
 
+/** The user's latest mark per player wins (toggling sus → clear → neutral replaces, never stacks). */
+export function userMarks(m: MatchState): Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }> {
+  const out = new Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }>();
+  for (const o of m.observations) {
+    if (o.type !== 'manualMark') continue;
+    if (o.mark === 'neutral') out.delete(o.player); else out.set(o.player, { mark: o.mark, id: o.id, round: o.stamp.round });
+  }
+  return out;
+}
+
 export function ruleManualMarks(m: MatchState): EvidenceItem[] {
-  return m.observations.flatMap(o => {
-    if (o.type !== 'manualMark' || o.mark === 'neutral') return [];
-    const w = o.weight ?? (o.mark === 'sus' ? W.manual.sus : W.manual.clear);
-    return [ev(o.player, w, 'manual', `Marked ${o.mark} by you`, [o.id])];
-  });
+  const out: EvidenceItem[] = [];
+  for (const [player, { mark, id }] of userMarks(m)) {
+    if (mark === 'hardClear') continue; // handled as a hard fact in suspicion.ts
+    const o = m.observations.find(x => x.id === id);
+    const w = (o && o.type === 'manualMark' && o.weight) || (mark === 'sus' ? W.manual.sus : W.manual.clear);
+    out.push(ev(player, w, 'manual', mark === 'sus' ? 'Marked sus by you' : 'Round-cleared by you', [id]));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -49,11 +49,11 @@ export function GhostPanel() {
       <div className="row" style={{ marginBottom: 6 }}>
         <Crewmate color={me?.color ?? 'unknown'} size={40} state="dead" />
         <h2 style={{ margin: 0 }}>You're dead.</h2>
-        <span className="muted small right">keep logging what you see; it feeds the next vote</span>
+
       </div>
       {!killer ? (
         <>
-          <div className="muted small" style={{ marginBottom: 4 }}>Who killed you? (one click — hard evidence)</div>
+          <div className="muted small" style={{ marginBottom: 4 }}>Who killed you?</div>
           <div className="roster">
             {alive.map(p => (
               <div key={p.id} className="chip" onClick={() => observe({ type: 'sawKill', killer: p.id, victim: match.me, room: here }, `${p.name} killed you in ${roomName(match, here)}`)}>
@@ -152,7 +152,7 @@ function SignalHelper({ killerColor }: { killerColor: PlayerColor }) {
     <div className="col">
       <div className="row">
         <button className={`btn sm ${open ? 'primary' : ''}`} onClick={() => setOpen(o => !o)}>{open ? 'Signal helper on' : 'Signal helper (image role)'}</button>
-        <span className="muted small">ranks the on-screen icons by how close their colour is to the killer's</span>
+
       </div>
       {open && (
         <>

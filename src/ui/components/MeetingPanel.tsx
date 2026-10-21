@@ -5,7 +5,7 @@ import { newId } from '../../state/events';
 import { verifyClaims } from '../../engine/contradictions';
 import { pushTally } from '../../engine/chatClaims';
 import { PlayerIcon } from './Crewmate';
-import { Crewmate } from './Crewmate';
+import { copyText } from '../clipboard';
 
 function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceItem> }) {
   const [open, setOpen] = useState(false);
@@ -23,6 +23,31 @@ function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceI
   );
 }
 
+/** Copies exactly the sentence (no "to:" label, no prefix) so it can be pasted into the game chat as is. */
+export function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  const showToast = useMatch(s => s.showToast);
+  return (
+    <button className={`btn xs copy-btn ${done ? 'done' : ''}`} title="Copy to clipboard"
+      onClick={async e => { e.stopPropagation(); const ok = await copyText(text); setDone(ok); if (!ok) showToast('Could not copy'); setTimeout(() => setDone(false), 1200); }}>
+      {done ? '✓' : '⧉'}
+    </button>
+  );
+}
+
+/** One suggested line: the sentence, a copy button, and (optionally) who it is aimed at + why. */
+function Line({ text, to, why, evidence }: { text: string; to?: string; why: string[]; evidence: Map<string, EvidenceItem> }) {
+  return (
+    <div className="script-line">
+      <div className="col">
+        <span className="text">{to && <span className="to">{to}</span>}{text}</span>
+        <Why ids={why} evidence={evidence} />
+      </div>
+      <CopyButton text={text} />
+    </div>
+  );
+}
+
 export function MeetingPanel({ script, scores, ghost = false }: { script: MeetingScript; scores: SuspectScore[]; ghost?: boolean }) {
   const match = useMatch(s => s.match)!;
   const evidence = useMemo(() => new Map(scores.flatMap(s => s.evidence).map(e => [e.id, e])), [scores]);
@@ -30,38 +55,38 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
   const target = script.vote.target;
   return (
     <section className="panel">
-      <h3>Meeting {script.meeting + 1}</h3>
-      <div className="headline" style={{ marginBottom: 8 }}>{script.headline}</div>
-      {ghost && <div className="muted small">You can't talk or vote. The ranking keeps updating from what you log; use it to pick your signal.</div>}
+      <div className="row" style={{ marginBottom: 6 }}>
+        <h3>Meeting {script.meeting + 1}</h3>
+        <span className="small right" style={{ color: '#e6eaf0' }}>{script.headline}</span>
+      </div>
       <div className={`vote-card big ${target === 'skip' ? 'skip' : 'go'}`}>
         {target !== 'skip' && <PlayerIcon id={target} color={match.players[target]?.color ?? 'unknown'} size={48} />}
         <div className="col" style={{ gap: 2 }}>
           <div style={{ fontWeight: 800, fontSize: 22 }}>{target === 'skip' ? 'SKIP' : `VOTE ${name(target)}`} <span className="muted" style={{ fontSize: 14 }}>({Math.round(script.vote.confidence * 100)}%)</span></div>
           <div className="small">{script.vote.reason}</div>
+          {script.vote.alternative && <div className="small muted">or: {name(script.vote.alternative)}</div>}
         </div>
       </div>
       <PushTally recommended={target} />
       {!ghost && <div className="col">
-        <h3>Say</h3>
-        {script.say.map((s, i) => <div key={i} className="script-line"><span className="text">{s.text}</span><Why ids={s.why} evidence={evidence} /></div>)}
-        <h3>Ask</h3>
-        {script.ask.map((q, i) => (
-          <div key={i} className="script-line">
-            <span className="text"><b>{name(q.to)}:</b> {q.text}</span>
-            <Why ids={q.why} evidence={evidence} />
-          </div>
-        ))}
-        {script.vote.alternative && <div className="small muted">alternative: {name(script.vote.alternative)}</div>}
+        {script.say.length > 0 && <h3>Say</h3>}
+        {script.say.map((s, i) => <Line key={'s' + i} text={s.text} why={s.why} evidence={evidence} />)}
+        {script.ask.length > 0 && <h3>Ask</h3>}
+        {script.ask.map((q, i) => <Line key={'a' + i} text={q.text} to={q.to === 'all' ? undefined : name(q.to)} why={q.why} evidence={evidence} />)}
         {script.watch.length > 0 && (
-          <>
-            <h3>Watch for</h3>
+          <details className="fold"><summary>Watch for</summary>
             {script.watch.map((w, i) => <div key={i} className="script-line"><span className="text small">{w}</span></div>)}
-          </>
+          </details>
         )}
       </div>}
-      <ChatFeed />
-      {!ghost && <ClaimEntry />}
-      {!ghost && <VoteOutcome />}
+      {!ghost && (
+        <details className="fold" style={{ marginTop: 8 }}><summary>Log a claim / record the vote by hand</summary>
+          <div className="manual-grid">
+            <ClaimEntry />
+            <VoteOutcome />
+          </div>
+        </details>
+      )}
     </section>
   );
 }
@@ -87,31 +112,6 @@ function PushTally({ recommended }: { recommended: string }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function ChatFeed() {
-  const match = useMatch(s => s.match)!;
-  const meeting = match.phase.meeting ?? 0;
-  const lines = match.chat.filter(c => c.meeting === meeting).slice(-8);
-  if (lines.length === 0) return null;
-  const name = (id: string) => match.players[id]?.name ?? (id === 'unknown' ? '?' : id);
-  return (
-    <div className="col" style={{ marginTop: 10 }}>
-      <h3>Chat (read from screen)</h3>
-      <div className="col" style={{ gap: 3 }}>
-        {lines.map(c => {
-          const claims = match.claims.filter(k => k.by === c.sender && k.meeting === c.meeting && k.text?.startsWith(c.original.slice(0, 20)) || false);
-          return (
-            <div key={c.id} className="tl">
-              <span className="t">{name(c.sender)}</span>
-              <span>{c.original}</span>
-              <span className="muted small">{claims.map(k => k.type).join(' ') || ''}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -151,9 +151,9 @@ function ClaimEntry() {
     });
     showToast(`Logged claim by ${match.players[by].name}`, true);
   };
+  const mine = match.claims.filter(c => c.meeting === (match.phase.meeting ?? 0));
   return (
-    <div className="col" style={{ marginTop: 10 }}>
-      <h3>Log a chat claim</h3>
+    <div className="col">
       <div className="row">
         <select className="input" value={by} onChange={e => setBy(e.target.value)}>
           {alive.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -180,9 +180,9 @@ function ClaimEntry() {
         <input className="input" style={{ width: 70 }} placeholder="t 0:45" value={t} onChange={e => setT(e.target.value)} />
         <button className="btn sm primary" onClick={submit}>Log</button>
       </div>
-      {match.claims.filter(c => c.meeting === (match.phase.meeting ?? 0)).length > 0 && (
+      {mine.length > 0 && (
         <div className="col" style={{ gap: 3 }}>
-          {match.claims.filter(c => c.meeting === (match.phase.meeting ?? 0)).map(c => (
+          {mine.map(c => (
             <div key={c.id} className="tl">
               <span className="t">{verdicts.get(c.id) === 'contradicted' ? '✗' : verdicts.get(c.id) === 'confirmed' ? '✓' : '…'}</span>
               <span>{match.players[c.by]?.name} {CLAIM_TYPES.find(x => x.t === c.type)?.label} {c.about ? match.players[c.about]?.name : ''} {c.taskId ? match.map.tasks.find(x => x.id === c.taskId)?.name : ''} {c.room ? match.map.rooms.find(r => r.id === c.room)?.name : ''}</span>
@@ -219,21 +219,19 @@ function VoteOutcome() {
     showToast(player ? `${match.players[player].name} ejected${wasImpostor === true ? ' — impostor' : wasImpostor === false ? ' — not impostor' : ''}` : 'No one ejected', true);
   };
   return (
-    <div className="col" style={{ marginTop: 10 }}>
-      <h3>Vote result</h3>
-      <div className="row">
-        <select className="input" value={ejected} onChange={e => setEjected(e.target.value)}>
-          <option value="skip">skipped / tie</option>
-          {alive.map(p => <option key={p.id} value={p.id}>{p.name} ejected</option>)}
+    <div className="row">
+      <span className="muted small">vote result:</span>
+      <select className="input" value={ejected} onChange={e => setEjected(e.target.value)}>
+        <option value="skip">skipped / tie</option>
+        {alive.map(p => <option key={p.id} value={p.id}>{p.name} ejected</option>)}
+      </select>
+      {ejected !== 'skip' && match.settings.confirmEjectsOn && (
+        <select className="input" value={wasImp} onChange={e => setWasImp(e.target.value as 'yes' | 'no')}>
+          <option value="no">was NOT the impostor</option>
+          <option value="yes">WAS the impostor</option>
         </select>
-        {ejected !== 'skip' && match.settings.confirmEjectsOn && (
-          <select className="input" value={wasImp} onChange={e => setWasImp(e.target.value as 'yes' | 'no')}>
-            <option value="no">was NOT the impostor</option>
-            <option value="yes">WAS the impostor</option>
-          </select>
-        )}
-        <button className="btn sm danger" onClick={submit}>Record</button>
-      </div>
+      )}
+      <button className="btn sm danger" onClick={submit}>Record</button>
     </div>
   );
 }

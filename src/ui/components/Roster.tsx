@@ -6,6 +6,8 @@ import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
 import { isTauri } from '../../state/persist';
+import { userMarks } from '../../engine/rules';
+import type { UserMark } from '../../types/game';
 
 type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color' | 'rename';
 
@@ -37,15 +39,15 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
   const prime = scores.find(s => s.verdict === 'unknown' || s.verdict === 'softClear');
   const primeId = prime && prime.evidence.some(e => e.weight > 0) ? prime.player : null;
   const lastObs = match.observations[match.observations.length - 1];
+  const marks = userMarks(match);
   return (
     <section className="panel">
       <div className="row" style={{ marginBottom: 6 }}>
-        <h3>Roster</h3>
-        <span className="muted small right">click a crewmate to log</span>
+        <h3>Roster<ConfidenceDot /></h3>
       </div>
       <div className="roster">
         {players.map(p => (
-          <Chip key={p.id} p={p} score={byId[p.id]} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onClose={() => setOpen(null)}
+          <Chip key={p.id} p={p} score={byId[p.id]} mark={marks.get(p.id)?.mark} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onClose={() => setOpen(null)}
             prime={p.id === primeId} flashKey={lastObs && 'player' in lastObs && lastObs.player === p.id ? lastObs.id : lastObs && lastObs.type === 'sawKill' && lastObs.killer === p.id ? lastObs.id : null} />
         ))}
       </div>
@@ -53,7 +55,15 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
   );
 }
 
-function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Player; score?: SuspectScore; open: boolean; onToggle: () => void; onClose: () => void; prime?: boolean; flashKey?: string | null }) {
+/** One dot: how sure the app is that this roster mirrors the vote grid (names read, cards matched). */
+function ConfidenceDot() {
+  const c = useMatch(s => s.rosterConfidence);
+  const cls = c === null ? 'none' : c >= 0.8 ? 'good' : c >= 0.5 ? 'ok' : 'bad';
+  const title = c === null ? 'Roster not read from a meeting yet' : `Roster confidence ${Math.round(c * 100)}% (names read + headshots matched on the last vote grid)`;
+  return <span className={`conf-dot ${cls}`} title={title} />;
+}
+
+function Chip({ p, score, mark, open, onToggle, onClose, prime, flashKey }: { p: Player; score?: SuspectScore; mark?: UserMark; open: boolean; onToggle: () => void; onClose: () => void; prime?: boolean; flashKey?: string | null }) {
   const match = useMatch(s => s.match)!;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -69,14 +79,18 @@ function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Playe
   const pct = score && hasEvidence ? Math.round(score.probability * 100) : null;
   const cleared = verdict === 'certainCrew' || verdict === 'hardClear' || p.knownRole === 'crew';
   const state = p.status === 'alive' ? 'alive' : p.status === 'dead' ? 'dead' : p.status === 'ejected' ? 'ejected' : 'disconnected';
+  const markCls = mark === 'sus' ? 'mark-sus' : mark === 'clear' ? 'mark-clear' : mark === 'hardClear' ? 'mark-hard' : '';
   return (
-    <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''} ${prime && p.status === 'alive' ? 'prime' : ''} ${cleared && !p.isMe && p.status === 'alive' ? 'cleared' : ''}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
+    <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''} ${prime && p.status === 'alive' && !mark ? 'prime' : ''} ${cleared && !p.isMe && p.status === 'alive' && !mark ? 'cleared' : ''} ${markCls}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
       {flashKey && <span className="flash" key={flashKey} />}
       <PlayerIcon id={p.id} color={p.color} size={46} state={state} />
       <div style={{ minWidth: 0 }}>
         <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''} ${(p.isMe && match.myRole === 'impostor') || p.isPartner ? 'red-name' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
         <div className="meta">
           {p.status !== 'alive' && <span className="badge dim">{p.status}</span>}
+          {mark === 'sus' && <span className="badge sus">SUS</span>}
+          {mark === 'clear' && <span className="badge rclear">ROUND CLEAR</span>}
+          {mark === 'hardClear' && <span className="badge hclear">HARD CLEAR</span>}
           {p.isPartner && <span className="badge imp">PARTNER</span>}
           {p.knownRole === 'impostor' && !p.isPartner && <span className="badge imp">IMPOSTOR</span>}
           {p.knownRole === 'crew' && !p.isMe && <span className="badge crew">CREW</span>}
@@ -93,6 +107,7 @@ function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Playe
         <div className="bar"><i style={{ width: `${verdict === 'certainImpostor' ? 100 : verdict === 'certainCrew' || verdict === 'hardClear' ? 0 : pct}%` }} /></div>
       )}
       {!p.isMe && p.status === 'alive' && <QuickActions p={p} />}
+      {!p.isMe && <MarkToggles p={p} mark={mark} />}
       {open && <ChipMenu p={p} onClose={onClose} />}
     </div>
   );
@@ -110,7 +125,23 @@ function QuickActions({ p }: { p: Player }) {
       <button className="btn xs" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first (prefix + / + room)'} disabled={!here}
         onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁 here</button>
       <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0]?.id ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
-      <button className="btn xs warn" onClick={() => observe({ type: 'manualMark', player: p.id, mark: 'sus' }, `${p.name} marked sus`)}>sus</button>
+    </div>
+  );
+}
+
+/** Your verdict on the card: sus / round clear / hard clear. Click again to unmark. Stays until the game ends. */
+function MarkToggles({ p, mark }: { p: Player; mark?: UserMark }) {
+  const observe = useMatch(s => s.observe);
+  const stop = (e: React.MouseEvent) => { e.stopPropagation(); };
+  const set = (m: UserMark) => {
+    if (mark === m) observe({ type: 'manualMark', player: p.id, mark: 'neutral' }, `${p.name} unmarked`);
+    else observe({ type: 'manualMark', player: p.id, mark: m }, `${p.name}: ${m === 'sus' ? 'sus' : m === 'clear' ? 'round clear' : 'hard clear'}`);
+  };
+  return (
+    <div className="marks" onClick={stop} onMouseDown={stop}>
+      <button className={`btn xs ${mark === 'sus' ? 'on-sus' : ''}`} title="Suspicious (soft evidence)" onClick={() => set('sus')}>sus</button>
+      <button className={`btn xs ${mark === 'clear' ? 'on-clear' : ''}`} title="Cleared for this round (soft)" onClick={() => set('clear')}>clear</button>
+      <button className={`btn xs ${mark === 'hardClear' ? 'on-hard' : ''}`} title="Hard clear: you are certain (visual task, kill window)" onClick={() => set('hardClear')}>hard</button>
     </div>
   );
 }
@@ -170,7 +201,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
         <div className="muted small">Where am I?</div>
         {rooms(r => { observe({ type: 'myRoom', room: r }, `Me → ${roomName(match, r)}`); done(); })}
         <div className="row">
-          <button className="btn sm" onClick={() => { dispatch({ kind: 'myRole', payload: { role: match.myRole === 'impostor' ? 'crew' : 'impostor' } }); done(); }}>
+          <button className="btn sm" onClick={() => { dispatch({ kind: 'myRole', payload: { role: match.myRole === 'impostor' ? 'crew' : 'impostor', locked: true } }); done(); }}>
             I am {match.myRole === 'impostor' ? 'crew' : 'impostor'} this game
           </button>
         </div>
@@ -192,10 +223,6 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
           <div className="row">
             <button className="btn sm danger" onClick={() => { observe({ type: 'sawVent', player: p.id, room: here }, `${p.name} VENTED`); done(); }}>Saw vent</button>
             <button className="btn sm danger" onClick={() => setMode('kill')}>Saw kill…</button>
-          </div>
-          <div className="row">
-            <button className="btn sm warn" onClick={() => { observe({ type: 'manualMark', player: p.id, mark: 'sus' }, `${p.name} marked sus`); done(); }}>Mark sus</button>
-            <button className="btn sm primary" onClick={() => { observe({ type: 'manualMark', player: p.id, mark: 'clear' }, `${p.name} marked clear`); done(); }}>Mark clear</button>
           </div>
           <div className="row">
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => setMode('victim')}>Found dead…</button>}

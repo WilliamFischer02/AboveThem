@@ -2,12 +2,15 @@
  * The automatic layer on the frontend: starts capture + the Rust watcher when
  * the game window exists, and turns `game://*` events into store events.
  *
- *  game://lobby   → remembers the lobby code (and applies a saved preset)
- *  game://role    → my role for this match
- *  game://roster  → creates the match on the first meeting if none exists,
- *                   otherwise adds players / marks dead
- *  game://phase   → round start / meeting / ejection / next round
- *  game://eject   → ejection event (who, impostor or not)
+ *  game://lobby     → remembers the lobby code (and applies a saved preset)
+ *  game://role      → my role for this match
+ *  game://roster    → creates the match on the first meeting if none exists,
+ *                     otherwise matches cards to players (name / icon / slot), marks dead
+ *  game://phase     → round start / meeting / ejection / next round; a round start after a
+ *                     finished game rolls the lobby into a fresh match
+ *  game://game_over → VICTORY / DEFEAT screen (word or text colour)
+ *  game://eject     → ejection event (who, impostor or not)
+ *  game://chat      → chat lines → claims; non-English lines are translated
  */
 import { useEffect, useState } from 'react';
 import { useMatch } from '../state/store';
@@ -17,16 +20,16 @@ import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
 import { parseChatClaims, toClaims } from '../engine/chatClaims';
+import { matchGrid, rosterConfidence, norm, similarity, nameScore, type GridEntry, type RosterPlayer } from '../engine/rosterMatch';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
-import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId } from '../types/game';
+import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
-export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number] }
+export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number]; icon_hash?: string; dim?: number }
 interface PhaseEvent { phase: string; round: number; meeting: number }
 interface EjectEvent { raw: string; name: string | null; was_impostor: boolean | null; skipped: boolean }
+interface GameOverEvent { outcome: 'victory' | 'defeat' | null; accent: 'teal' | 'blue' | 'red' | null }
 export interface WatcherStatus { running: boolean; phase: string | null; round: number; meeting: number; markers: Record<string, boolean>; last_ocr_ms: number; ocr_calls: number; frame_seq: number; lobby_code: string | null }
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** UI words the lobby reader can mistake for names when a settings panel is open. */
 const NOT_NAMES = /^(roles?|role amounts?|crewmate roles?|impostor roles?|scientist|engineer|guardian angel|noisemaker|tracker|shapeshifter|phantom|detective|viper|% ?chance|chance|amount|cosmetics|host|back|close|apply|reset|general|chat|filters?|map|skeld|mira hq|polus|airship|fungle|waiting for host|starting in \d+)$/i;
@@ -35,45 +38,45 @@ const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.te
 const lobbySeen = new Map<string, number>();
 
 function fuzzyFind<T extends { name: string }>(name: string, list: T[]): T | undefined {
-  const n = norm(name);
-  if (n.length < 2) return undefined;
   let best: { item: T; score: number } | null = null;
   for (const item of list) {
-    const m = norm(item.name);
-    const score = m === n ? 1 : m.includes(n) || n.includes(m) ? 0.85 : similarity(n, m);
+    const score = nameScore(name, item.name);
     if (!best || score > best.score) best = { item, score };
   }
   return best && best.score >= 0.6 ? best.item : undefined;
 }
 
-function similarity(a: string, b: string): number {
-  if (!a.length || !b.length) return 0;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 0; i < a.length; i++) {
-    let diag = prev[0]; prev[0] = i + 1;
-    for (let j = 0; j < b.length; j++) {
-      const tmp = prev[j + 1];
-      prev[j + 1] = Math.min(prev[j + 1] + 1, prev[j] + 1, diag + (a[i] === b[j] ? 0 : 1));
-      diag = tmp;
-    }
-  }
-  return 1 - prev[b.length] / Math.max(a.length, b.length);
-}
-
 /** Build players from a roster read; `myName` picks "me" (falls back to the first entry, flagged by `meGuessed`). */
-export function playersFromRoster(entries: RosterEntry[], myName: string): { players: Player[]; me: PlayerId; meGuessed: boolean } {
+export function playersFromRoster(entries: RosterEntry[], myName: string, meeting = 0): { players: Player[]; me: PlayerId; meGuessed: boolean } {
   const used = new Set<PlayerColor>();
   const players: Player[] = [];
   for (const e of entries) {
     let color = (COLOR_IDS as string[]).includes(e.color) ? (e.color as PlayerColor) : 'gray';
     if (used.has(color)) color = COLOR_IDS.find(c => !used.has(c)) ?? 'unknown';
     used.add(color);
-    players.push({ id: color === 'unknown' ? `p${e.index}` : color, name: e.name, color, isMe: false, status: e.dead ? 'dead' : 'alive', knownRole: 'unknown', slot: e.index + 1 });
+    players.push({ id: color === 'unknown' ? `p${e.index}` : color, name: e.name, color, isMe: false, status: e.dead ? 'dead' : 'alive', knownRole: 'unknown', slot: e.index + 1, slotMeeting: meeting });
   }
   const mine = myName ? fuzzyFind(myName, players) : undefined;
   const me = mine ?? players[0];
   for (const p of players) p.isMe = p.id === me.id;
   return { players, me: me.id, meGuessed: !mine };
+}
+
+/** Has this match seen any play? (Decides whether a role card / lobby means "new game".) */
+export function playedRounds(m: { phase: { phase: string; round: number }; observations: unknown[]; claims: unknown[]; ejections: unknown[]; chat: unknown[]; players: Record<string, { status: string }> }): boolean {
+  if (m.phase.phase === 'gameOver') return true;
+  if (m.phase.phase === 'lobby') return false;
+  return m.phase.round >= 0 && (m.observations.length + m.claims.length + m.ejections.length > 0 || Object.values(m.players).some(p => p.status !== 'alive'));
+}
+
+// Quick "is this English already" check so most chat never leaves the machine.
+const EN = new Set(('i im me my you u ur your he she it we they the a an and or but so if not no yes ok okay lol lmao omg bro guys guy who what where when why how was were is are am be been do did does done have has had go went going come came get got see saw seen say said tell told know think thought sus vent vented venting kill killed killer body report reported self button skip vote voted voting imp impostor crew crewmate task tasks fake faking clear clean safe trust with alone there here this that these those on in at to of for from by about near around behind left right up down out over just only also too very really maybe idk dunk hard soft wait stop pls please thanks thx ty gg gl hi hello hey bye yo nah yeah yep nope red blue green pink orange yellow black white purple brown cyan lime maroon rose banana gray grey tan coral cafeteria cafe weapons o2 navigation nav admin storage electrical elec medbay med security sec cams comms shields reactor engine engines upper lower lights sabotage sab doors lab office specimen dropship boiler laboratory communications decontamination cockpit vault records kitchen gap room showers vent vents rounds round meeting emergency last first then now before after dead died die vents saw sees look looked follow followed following chase chased stack stacked group two one three 1 2 3 4 5').split(' '));
+export function looksEnglish(text: string): boolean {
+  const words = text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  if (/[^\x00-\x7f]/.test(text)) return false;      // accents, cyrillic, cjk, arabic → translate
+  const hits = words.filter(w => EN.has(w) || /^\d+$/.test(w)).length;
+  return hits / words.length >= 0.6 || (words.length <= 2 && hits >= 1);
 }
 
 export function useGameEvents() {
@@ -141,13 +144,55 @@ export function useGameEvents() {
     const unlisten: Array<() => void> = [];
     let cancelled = false;
     let creating = false;
-    let role: 'crew' | 'impostor' | null = null;
+    let role: Role | null = null;
+    let roleAt = 0;
     let pendingMap: MapId | null = null;
     let pendingSettings: Record<string, unknown> = {};
     let bannerReason: 'body' | 'button' | null = null;
     const lastAutoSighting = new Map<string, number>();
-    /** Vote-grid colour votes per player: two agreeing reads change an unlocked colour. */
+    /** Vote-grid colour votes per player: three agreeing reads change an unlocked colour. */
     const colorVotes = new Map<string, { color: string; n: number }>();
+    const translated = new Map<string, { text: string; lang: string | null }>();
+
+    /** The role card read for *this* game (a card older than 30 s belongs to the previous one). */
+    const freshRole = (): Role => (role && Date.now() - roleAt < 30_000 ? role : 'crew');
+
+    /** Game ended (or a new one started without us seeing the end): keep the lobby, wipe the slate. */
+    const rollOver = (why: string) => {
+      const st = useMatch.getState();
+      const cur = st.match;
+      if (!cur) return;
+      const { avatars, bodySamples, iconHashes } = st;
+      // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
+      const players = Object.values(cur.players)
+        .filter(p => p.isMe || (!p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
+        .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined }));
+      st.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: freshRole(), players, lobbyCode: lobbyCode ?? undefined });
+      const live = useMatch.getState();
+      for (const [id, url] of Object.entries(avatars)) live.setAvatar(id, url);
+      for (const [id, rgb] of Object.entries(bodySamples)) live.setBodySample(id, rgb);
+      for (const [id, h] of Object.entries(iconHashes)) live.setIconHash(id, h);
+      live.showToast(`${why} — roster kept, slate wiped (auto)`);
+    };
+
+    const translateLine = async (id: string, text: string) => {
+      if (looksEnglish(text)) return;
+      const s = useMatch.getState();
+      const key = text.trim().toLowerCase();
+      const cached = translated.get(key);
+      if (cached) { s.dispatch({ kind: 'chatPatch', payload: { id, translated: cached.text, lang: cached.lang ?? undefined } }); return; }
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const r = await invoke<{ text: string; detected: string | null; provider: string }>('translate_text', { req: { text, to: 'en' } });
+        const lang = r.detected ?? null;
+        const changed = r.text.trim().length > 0 && norm(r.text) !== norm(text) && lang !== 'en';
+        const result = { text: changed ? r.text : '', lang };
+        translated.set(key, result);
+        if (translated.size > 300) translated.delete(translated.keys().next().value as string);
+        useMatch.getState().dispatch({ kind: 'chatPatch', payload: { id, translated: changed ? r.text : undefined, lang: lang ?? undefined } });
+      } catch { /* offline or provider down: the original stays */ }
+    };
+
     (async () => {
       const { listen } = await import('@tauri-apps/api/event');
       const { invoke } = await import('@tauri-apps/api/core');
@@ -163,12 +208,12 @@ export function useGameEvents() {
 
       guard(await listen<string>('game://role', e => {
         role = e.payload === 'impostor' ? 'impostor' : 'crew';
+        roleAt = Date.now();
         const s = useMatch.getState();
-        if (s.match && s.match.myRole !== role) {
-          s.dispatch({ kind: 'myRole', payload: { role } });
-          s.dispatch({ kind: 'player', payload: { id: s.match.me, knownRole: role } });
+        if (s.match && s.match.myRole !== role && !s.match.myRoleLocked) {
+          s.dispatch({ kind: 'myRole', payload: { role, auto: true } });
+          s.showToast(`You are ${role === 'impostor' ? 'IMPOSTOR' : 'crew'} (read from the screen)`);
         }
-        s.showToast(`You are ${role === 'impostor' ? 'IMPOSTOR' : 'crew'} (read from the screen)`);
       }));
 
       guard(await listen<{ source: 'lobby' | 'grid'; entries: RosterEntry[] }>('game://roster', async e => {
@@ -176,23 +221,25 @@ export function useGameEvents() {
         const { source, entries } = e.payload;
         // A grid read with several unreadable cells is occluded (chat panel, fade) — ignore it.
         if (source === 'grid' && entries.filter(x => x.name.startsWith('#')).length >= 3) return;
+        const fromLobby = source === 'lobby';
+        const meetingNow = s.match?.phase.meeting ?? 0;
         if (!s.match) {
           if (creating) return;
           creating = true;
           const presets = await loadPresets();
           if (useMatch.getState().match) { creating = false; return; }
           const preset = lobbyCode ? presets[lobbyCode] : undefined;
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName);
+          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, 0);
           setMeGuessed(meGuessed);
-          const fromLobby = source === 'lobby';
           if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
-          const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
+          const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined, slotMeeting: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
-          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
+          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyCode ?? undefined });
           if (!fromLobby) {
-            for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); }
+            for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
             useMatch.getState().setPhase('meetingDiscussion', { reason: bannerReason ?? 'body' });
+            useMatch.getState().setRosterConfidence(entries.filter(x => !x.name.startsWith('#')).length / Math.max(1, entries.length));
           }
           useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
           invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
@@ -201,60 +248,91 @@ export function useGameEvents() {
         }
         const m = s.match;
         const existing = Object.values(m.players);
-        const fromLobby = source === 'lobby';
         if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
         if (m.players['me'] && !fromLobby) {
           // Provisional match: add everyone from the grid, then point "me" at my name (or ask).
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName);
+          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, meetingNow);
           for (const p of players) if (!useMatch.getState().match!.players[p.id]) s.dispatch({ kind: 'addPlayer', payload: { ...p, isMe: false } });
-          for (const en of entries) { const p = players.find(x => x.slot === en.index + 1); if (p && en.avatar_png) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); }
+          for (const en of entries) { const p = players.find(x => x.slot === en.index + 1); if (p && en.avatar_png) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
           if (!meGuessed) { s.dispatch({ kind: 'me', payload: { id: me } }); s.dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); }
           else setMeGuessed(true);
           invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
           return;
         }
+
         if (fromLobby) {
           const now = new Set(entries.map(x => norm(x.name)));
           for (const k of [...lobbySeen.keys()]) if (!now.has(k)) lobbySeen.delete(k);
           for (const k of now) lobbySeen.set(k, (lobbySeen.get(k) ?? 0) + 1);
-        }
-        for (const en of entries) {
-          if (fromLobby && (!plausibleName(en.name) || (lobbySeen.get(norm(en.name)) ?? 0) < 2)) continue;
-          // Same vote-grid slot = same player, whatever OCR made of the name this time.
-          let p = (fromLobby ? undefined : existing.find(x => x.slot === en.index + 1)) ?? fuzzyFind(en.name, existing);
-          if (!p && existing.length >= entries.length) {
-            // Lobby is full: never invent a player, take the closest unmatched name.
-            const taken = new Set(entries.map(x => fuzzyFind(x.name, existing)?.id).filter(Boolean));
-            p = existing.filter(x => !taken.has(x.id)).sort((a, b) => similarity(norm(en.name), norm(b.name)) - similarity(norm(en.name), norm(a.name)))[0];
+          for (const en of entries) {
+            if (!plausibleName(en.name) || (lobbySeen.get(norm(en.name)) ?? 0) < 2) continue;
+            let p = fuzzyFind(en.name, existing);
+            if (!p && existing.length >= entries.length) {
+              // Lobby is full: never invent a player, take the closest unmatched name.
+              const taken = new Set(entries.map(x => fuzzyFind(x.name, existing)?.id).filter(Boolean));
+              p = existing.filter(x => !taken.has(x.id)).sort((a, b) => similarity(norm(en.name), norm(b.name)) - similarity(norm(en.name), norm(a.name)))[0];
+            }
+            if (!p) {
+              const live = useMatch.getState().match!;
+              const { players } = playersFromRoster([en], '');
+              const np = { ...players[0], slot: undefined, slotMeeting: undefined };
+              const id = live.players[np.id] || Object.values(live.players).some(x => x.color === np.color) ? `slot${en.index + 1}` : np.id;
+              if (!live.players[id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
+              continue;
+            }
+            // Lobby colour sampling is noisy: only fill a colour that is still the unknown fallback, never flip a set one.
+            if (en.color !== 'unknown' && en.color !== p.color && (p.color === 'gray' || p.color === 'unknown') && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
           }
-          if (!p) {
+          return;
+        }
+
+        // ---- Vote grid: match cards to players by name / icon / colour / same-meeting slot. ----
+        const hashes = useMatch.getState().iconHashes;
+        const rp: RosterPlayer[] = existing.map(p => ({ id: p.id, name: p.name, color: p.color, status: p.status, slot: p.slot, slotMeeting: p.slotMeeting, iconHash: hashes[p.id], isMe: p.isMe }));
+        const ge: GridEntry[] = entries.map(en => ({ index: en.index, name: en.name, color: en.color, dead: en.dead, iconHash: en.icon_hash }));
+        const assignments = matchGrid(rp, ge, meetingNow);
+        useMatch.getState().setRosterConfidence(rosterConfidence(assignments, ge));
+        const established = existing.filter(p => p.slot !== undefined).length >= Math.min(entries.length, 4);
+        for (const a of assignments) {
+          const en = entries[a.index] ?? entries.find(x => x.index === a.index)!;
+          if (!a.playerId) {
+            // Unmatched card: a real newcomer only while the roster is still forming; later it is an OCR miss.
+            if (established && existing.length >= entries.length) continue;
+            if (en.name.startsWith('#')) continue;
             const live = useMatch.getState().match!;
-            const { players } = playersFromRoster([en], '');
-            const np = { ...players[0], slot: fromLobby ? undefined : players[0].slot };
-            // Ids must be unique: fall back to a slot id when that colour is already taken.
+            const { players } = playersFromRoster([en], '', meetingNow);
+            const np = players[0];
             const id = live.players[np.id] || Object.values(live.players).some(x => x.color === np.color) ? `slot${en.index + 1}` : np.id;
-            if (!live.players[id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
+            if (!live.players[id]) {
+              s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
+              if (en.avatar_png && !en.dead) useMatch.getState().setAvatar(id, `data:image/png;base64,${en.avatar_png}`);
+              if (en.icon_hash) useMatch.getState().setIconHash(id, en.icon_hash);
+            }
             continue;
           }
-          if (!fromLobby && p.slot === undefined) {
-            s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
-            // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
-            if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
-              s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
-            }
+          const p = useMatch.getState().match!.players[a.playerId];
+          if (!p) continue;
+          // Slot is per meeting (the grid re-sorts: alive first, dead last).
+          if (p.slot !== en.index + 1 || p.slotMeeting !== meetingNow) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1, slotMeeting: meetingNow } });
+          // A placeholder / slot-named card takes its readable name.
+          if (!en.name.startsWith('#') && (p.name.startsWith('#') || /^slot\d+$/.test(p.name) || p.name === 'You') && en.name_confidence >= 0.4) s.dispatch({ kind: 'player', payload: { id: p.id, name: en.name } });
+          // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
+          if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
+            s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
           }
-          if (!fromLobby) {
-            // Merge slot-less duplicates of this player (chat/lobby spellings): drop the one without a slot.
+          // Merge slot-less duplicates of this player (chat/lobby spellings): drop the one without a slot.
+          {
             const live = useMatch.getState().match!;
             for (const d of Object.values(live.players)) {
               if (d.id === p.id || d.slot !== undefined || d.isMe) continue;
               if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
             }
           }
-          if (!fromLobby && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
-          // Keep the freshest alive-time headshot (dead cards carry the X); take a dead one only if we have none.
-          if (!fromLobby && en.avatar_png && (!en.dead || !useMatch.getState().avatars[p.id])) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);
-          if (!fromLobby && !p.colorLocked && en.color !== 'unknown' && en.color !== p.color) {
+          if (en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
+          // Headshot + icon hash: keep the freshest alive-time one (dead cards carry the X and are dimmed).
+          if (en.avatar_png && (!en.dead || !useMatch.getState().avatars[p.id])) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);
+          if (en.icon_hash && (!en.dead || !useMatch.getState().iconHashes[p.id])) useMatch.getState().setIconHash(p.id, en.icon_hash);
+          if (!p.colorLocked && en.color !== 'unknown' && en.color !== p.color && !en.dead) {
             const v = colorVotes.get(p.id);
             const n = v && v.color === en.color ? v.n + 1 : 1;
             colorVotes.set(p.id, { color: en.color, n });
@@ -266,14 +344,14 @@ export function useGameEvents() {
               colorVotes.delete(p.id);
             }
           }
-          if (!fromLobby && en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
-          // Lobby colour sampling is noisy: only fill a colour that is still the unknown fallback, never flip a set one.
-          if (fromLobby && en.color !== 'unknown' && en.color !== p.color && (p.color === 'gray' || p.color === 'unknown') && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
+          // The card went grey / got the X: they died since the last meeting.
+          if (en.dead && p.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } }); if (!p.isMe) s.showToast(`${p.name} is dead (vote grid)`); }
         }
       }));
 
       guard(await listen<PhaseEvent>('game://phase', e => {
         const s = useMatch.getState();
+        if (e.payload.phase === 'gameOver') return; // handled by game://game_over (carries the outcome)
         if (!s.match) {
           // Already in a game (app started mid-match): open a provisional match with a placeholder "me";
           // the next vote-grid read fills the roster and re-points "me" by name.
@@ -281,8 +359,8 @@ export function useGameEvents() {
           if (creating) return;
           creating = true;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
-          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: role ?? 'crew', lobbyCode: lobbyCode ?? undefined,
-            players: [{ id: 'me', name: settings.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: role ?? 'crew' }] });
+          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyCode ?? undefined,
+            players: [{ id: 'me', name: settings.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
           creating = false;
           useMatch.getState().showToast('Game in progress detected — roster fills at the next meeting');
         }
@@ -291,26 +369,33 @@ export function useGameEvents() {
         const map: Record<string, Phase> = { lobby: 'lobby', roundStart: 'roundStart', round: 'round', meetingDiscussion: 'meetingDiscussion', meetingVoting: 'meetingVoting', ejection: 'ejection', gameOver: 'gameOver' };
         const phase = map[e.payload.phase];
         if (!phase || s2.match.phase.phase === phase) return;
+        const cur = s2.match;
         if (phase === 'lobby') {
           // Back in the lobby after a game: keep the lobby (names, colours, me, headshots) but start a fresh match.
-          const cur = s2.match;
-          const playedRounds = cur.phase.round >= 0 && cur.observations.length + cur.claims.length + cur.ejections.length > 0;
-          if (cur.phase.phase === 'lobby' || (!playedRounds && cur.phase.phase !== 'gameOver')) return; // nothing to roll over, or a missed frame
-          const avatars = useMatch.getState().avatars;
-          const samples = useMatch.getState().bodySamples;
-          // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
-          const players = Object.values(cur.players)
-            .filter(p => p.isMe || (!p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
-            .map(p => ({ ...p, status: 'alive' as const, knownRole: 'unknown' as const, isPartner: false, slot: undefined }));
-          s2.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: 'crew', players, lobbyCode: lobbyCode ?? undefined });
-          for (const [id, url] of Object.entries(avatars)) useMatch.getState().setAvatar(id, url);
-          for (const [id, rgb] of Object.entries(samples)) useMatch.getState().setBodySample(id, rgb);
-          useMatch.getState().showToast('New game in this lobby — roster kept, slate wiped (auto)');
+          if (!playedRounds(cur)) return; // nothing to roll over
+          rollOver('Back in the lobby');
+          return;
+        }
+        if (phase === 'roundStart' && playedRounds(cur)) {
+          // A role card after a finished (or unfinished) game: this is the next game.
+          rollOver('New game started');
+          useMatch.getState().setPhase('roundStart');
           return;
         }
         s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
         if (phase === 'meetingDiscussion') bannerReason = null;
         s2.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
+      }));
+
+      guard(await listen<GameOverEvent>('game://game_over', e => {
+        const s = useMatch.getState();
+        if (!s.match || s.match.phase.phase === 'gameOver' || s.match.phase.phase === 'lobby') return;
+        // UNVERIFIED: end-screen colours. Blue letters = crew victory; red letters = impostor win,
+        // which reads "Victory" for impostors and "Defeat" for crew.
+        const byColour = e.payload.accent === 'blue' ? 'victory' : e.payload.accent === 'red' ? (s.match.myRole === 'impostor' ? 'victory' : 'defeat') : undefined;
+        const outcome = e.payload.outcome ?? byColour;
+        s.setPhase('gameOver', outcome ? { outcome } : undefined);
+        s.showToast(outcome === 'victory' ? 'VICTORY (auto)' : outcome === 'defeat' ? 'DEFEAT (auto)' : 'Game over (auto)');
       }));
 
       guard(await listen<EjectEvent>('game://eject', e => {
@@ -346,7 +431,7 @@ export function useGameEvents() {
         for (const msg of e.payload) {
           if (!msg.system && msg.text.trim().length === 0) continue;
           // Garbled system lines ("sillynorny nas votea. z remyalmng.") still carry 'vot' + 'rem' fragments.
-          const system = msg.system || (/vot/i.test(msg.text) && /rem/i.test(msg.text) && !/(vote|voting) [a-z]/i.test(msg.text)) || /left the game|joined the game/i.test(msg.text);
+          const system = msg.system || (/vot/i.test(msg.text) && /rem/i.test(msg.text) && !/(vote|voting) [a-z]/i.test(msg.text)) || /left the game|joined the game/i.test(msg.text);
           if (system) {
             const left = msg.text.match(/^(.*?) (?:has )?left the game/i);
             if (left) { const mm = useMatch.getState().match!; const p = fuzzyFind(left[1], Object.values(mm.players)); if (p && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); }
@@ -390,7 +475,9 @@ export function useGameEvents() {
             sender = id;
           }
           const stamp = s.stamp();
-          s.dispatch({ kind: 'chat', payload: { id: newId('ch'), meeting, stamp, sender, original: msg.text, source: 'ocr' } });
+          const lineId = newId('ch');
+          s.dispatch({ kind: 'chat', payload: { id: lineId, meeting, stamp, sender, original: msg.text, source: 'ocr' } });
+          if (sender !== m.me) void translateLine(lineId, msg.text);
           if (sender === 'unknown' || sender === m.me) continue;
           const parsed = parseChatClaims(msg.text, sender, m);
           for (const b of parsed.filter(x => x.type === 'body' && x.room)) {
@@ -481,7 +568,7 @@ export function useGameEvents() {
           const live = useMatch.getState().match!;
           const p = fuzzyFind(nm, Object.values(live.players));
           if (!p) continue;
-          if (live.myRole !== 'impostor') { s.dispatch({ kind: 'myRole', payload: { role: 'impostor' } }); s.dispatch({ kind: 'player', payload: { id: live.me, knownRole: 'impostor' } }); s.showToast('Red name seen — you are IMPOSTOR (auto)'); }
+          if (live.myRole !== 'impostor' && !live.myRoleLocked && live.players[live.me]?.status === 'alive') { role = 'impostor'; roleAt = Date.now(); s.dispatch({ kind: 'myRole', payload: { role: 'impostor', auto: true } }); s.showToast('Red name seen — you are IMPOSTOR (auto)'); }
           if (!p.isMe && !p.isPartner) { s.dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor' } }); s.showToast(`${p.name} is your partner (red name)`); }
         }
         const room = myRoomNow(m);
@@ -503,7 +590,8 @@ export function useGameEvents() {
         const m = s.match;
         if (!m) return;
         const lines = e.payload;
-        if (lines.some(l => /fake/i.test(l)) && m.myRole !== 'impostor') s.dispatch({ kind: 'myRole', payload: { role: 'impostor' } });
+        // Only the real "Fake Tasks:" header counts (chat about "faking" overlaps this region during meetings).
+        if (lines.some(l => /^\W*fake\s*tasks?/i.test(l)) && m.myRole !== 'impostor' && !m.myRoleLocked && m.phase.phase === 'round') { role = 'impostor'; roleAt = Date.now(); s.dispatch({ kind: 'myRole', payload: { role: 'impostor', auto: true } }); s.showToast('Fake tasks on your list — you are IMPOSTOR (auto)'); }
         const tasks: MyTask[] = [];
         for (const raw of lines) {
           if (/total tasks|fake tasks/i.test(raw)) continue;
@@ -533,16 +621,18 @@ export function useGameEvents() {
       const r = await invoke<{ entries: RosterEntry[] }>('read_roster', { knownNames: [] });
       if (r.entries.length < 3) return 'vote grid not visible — rescan during a meeting';
       let changed = 0;
+      const meeting = m.phase.meeting ?? 0;
       for (const en of r.entries) {
         if (en.name.startsWith('#')) continue;
-        const p = Object.values(m.players).find(x => x.slot === en.index + 1);
+        const p = Object.values(m.players).find(x => x.slot === en.index + 1 && x.slotMeeting === meeting) ?? Object.values(m.players).find(x => x.slot === en.index + 1);
         if (p) { if (p.name !== en.name) { s.dispatch({ kind: 'player', payload: { id: p.id, name: en.name } }); changed++; } }
         else {
-          const { players } = playersFromRoster([en], '');
+          const { players } = playersFromRoster([en], '', meeting);
           const np = { ...players[0], id: `slot${en.index + 1}` };
           if (!m.players[np.id]) { s.dispatch({ kind: 'addPlayer', payload: { ...np, isMe: false } }); changed++; }
         }
         if (en.avatar_png && !en.dead && p) s.setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);
+        if (en.icon_hash && p) s.setIconHash(p.id, en.icon_hash);
       }
       invoke('watcher_set_names', { names: r.entries.map(e => e.name) }).catch(() => {});
       return `rescanned ${r.entries.length} cards, ${changed} updated`;

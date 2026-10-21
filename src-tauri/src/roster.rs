@@ -29,7 +29,16 @@ pub struct RosterEntry {
     /// Floating name drawn in red = an impostor from the local player's point of view (me or my partner).
     #[serde(default)]
     pub red_name: bool,
+    /// Perceptual hash of the card icon (hat + visor + body). Same player ⇒ small Hamming distance,
+    /// even across meetings when the card moved to another slot or was dimmed (dead).
+    #[serde(serialize_with = "hex_u64")]
+    pub icon_hash: u64,
+    /// Card brightness relative to the brightest card on the grid (1.0 = alive, ≈ 0.55 = dead/greyed).
+    pub dim: f32,
 }
+
+/// JS numbers lose bits above 2^53: ship the hash as hex.
+fn hex_u64<S: serde::Serializer>(v: &u64, s: S) -> Result<S::Ok, S::Error> { s.serialize_str(&format!("{v:016x}")) }
 
 impl PartialEq for RosterEntry {
     fn eq(&self, o: &Self) -> bool {
@@ -181,23 +190,53 @@ pub fn color_name(c: PlayerColor) -> &'static str {
     }
 }
 
-/// Meeting-panel fade-in: the cards animate in from dark. The brightest card background
-/// (plain grey cards read ≈ 245 when faded in, ≈ 186 mid-fade) gives a gain to normalise the frame.
-pub fn brightness_factor(f: &Frame) -> f32 {
+/// Mean luminance of the name-box background strip below the name text (right side of the card).
+/// Plain grey cards read ≈ 245 when faded in, ≈ 186 mid-fade, ≈ 130 when dead (dark overlay).
+fn card_strip_lum(f: &Frame, cell: Rect) -> u32 { card_strip(f, cell).0 }
+
+/// (mean luminance, mean saturation) of the strip. Cosmetic nameplates are coloured (saturated);
+/// the plain card and the dead overlay are neutral grey.
+fn card_strip(f: &Frame, cell: Rect) -> (u32, u32) {
     let sx = f.width as f32 / REF_W as f32;
+    let r = Rect::new(cell.x + (330.0 * sx) as u32, cell.y + (88.0 * sx) as u32, (140.0 * sx) as u32, (12.0 * sx) as u32);
+    let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+    let n = (w * h).max(1);
+    let lum = buf.chunks_exact(4).map(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3).sum::<u32>() / n;
+    let sat = buf.chunks_exact(4).map(|p| { let mx = p[0].max(p[1]).max(p[2]) as u32; let mn = p[0].min(p[1]).min(p[2]) as u32; mx - mn }).sum::<u32>() / n;
+    (lum, sat)
+}
+
+/// Brightest occupied card strip on the grid (0 when nothing is readable).
+fn brightest_card(f: &Frame) -> u32 {
     let mut best = 0u32;
     for index in 0..(VoteCell::ROWS * VoteCell::COLS) {
         let cell = cell_in_frame(index, f);
         if cell.x + cell.w > f.width || cell.y + cell.h > f.height { break; }
         if !cell_occupied(f, cell) { continue; }
-        // name-box background strip below the name text, right side of the card
-        let r = Rect::new(cell.x + (330.0 * sx) as u32, cell.y + (88.0 * sx) as u32, (140.0 * sx) as u32, (12.0 * sx) as u32);
-        let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
-        let lum: u32 = buf.chunks_exact(4).map(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3).sum::<u32>() / (w * h).max(1);
+        let lum = card_strip_lum(f, cell);
         if lum > best { best = lum; }
     }
+    best
+}
+
+/// Meeting-panel fade-in: the cards animate in from dark. The brightest card background
+/// gives a gain to normalise the frame.
+pub fn brightness_factor(f: &Frame) -> f32 {
+    let best = brightest_card(f);
     if best < 100 { return 1.0; } // nothing readable
     (245.0 / best as f32).clamp(1.0, 1.6)
+}
+
+/// A dead card is greyed out: its strip sits well below the brightest card's (measured ≈ 0.53).
+const DIM_DEAD: f32 = 0.74;
+
+/// Perceptual hash of the card icon (cell-local x 6..134, y 2..90). dHash compares neighbouring
+/// luminances, so uniform dimming (dead cards) and the fade-in leave it almost unchanged.
+fn icon_hash(f: &Frame, cell: Rect) -> u64 {
+    let sx = f.width as f32 / REF_W as f32;
+    let r = Rect::new(cell.x + (6.0 * sx) as u32, cell.y + (2.0 * sx) as u32, (128.0 * sx) as u32, (88.0 * sx) as u32);
+    if r.x + r.w > f.width || r.y + r.h > f.height { return 0; }
+    crate::regions::dhash(&f.bgra, f.width, r)
 }
 
 /// Is the chat panel open (covering the vote grid)? Either the Send button or the "N/100" counter is readable.
@@ -221,6 +260,7 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
     let mut entries = Vec::new();
     if chat_is_open(f) { return Ok(RosterRead { entries, ocr_ms: t0.elapsed().as_millis() as u64 }); }
     let gain = brightness_factor(f);
+    let brightest = brightest_card(f);
     for index in 0..(VoteCell::ROWS * VoteCell::COLS) {
         let cell = cell_in_frame(index, f);
         if cell.x + cell.w > f.width || cell.y + cell.h > f.height { break; }
@@ -247,9 +287,13 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
             Some((n, score)) if !placeholder && score >= 0.6 => (n.to_string(), score),
             _ => (raw.clone(), if placeholder { 0.2 } else if known_names.is_empty() { 0.8 } else { 0.4 }),
         };
-        let dead = dead_x_score(f, cell, gain) >= 700;
+        // Dead = the red X on the icon, or the whole card greyed out relative to the brightest one.
+        // Only a plain (neutral) card strip can be judged by brightness: cosmetic nameplates are coloured.
+        let (lum, sat) = card_strip(f, cell);
+        let dim = if brightest >= 150 && sat < 18 { (lum as f32 / brightest as f32).min(1.0) } else { 1.0 };
+        let dead = dead_x_score(f, cell, gain) >= 700 || dim < DIM_DEAD;
         let (color, delta, body_rgb) = icon_color(f, cell, dead, gain);
-        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb, red_name: false });
+        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb, red_name: false, icon_hash: icon_hash(f, cell), dim });
     }
     // The reporter/caller has a megaphone badge at the cell's top-right; approximate with a red-ish badge check.
     for e in entries.iter_mut() {
@@ -328,6 +372,29 @@ mod tests {
         assert_eq!(by3("BigBingus").color, "maroon");
         // heaven holds a yellow "DUM" sign across the body: a cosmetic can still win. Known limit.
         assert!(["cyan", "yellow"].contains(&by3("heaven").color.as_str()), "{}", by3("heaven").color);
+    }
+
+    #[test]
+    fn dead_cards_are_dim_and_icon_hashes_match_across_frames() {
+        let f2 = load_fixture("meeting_vote_grid_2");
+        let r2 = read_vote_grid(&f2, &[]).expect("read");
+        // Greying never flags an alive card (false positives would kill players in the app); on plain
+        // cards it agrees with the X detector.
+        for e in &r2.entries { if e.dim < DIM_DEAD { assert!(e.dead, "{} dim={} but alive", e.name, e.dim); } }
+        assert!(r2.entries.iter().any(|e| e.dead && e.dim < DIM_DEAD), "{:?}", r2.entries.iter().map(|e| (e.name.clone(), e.dim, e.dead)).collect::<Vec<_>>());
+        let f3 = load_fixture("meeting_vote_grid_3");
+        let r3 = read_vote_grid(&f3, &[]).expect("read");
+        for e in &r3.entries { if e.dim < DIM_DEAD { assert!(e.dead, "{} dim={} but alive", e.name, e.dim); } }
+        // Same lobby, two frames (fade-in vs faded): each card's hash is closest to its own counterpart.
+        let f1 = load_fixture("meeting_vote_grid");
+        let r1 = read_vote_grid(&f1, &[]).expect("read");
+        for a in &r1.entries {
+            let b = r2.entries.iter().find(|b| b.index == a.index).unwrap();
+            let own = crate::regions::hamming(a.icon_hash, b.icon_hash);
+            let best_other = r2.entries.iter().filter(|o| o.index != a.index).map(|o| crate::regions::hamming(a.icon_hash, o.icon_hash)).min().unwrap();
+            assert!(own <= 12, "{}: own distance {own}", a.name);
+            assert!(own < best_other, "{}: own {own} vs other {best_other}", a.name);
+        }
     }
 
     #[test]

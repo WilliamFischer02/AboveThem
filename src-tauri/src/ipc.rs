@@ -181,13 +181,20 @@ pub struct TranslateRes {
     pub provider: String,
 }
 
+/// Translate a chat line into `to`. Source language: the caller's `from`, else whatlang when the
+/// text is long enough, else the provider's own detection. Returns the original text unchanged when
+/// the detected language already is `to`, so the UI can tell "no translation needed" from "failed".
 #[tauri::command]
 pub async fn translate_text(req: TranslateReq) -> Result<TranslateRes, String> {
-    let detected = req.from.clone().or_else(|| crate::translate::detect(&req.text));
+    let hint = req.from.clone().or_else(|| crate::translate::detect(&req.text));
+    if hint.as_deref() == Some(req.to.as_str()) {
+        return Ok(TranslateRes { text: req.text, detected: hint, provider: "none".into() });
+    }
     let provider = crate::translate::current();
-    let text = provider
-        .translate(&req.text, detected.as_deref().unwrap_or("auto"), &req.to)
+    let t = provider
+        .translate(&req.text, hint.as_deref().unwrap_or("auto"), &req.to)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(TranslateRes { text, detected, provider: provider.name().to_string() })
+    let detected = t.detected.or(hint);
+    Ok(TranslateRes { text: t.text, detected, provider: provider.name().to_string() })
 }

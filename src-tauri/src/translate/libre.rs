@@ -1,6 +1,6 @@
 //! LibreTranslate provider — keyless fallback (self-host or a public instance).
 
-use super::{BoxFut, TranslateError, TranslateProvider};
+use super::{BoxFut, TranslateError, TranslateProvider, Translation};
 
 pub struct Libre { pub endpoint: String, pub api_key: Option<String> }
 
@@ -10,7 +10,7 @@ impl Default for Libre {
 
 impl TranslateProvider for Libre {
     fn name(&self) -> &'static str { "libretranslate" }
-    fn translate<'a>(&'a self, text: &'a str, from: &'a str, to: &'a str) -> BoxFut<'a, Result<String, TranslateError>> {
+    fn translate<'a>(&'a self, text: &'a str, from: &'a str, to: &'a str) -> BoxFut<'a, Result<Translation, TranslateError>> {
         Box::pin(async move {
             #[derive(serde::Serialize)] struct Req<'b> { q: &'b str, source: &'b str, target: &'b str, format: &'b str, api_key: Option<&'b str> }
             #[derive(serde::Deserialize)] struct Res { #[serde(rename = "translatedText")] translated_text: String }
@@ -19,7 +19,7 @@ impl TranslateProvider for Libre {
                 .json(&Req { q: text, source: from, target: to, format: "text", api_key: self.api_key.as_deref() })
                 .send().await?;
             if !res.status().is_success() { return Err(TranslateError::Provider(res.status().to_string())); }
-            Ok(res.json::<Res>().await?.translated_text)
+            Ok(Translation { text: res.json::<Res>().await?.translated_text, detected: None })
         })
     }
 }

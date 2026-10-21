@@ -151,7 +151,7 @@ describe('meeting script v2', () => {
     const script = buildMeetingScript(fixture3, scoreAll(fixture3), 0);
     expect(script.insufficientInfo).toBe(true);
     expect(script.vote.target).toBe('skip');
-    expect(script.say.some(s => /Skip and stack/.test(s.text))).toBe(true);
+    expect(script.say.some(s => /Skip and move/.test(s.text))).toBe(true);
   });
   it('endgame: two left framing when crew ≤ impostors + 1', () => {
     const m: MatchState = {
@@ -159,7 +159,7 @@ describe('meeting script v2', () => {
       players: { ...fixture3.players, white: { ...fixture3.players.white, status: 'dead' }, purple: { ...fixture3.players.purple, status: 'dead' } },
     }; // alive: cyan, blue, green (crew 2 vs 1 imp)
     const script = buildMeetingScript(m, scoreAll(m), 1);
-    expect(script.say[0].text).toMatch(/Hard clears only|Count:/);
+    expect(script.say[0].text).toMatch(/Only hard clears|impostors left/);
     expect(script.vote.target).not.toBe('skip');
   });
 });

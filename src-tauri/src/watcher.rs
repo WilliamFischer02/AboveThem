@@ -37,12 +37,55 @@ pub const EV_BANNER: &str = "game://meeting_banner";
 pub const EV_MAP: &str = "game://map";
 pub const EV_SETTINGS: &str = "game://settings";
 pub const EV_CHAT: &str = "game://chat";
+pub const EV_GAME_OVER: &str = "game://game_over";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RosterEvent { pub source: &'static str, pub entries: Vec<RosterEntry> }
+
+/// End-of-game screen. `outcome` comes from the VICTORY / DEFEAT word when OCR read it; `accent` is the
+/// dominant text colour on the black screen (blue = crew victory, red = impostor win / defeat).
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct GameOverEvent { pub outcome: Option<&'static str>, pub accent: Option<&'static str> }
+
+/// Dominant text colour on a dark screen (role reveal, victory / defeat).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Accent { pub teal: u32, pub blue: u32, pub red: u32, pub dark: f32 }
+
+impl Accent {
+    pub fn is_dark_screen(&self) -> bool { self.dark > 0.75 && self.teal + self.blue + self.red >= 300 }
+    /// "teal" (crewmate role), "blue" (victory), "red" (impostor role / defeat), or None.
+    pub fn dominant(&self) -> Option<&'static str> {
+        if !self.is_dark_screen() { return None; }
+        if self.teal >= self.blue && self.teal >= self.red { Some("teal") } else if self.red >= self.blue { Some("red") } else { Some("blue") }
+    }
+}
+
+/// Count teal / blue / red text pixels and the dark share in a region, sampling every 3rd pixel.
+pub fn screen_accent(f: &Frame, r: Rect) -> Accent {
+    let mut a = Accent::default();
+    let mut n = 0u32; let mut dark = 0u32;
+    let x1 = (r.x + r.w).min(f.width); let y1 = (r.y + r.h).min(f.height);
+    let mut y = r.y;
+    while y < y1 {
+        let mut x = r.x;
+        while x < x1 {
+            let i = ((y * f.width + x) * 4) as usize;
+            let (b, g, rr) = (f.bgra[i] as i32, f.bgra[i + 1] as i32, f.bgra[i + 2] as i32);
+            n += 1;
+            if rr.max(g).max(b) < 40 { dark += 1; }
+            else if g > rr + 60 && b > rr + 40 && g >= b - 30 && g > 140 { a.teal += 1; }
+            else if b > rr + 40 && b > g + 10 && b > 120 { a.blue += 1; }
+            else if rr > 150 && g < 90 && b < 90 { a.red += 1; }
+            x += 3;
+        }
+        y += 3;
+    }
+    a.dark = if n > 0 { dark as f32 / n as f32 } else { 0.0 };
+    a
+}
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct EjectEvent { pub raw: String, pub name: Option<String>, pub was_impostor: Option<bool>, pub skipped: bool }
@@ -91,7 +134,10 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons", "voting_timer", "chat_counter"];
+
+/// Nothing recognisable for this long (main menu, alt-tabbed, map open for ages) => treat as the lobby.
+const UNKNOWN_TO_LOBBY: Duration = Duration::from_secs(120);
 
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
@@ -177,6 +223,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     let mut last_chat_read = Instant::now() - Duration::from_secs(60);
     let mut me_dead_meeting: Option<u32> = None;
+    let mut unknown_since: Option<Instant> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
     { shared.lock().unwrap().status.running = true; }
@@ -215,51 +262,86 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let chat_open = fuzzy_best(text("chat_send").trim(), ["Send"]).map(|b| b.1 > 0.7).unwrap_or(false)
             || counter.contains("/100") || counter.contains("/ 100") || counter.contains("I100");
         let header = text("meeting_header");
-        let meeting = fuzzy_best(&header, ["Who Is The Impostor?", "Emergency Meeting", "Dead Body Reported"]).map(|b| b.1 > 0.65).unwrap_or(false);
+        let meeting_header = fuzzy_best(&header, ["Who Is The Impostor?", "Emergency Meeting", "Dead Body Reported"]).map(|b| b.1 > 0.65).unwrap_or(false);
         let me_dead_header = header.trim().to_uppercase() == "DEAD" || (header.trim().len() <= 5 && fuzzy_best(header.trim(), ["DEAD"]).map(|b| b.1 > 0.85).unwrap_or(false));
+        // The voting timer ("Voting Ends In: 119s" / "Voting Begins In: 3s") stays visible under the chat panel.
+        let timer_text = text("voting_timer").to_lowercase();
+        let voting_timer = timer_text.contains("ends in") || timer_text.contains("begins in") || fuzzy_best(&timer_text, ["voting ends in", "voting begins in"]).map(|b| b.1 > 0.6).unwrap_or(false);
+        let in_meeting_now = matches!(detector.current, Some(Phase::MeetingDiscussion) | Some(Phase::MeetingVoting));
+        // An open chat panel covers the header: a meeting stays a meeting while chat is open.
+        let meeting = meeting_header || voting_timer || me_dead_header || (chat_open && in_meeting_now);
         let eject = parse_eject(&text("eject_text"));
+        // Round: the task bar, or the USE / REPORT / KILL / SABOTAGE / VENT buttons (visible whatever the task-bar setting).
+        let ab = text("action_buttons").to_uppercase();
+        let action_words = ab.split_whitespace().any(|w| w.len() >= 3 && fuzzy_best(w, ["USE", "REPORT", "KILL", "SABOTAGE", "VENT"]).map(|b| b.1 > 0.8).unwrap_or(false));
+        let in_round = task_bar || (action_words && !meeting && !chat_open);
         let role_text = text("role_card").to_uppercase();
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
             .map(|w| if fuzzy_best(w, ["IMPOSTOR"]).unwrap().1 > fuzzy_best(w, ["CREWMATE"]).unwrap().1 { "impostor" } else { "crew" });
-        // Previous game may never have reached GameOver (no victory frame yet), so accept a role card from any
-        // non-round, non-meeting state as long as no ejection text is up.
-        let at_game_start = !matches!(detector.current, Some(Phase::Round) | Some(Phase::MeetingDiscussion) | Some(Phase::MeetingVoting));
-        let role_card = !meeting && at_game_start && eject.is_none() && role_word.is_some() && !role_text.contains("WHO IS");
-        let game_over = role_text.split_whitespace().any(|w| fuzzy_best(w, ["VICTORY", "DEFEAT"]).map(|b| b.1 > 0.85).unwrap_or(false));
+        let over_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
+            .find(|w| w.len() >= 5 && fuzzy_best(w, ["VICTORY", "DEFEAT"]).map(|b| b.1 > 0.85).unwrap_or(false))
+            .map(|w| if fuzzy_best(w, ["VICTORY"]).unwrap().1 > fuzzy_best(w, ["DEFEAT"]).unwrap().1 { "victory" } else { "defeat" });
+        // Role reveal and victory / defeat are big coloured letters on a black screen: the text colour
+        // (teal = crewmate, red = impostor / defeat, blue = victory) backs up OCR, and stands in for it.
+        let accent = screen_accent(&frame, regions.role_card);
+        let dark_screen = accent.is_dark_screen() && !chat_open;
+        let in_game = matches!(detector.current, Some(Phase::Round) | Some(Phase::MeetingDiscussion) | Some(Phase::MeetingVoting) | Some(Phase::Ejection));
+        let ocr_role = dark_screen && role_word.is_some() && !role_text.contains("WHO IS");
+        let ocr_over = dark_screen && over_word.is_some();
+        let role_card = !meeting && eject.is_none() && (ocr_role || (dark_screen && !ocr_over && !in_game && accent.dominant().is_some()));
+        let game_over = ocr_over || (dark_screen && !ocr_role && in_game && eject.is_none() && accent.dominant().is_some());
         let banner_text = text("meeting_banner").to_uppercase();
         let banner = if banner_text.contains("DEAD") || banner_text.contains("BODY") { Some("body") } else if banner_text.contains("EMERGENCY") { Some("button") } else { None };
         let lobby_code = lobby_code_of(&text("lobby_code"));
 
-        // 3. Role (once per card appearance).
-        if role_card && role_text != last_role_text {
-            last_role_text = role_text.clone();
-            let _ = app.emit(EV_ROLE, role_word.unwrap_or("crew"));
+        // 3. Role (once per card appearance): the OCR word when read, else the text colour.
+        if role_card && !game_over {
+            let role = role_word.or_else(|| match accent.dominant() { Some("red") => Some("impostor"), Some("teal") => Some("crew"), _ => None });
+            if let Some(role) = role {
+                let key = if role_text.is_empty() { format!("<{role}>") } else { role_text.clone() };
+                if key != last_role_text {
+                    last_role_text = key;
+                    let _ = app.emit(EV_ROLE, role);
+                }
+            }
         }
         if !role_card { last_role_text.clear(); }
 
-        // 3b. Impostor buttons (KILL / SABOTAGE) — visible all round, so this catches a missed role card.
-        if task_bar && !meeting {
-            let ab = text("action_buttons").to_uppercase();
-            let imp = ab.split_whitespace().any(|w| fuzzy_best(w, ["KILL", "SABOTAGE"]).map(|b| b.1 > 0.8).unwrap_or(false));
+        // 3b. Impostor buttons (KILL / SABOTAGE) -- visible all round, so this catches a missed role card.
+        if in_round && !meeting {
+            let imp = ab.split_whitespace().any(|w| w.len() >= 4 && fuzzy_best(w, ["KILL", "SABOTAGE"]).map(|b| b.1 > 0.8).unwrap_or(false));
             if imp && !impostor_buttons_seen { impostor_buttons_seen = true; let _ = app.emit(EV_ROLE, "impostor"); }
         }
-        if matches!(next_phase_hint(task_bar, meeting, role_card, eject.is_some(), game_over), Phase::Lobby | Phase::GameOver) { impostor_buttons_seen = false; }
+        if game_over || role_card || lobby_code.is_some() { impostor_buttons_seen = false; }
 
-        // 4. Phase with hysteresis.
-        let next = if game_over { Phase::GameOver }
-            else if eject.is_some() { Phase::Ejection }
-            else if meeting || me_dead_header { Phase::MeetingDiscussion }
-            else if role_card { Phase::RoundStart }
-            else if task_bar { Phase::Round }
-            else { Phase::Lobby };
-        if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
-        let needed = match next { Phase::Lobby => 6, Phase::Round => 2, Phase::GameOver => 2, _ => 1 };
-        if candidate_count >= needed {
-            if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
-                let name = phase_name(p);
-                let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting });
-                if p == Phase::MeetingDiscussion { meeting_since = Some(Instant::now()); last_roster.clear(); } else { meeting_since = None; }
+        // 4. Phase with hysteresis. Only positive evidence moves the phase; "nothing recognisable"
+        //    (map open, settings, a missed frame) keeps the current one for up to UNKNOWN_TO_LOBBY.
+        let next = if game_over { Some(Phase::GameOver) }
+            else if eject.is_some() { Some(Phase::Ejection) }
+            else if meeting { Some(Phase::MeetingDiscussion) }
+            else if role_card { Some(Phase::RoundStart) }
+            else if in_round { Some(Phase::Round) }
+            else if lobby_code.is_some() { Some(Phase::Lobby) }
+            else { None };
+        match next {
+            Some(_) => unknown_since = None,
+            None => { if unknown_since.is_none() { unknown_since = Some(Instant::now()); } }
+        }
+        let next = next.or_else(|| if unknown_since.map(|t| t.elapsed() > UNKNOWN_TO_LOBBY).unwrap_or(false) && detector.current != Some(Phase::Lobby) { Some(Phase::Lobby) } else { None });
+        if let Some(next) = next {
+            if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
+            let needed = match next { Phase::Lobby => 4, Phase::Round => 2, Phase::GameOver => 2, _ => 1 };
+            if candidate_count >= needed {
+                if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
+                    let name = phase_name(p);
+                    let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting });
+                    if p == Phase::GameOver {
+                        let outcome = over_word.or_else(|| match accent.dominant() { Some("blue") => Some("victory"), _ => None });
+                        let _ = app.emit(EV_GAME_OVER, GameOverEvent { outcome, accent: accent.dominant() });
+                    }
+                    if p == Phase::MeetingDiscussion { meeting_since = Some(Instant::now()); last_roster.clear(); } else { meeting_since = None; }
+                }
             }
         }
 
@@ -323,8 +405,9 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             }
         } else { last_room.clear(); }
 
-        // 6c. My task list (top-left) when it changes.
-        if task_bar {
+        // 6c. My task list (top-left) when it changes. Not under the meeting screen or an open chat
+        //     panel: both overlap the region and chat about "faking" would read as "Fake Tasks".
+        if task_bar && !meeting && !chat_open {
             let t = text("task_list");
             if !t.trim().is_empty() && t != last_tasks && stable("task_list", 2) {
                 last_tasks = t.clone();
@@ -404,7 +487,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             s.status.phase = detector.current.map(|p| phase_name(p).to_string());
             s.status.round = detector.round;
             s.status.meeting = detector.meeting;
-            s.status.markers = Markers { task_bar, role_card, meeting_header: meeting, eject_text: eject.is_some(), lobby_code: lobby_code.is_some(), chat_open, banner: banner.is_some() };
+            s.status.markers = Markers { task_bar: in_round, role_card, meeting_header: meeting, eject_text: eject.is_some(), lobby_code: lobby_code.is_some(), chat_open, banner: banner.is_some() };
             if ocr_ms > 0 { s.status.last_ocr_ms = ocr_ms; }
             s.status.ocr_calls = ocr_calls;
             s.status.frame_seq = frame.seq;
@@ -415,10 +498,6 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         }
     }
     shared.lock().unwrap().status.running = false;
-}
-
-fn next_phase_hint(task_bar: bool, meeting: bool, role_card: bool, eject: bool, game_over: bool) -> Phase {
-    if game_over { Phase::GameOver } else if eject { Phase::Ejection } else if meeting { Phase::MeetingDiscussion } else if role_card { Phase::RoundStart } else if task_bar { Phase::Round } else { Phase::Lobby }
 }
 
 fn phase_name(p: Phase) -> &'static str {
@@ -451,6 +530,31 @@ mod tests {
         assert_eq!(lobby_code_of("ROOM CODE\nPFRXRG").as_deref(), Some("PFRXRG"));
         assert_eq!(lobby_code_of("ROOM CODE"), None);
         assert_eq!(lobby_code_of("BRATZY"), None, "a six-capital player name is not a code");
+    }
+
+    #[cfg(windows)]
+    fn load_fixture(name: &str) -> Frame {
+        let path = format!("{}/fixtures/screens/1920x1080/{name}.png", env!("CARGO_MANIFEST_DIR"));
+        let img = image::open(&path).expect("fixture png").to_rgba8();
+        let (w, h) = img.dimensions();
+        let mut bgra = img.into_raw();
+        for px in bgra.chunks_exact_mut(4) { px.swap(0, 2); }
+        Frame { width: w, height: h, bgra, t_wall_ms: 0, seq: 1 }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn role_cards_read_as_teal_on_black_and_game_screens_do_not() {
+        let r = Regions::default();
+        for name in ["role_card", "role_card_v2"] {
+            let a = screen_accent(&load_fixture(name), r.role_card);
+            assert!(a.is_dark_screen(), "{name}: {a:?}");
+            assert_eq!(a.dominant(), Some("teal"), "{name}: {a:?}");
+        }
+        for name in ["lobby", "round_cafeteria", "meeting_vote_grid", "meeting_chat", "eject_text", "voting_results"] {
+            let a = screen_accent(&load_fixture(name), r.role_card);
+            assert!(!a.is_dark_screen(), "{name} must not look like a role/end screen: {a:?}");
+        }
     }
 
     #[test]

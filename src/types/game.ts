@@ -36,6 +36,8 @@ export interface Player {
   slot?: number;
   /** Colour was set by the user; automatic reads must not change it. */
   colorLocked?: boolean;
+  /** Meeting index the slot was read in (slots re-sort every meeting: alive first, dead last). */
+  slotMeeting?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,9 +157,12 @@ export interface SabotageObs extends BaseObs {
 export interface ManualMarkObs extends BaseObs {
   type: 'manualMark';
   player: PlayerId;
-  mark: 'sus' | 'clear' | 'neutral';
+  /** sus = soft suspicion; clear = round clear (soft); hardClear = you are certain (visual task, kill-window); neutral = unmark. */
+  mark: 'sus' | 'clear' | 'hardClear' | 'neutral';
   weight?: number;
 }
+
+export type UserMark = 'sus' | 'clear' | 'hardClear';
 
 export type Observation =
   | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
@@ -229,6 +234,8 @@ export interface PhaseChange {
   /** For meetings: who called it and why. */
   calledBy?: PlayerId;
   reason?: 'body' | 'button';
+  /** For gameOver: read from the end screen (VICTORY / DEFEAT word or its colour). */
+  outcome?: 'victory' | 'defeat';
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +380,8 @@ export interface MatchState {
   map: MapData;
   me: PlayerId;
   myRole: Role;
+  /** Set by hand in the UI: automatic reads must not change myRole for the rest of this match. */
+  myRoleLocked?: boolean;
   players: Record<PlayerId, Player>;
   phase: PhaseChange;
   observations: Observation[];

@@ -8,7 +8,7 @@
 import type { MatchState, PlayerId, SuspectScore, EvidenceItem, BodyFoundObs } from '../types/game';
 import weightsJson from '../data/tactics/weights.json';
 import { buildAlibiGraph, killWindowClears } from './alibi';
-import { OBSERVATION_RULES } from './rules';
+import { OBSERVATION_RULES, userMarks } from './rules';
 import { CLAIM_RULES } from './contradictions';
 import { ev, fmt, resetEvidenceIds } from './evidence';
 
@@ -64,6 +64,13 @@ export function hardFacts(m: MatchState): HardFacts {
     if (!e.player) continue;
     if (e.wasImpostor === true) imp.add(e.player);
     if (e.wasImpostor === false) crew.add(e.player);
+  }
+
+  // A hard clear by the user is a hard fact (they saw the visual task / the kill window themselves).
+  for (const [player, { mark, id }] of userMarks(m)) {
+    if (mark !== 'hardClear' || imp.has(player)) continue;
+    crew.add(player);
+    evidence.push(ev(player, -HARD, 'hard', 'Hard-cleared by you', [id]));
   }
 
   // Kill-window clears through the alibi graph (me + certain crew are anchors; one extra hop).

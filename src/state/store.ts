@@ -41,6 +41,12 @@ interface Store {
   /** Last measured body RGB per player from the vote grid (for colour calibration). */
   bodySamples: Record<string, [number, number, number]>;
   setBodySample: (id: string, rgb: [number, number, number]) => void;
+  /** Perceptual hash of each player's vote-grid icon (hex). Lets re-sorted grids keep identities. */
+  iconHashes: Record<string, string>;
+  setIconHash: (id: string, hash: string) => void;
+  /** 0..1 from the last vote-grid read: how well the roster mirrors the screen (null = no read yet). */
+  rosterConfidence: number | null;
+  setRosterConfidence: (c: number | null) => void;
 
   newMatch: (init: Omit<InitPayload, 'id' | 'startedAt'>) => string;
   loadMatch: (id: string) => Promise<boolean>;
@@ -65,6 +71,18 @@ function clockFromLog(log: readonly MatchEvent[]): ClockState {
 
 let toastSeq = 0;
 
+/** Headshots / icon hashes / body samples live outside the event log; cache them per match on disk
+ *  (`avatars_<matchId>.json`) so an app restart (every Rust rebuild) does not lose the faces. */
+let avatarTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleAvatarSave(get: () => { matchId: string | null; avatars: Record<string, string>; iconHashes: Record<string, string>; bodySamples: Record<string, [number, number, number]> }) {
+  if (avatarTimer) clearTimeout(avatarTimer);
+  avatarTimer = setTimeout(() => {
+    const s = get();
+    if (!s.matchId) return;
+    persist.writeJson(`avatars_${s.matchId}.json`, { avatars: s.avatars, iconHashes: s.iconHashes, bodySamples: s.bodySamples }).catch(() => {});
+  }, 1500);
+}
+
 export const useMatch = create<Store>((set, get) => {
   const append = (e: MatchEvent) => {
     const id = get().matchId;
@@ -81,15 +99,19 @@ export const useMatch = create<Store>((set, get) => {
     pending: null,
     diskError: null,
     avatars: {},
-    setAvatar: (id, dataUrl) => set(s => ({ avatars: { ...s.avatars, [id]: dataUrl } })),
+    setAvatar: (id, dataUrl) => { set(s => ({ avatars: { ...s.avatars, [id]: dataUrl } })); scheduleAvatarSave(get); },
     bodySamples: {},
-    setBodySample: (id, rgb) => set(s => ({ bodySamples: { ...s.bodySamples, [id]: rgb } })),
+    setBodySample: (id, rgb) => { set(s => ({ bodySamples: { ...s.bodySamples, [id]: rgb } })); scheduleAvatarSave(get); },
+    iconHashes: {},
+    setIconHash: (id, hash) => { set(s => ({ iconHashes: { ...s.iconHashes, [id]: hash } })); scheduleAvatarSave(get); },
+    rosterConfidence: null,
+    setRosterConfidence: (c) => set({ rosterConfidence: c }),
 
     newMatch: (init) => {
       const startedAt = Date.now();
       const id = new Date(startedAt).toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
       const e: MatchEvent = { kind: 'init', wall: startedAt, payload: { ...init, id, startedAt } };
-      set({ matchId: id, log: [e], match: reduce(null as unknown as MatchState, e), clock: initialClock, toast: null, diskError: null });
+      set({ matchId: id, log: [e], match: reduce(null as unknown as MatchState, e), clock: initialClock, toast: null, diskError: null, rosterConfidence: null });
       append(e);
       return id;
     },
@@ -98,7 +120,8 @@ export const useMatch = create<Store>((set, get) => {
       const log = await persist.readMatch(id);
       const match = replay(log);
       if (!match) return false;
-      set({ matchId: id, log, match, clock: clockFromLog(log), toast: null });
+      const cache = await persist.readJson<{ avatars?: Record<string, string>; iconHashes?: Record<string, string>; bodySamples?: Record<string, [number, number, number]> }>(`avatars_${id}.json`).catch(() => null);
+      set({ matchId: id, log, match, clock: clockFromLog(log), toast: null, avatars: cache?.avatars ?? {}, iconHashes: cache?.iconHashes ?? {}, bodySamples: cache?.bodySamples ?? {}, rosterConfidence: null });
       return true;
     },
 
@@ -197,5 +220,6 @@ export function describe(e: MatchEvent): string {
     case 'addPlayer': return `player ${e.payload.name} joined`;
     case 'removePlayer': return `removed ${e.payload.id}`;
     case 'myTasks': return `my tasks: ${e.payload.map(t => t.name).join(', ')}`;
+    case 'chatPatch': return `translation`;
   }
 }
