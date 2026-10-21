@@ -84,6 +84,22 @@ export function useGameEvents() {
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
 
+  // Keep the OCR snap-list in sync with the roster (names added, renamed, rescanned).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let last = '';
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsub = useMatch.subscribe(st => {
+      const names = st.match ? Object.values(st.match.players).map(p => p.name).filter(n => n && !n.startsWith('#')) : [];
+      const key = names.join('|');
+      if (key === last) return;
+      last = key;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { import('@tauri-apps/api/core').then(({ invoke }) => invoke('watcher_set_names', { names })).catch(() => {}); }, 300);
+    });
+    return () => { unsub(); if (timer) clearTimeout(timer); };
+  }, []);
+
   // Auto-start capture + watcher whenever the game window exists (retry every 8 s).
   useEffect(() => {
     if (!isTauri() || !settings?.autoCapture) return;
@@ -273,14 +289,26 @@ export function useGameEvents() {
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
       }));
 
-      guard(await listen<{ sender: string; text: string; mine: boolean; system: boolean; y: number }[]>('game://chat', e => {
+      guard(await listen<{ sender: string; text: string; mine: boolean; system: boolean; y: number; color: string }[]>('game://chat', e => {
         const s = useMatch.getState();
-        const m = s.match;
-        if (!m) return;
-        const meeting = m.phase.meeting ?? 0;
+        if (!s.match) return;
+        const meeting = s.match.phase.meeting ?? 0;
         for (const msg of e.payload) {
           if (msg.system) continue;
-          const sender = msg.mine ? m.me : (fuzzyFind(msg.sender, Object.values(m.players))?.id ?? 'unknown');
+          const m = useMatch.getState().match!;
+          const others = Object.values(m.players).filter(p => !p.isMe);
+          let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
+          if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
+            const byColor = others.filter(p => p.color === msg.color);
+            if (byColor.length === 1 && msg.sender && similarity(norm(msg.sender), norm(byColor[0].name)) > 0.4) sender = byColor[0].id;
+          }
+          if (sender === 'unknown' && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
+            // Chat bubbles are a roster source too: a new name with a readable icon becomes a player.
+            const color = (COLOR_IDS as string[]).includes(msg.color) && !others.some(p => p.color === msg.color) ? (msg.color as PlayerColor) : 'gray';
+            const id = color !== 'gray' && !m.players[color] ? color : `chat${Object.keys(m.players).length + 1}`;
+            s.dispatch({ kind: 'addPlayer', payload: { id, name: msg.sender, color, isMe: false, status: 'alive', knownRole: 'unknown' } });
+            sender = id;
+          }
           const stamp = s.stamp();
           s.dispatch({ kind: 'chat', payload: { id: newId('ch'), meeting, stamp, sender, original: msg.text, source: 'ocr' } });
           if (sender === 'unknown' || sender === m.me) continue;

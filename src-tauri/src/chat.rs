@@ -12,7 +12,8 @@
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame};
 use crate::ocr::{fuzzy_best, ocr_bgra, OcrLine};
-use crate::regions::{Regions, REF_W};
+use crate::regions::{Rect, Regions, REF_W};
+use crate::roster::{body_color_in, color_name};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct ChatMsg {
@@ -24,6 +25,8 @@ pub struct ChatMsg {
     pub system: bool,
     /// Frame y of the name line (for ordering / dedupe hints).
     pub y: u32,
+    /// Colour of the crewmate icon beside the bubble ("unknown" when unreadable).
+    pub color: String,
 }
 
 fn is_system(text: &str) -> bool {
@@ -52,9 +55,17 @@ pub fn read_chat(f: &Frame, known: &[String]) -> anyhow::Result<Vec<ChatMsg>> {
     let (u, uw, uh) = upscale_bgra(&c, w, h, 2);
     let res = ocr_bgra(&u, uw, uh, None)?;
     // Back to frame coordinates, sorted top→bottom.
-    let mut lines: Vec<OcrLine> = res.lines.into_iter().map(|l| OcrLine { text: l.text, x: r.x + l.x / 2, y: r.y + l.y / 2, w: l.w / 2, h: l.h / 2 }).collect();
-    lines.sort_by_key(|l| l.y);
     let sx = f.width as f32 / REF_W as f32;
+    // Drop what isn't bubble text: vote-grid names bleeding through the translucent panel (small),
+    // and glyph-like junk from the crewmate icons in the left (x<~500) and right (x>~1340) icon columns.
+    let min_h = (23.0 * sx) as u32;
+    let left_text = r.x + (150.0 * sx) as u32;
+    let right_icon = r.x + (995.0 * sx) as u32;
+    let mut lines: Vec<OcrLine> = res.lines.into_iter()
+        .map(|l| OcrLine { text: l.text, x: r.x + l.x / 2, y: r.y + l.y / 2, w: l.w / 2, h: l.h / 2 })
+        .filter(|l| l.h >= min_h && l.x >= left_text && l.x < right_icon && l.text.trim().chars().count() >= 1)
+        .collect();
+    lines.sort_by_key(|l| l.y);
     let mid = (r.x as f32 + r.w as f32 * 0.5) as u32;
     let line_gap = (48.0 * sx) as u32; // max vertical gap between lines of one bubble
 
@@ -66,17 +77,25 @@ pub fn read_chat(f: &Frame, known: &[String]) -> anyhow::Result<Vec<ChatMsg>> {
         if t.is_empty() { continue; }
         if is_system(&t) {
             if let Some(m) = cur.take() { out.push(m); }
-            out.push(ChatMsg { sender: String::new(), text: t, mine: false, system: true, y: l.y });
+            out.push(ChatMsg { sender: String::new(), text: t, mine: false, system: true, y: l.y, color: "unknown".into() });
             last_y = l.y;
             continue;
         }
-        let mine = l.x + l.w / 2 > mid + (120.0 * sx) as u32; // right-aligned bubble
-        let starts_new = cur.is_none() || l.y.saturating_sub(last_y) > line_gap || cur.as_ref().map(|m| m.mine != mine).unwrap_or(true);
+        // A bubble is "mine" when its NAME line is right-aligned (text lines of long messages wrap leftwards).
+        let right_aligned = l.x + l.w > mid + (260.0 * sx) as u32;
+        let starts_new = cur.is_none() || l.y.saturating_sub(last_y) > line_gap;
         if starts_new {
             if let Some(m) = cur.take() { if !m.text.is_empty() { out.push(m); } }
+            let mine = right_aligned;
+            // Icon sits left of a left bubble (x≈385–470) or right of a right bubble (x≈1350–1440), level with the name line.
+            let icon = if mine { Rect::new(r.x + (1010.0 * sx) as u32, l.y.saturating_sub((5.0 * sx) as u32), (80.0 * sx) as u32, (80.0 * sx) as u32) }
+                       else { Rect::new(r.x + (40.0 * sx) as u32, l.y.saturating_sub((5.0 * sx) as u32), (80.0 * sx) as u32, (80.0 * sx) as u32) };
+            // body of that sprite (measured: SHUSH's blue at icon-local x 20..60, y 30..75); plain palette rendering
+            let body = Rect::new(icon.x + (20.0 * sx) as u32, icon.y + (30.0 * sx) as u32, (40.0 * sx) as u32, (45.0 * sx) as u32);
+            let color = color_name(body_color_in(f, body, false, false).0).to_string();
             match looks_like_name(&t, known) {
-                Some((name, _)) => cur = Some(ChatMsg { sender: name, text: String::new(), mine, system: false, y: l.y }),
-                None => cur = Some(ChatMsg { sender: "?".into(), text: t.clone(), mine, system: false, y: l.y }),
+                Some((name, _)) => cur = Some(ChatMsg { sender: name, text: String::new(), mine, system: false, y: l.y, color }),
+                None => cur = Some(ChatMsg { sender: "?".into(), text: t.clone(), mine, system: false, y: l.y, color }),
             }
         } else if let Some(m) = cur.as_mut() {
             // A name line right after a name line (no text yet) means the previous bubble was empty.
@@ -111,7 +130,11 @@ mod tests {
         let known = vec!["SHUSH".to_string(), "BigBingus".to_string(), "Bonsainew".to_string()];
         let msgs = read_chat(&f, &known).unwrap();
         let flat: Vec<String> = msgs.iter().map(|m| format!("{}{}: {}", if m.mine { "*" } else { "" }, m.sender, m.text)).collect();
-        assert!(flat.iter().any(|m| m.starts_with("SHUSH: Hi")), "{flat:?}");
+        let shush = msgs.iter().find(|m| m.sender == "SHUSH").unwrap();
+        assert_eq!(shush.color, "blue", "{:?}", msgs);
+        let big = msgs.iter().find(|m| m.sender == "BigBingus").unwrap();
+        assert_eq!(big.color, "maroon", "{:?}", msgs);
+        assert!(flat.iter().any(|m| *m == "SHUSH: Hi"), "{flat:?}");
         assert!(flat.iter().any(|m| m.starts_with("*BigBingus: hell")), "{flat:?}"); // the crewmate icon overlaps the last letter
         assert!(flat.iter().any(|m| m.starts_with("SHUSH: How are u")), "{flat:?}");
         assert!(flat.iter().any(|m| m.starts_with("*BigBingus: doing goo")), "{flat:?}");
@@ -125,3 +148,4 @@ mod tests {
         assert!(msgs.iter().any(|m| m.text.to_lowercase().contains("vent")), "{msgs:?}");
     }
 }
+

@@ -93,8 +93,9 @@ fn dead_x_score(f: &Frame, cell: Rect) -> u32 {
 
 /// How the game renders palette colours on vote-grid icons (measured on real frames):
 /// alive ≈ 0.75·palette + 60 (a 25 % white lift); dead cards are dimmed to ≈ 0.6 of that.
-fn grid_expected(p: [u8; 3], dead: bool) -> [f32; 3] {
-    let alive = [0.75 * p[0] as f32 + 60.0, 0.75 * p[1] as f32 + 60.0, 0.75 * p[2] as f32 + 60.0];
+fn grid_expected(p: [u8; 3], dead: bool, lift: bool) -> [f32; 3] {
+    // Vote-grid icons get a 25 % white lift; chat-bubble icons use the plain palette (measured).
+    let alive = if lift { [0.75 * p[0] as f32 + 60.0, 0.75 * p[1] as f32 + 60.0, 0.75 * p[2] as f32 + 60.0] } else { [p[0] as f32, p[1] as f32, p[2] as f32] };
     if !dead { return alive; }
     // Dead cards sit under a dark semi-transparent overlay: measured red (208,64,80) → (128,48,64).
     [0.45 * alive[0] + 20.0, 0.45 * alive[1] + 20.0, 0.45 * alive[2] + 20.0]
@@ -107,6 +108,11 @@ fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
     let sx = f.width as f32 / REF_W as f32;
     // Lower half of the body only: hats and held signs sit above y≈45 of the icon box.
     let r = Rect::new(cell.x + ((ix + 28) as f32 * sx) as u32, cell.y + ((iy + 48) as f32 * sx) as u32, (46.0 * sx) as u32, (40.0 * sx) as u32);
+    body_color_in(f, r, dead, true)
+}
+
+/// Same classifier over any body patch. `lift` = vote-grid rendering (white lift); chat icons use false.
+pub fn body_color_in(f: &Frame, r: Rect, dead: bool, lift: bool) -> (PlayerColor, f32) {
     let (buf, _, _) = crop_bgra(f, r.x, r.y, r.w, r.h);
     let mut votes: std::collections::HashMap<PlayerColor, (u32, f32)> = Default::default();
     for px in buf.chunks_exact(4) {
@@ -115,7 +121,7 @@ fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
         if dead && (100.0..=175.0).contains(&rr) && (40.0..=100.0).contains(&g) && (25.0..=90.0).contains(&b) && rr - g >= 35.0 { continue; } // the X
         let mut best = (PlayerColor::Unknown, f32::MAX);
         for (c, p) in PALETTE {
-            let e = grid_expected(*p, dead);
+            let e = grid_expected(*p, dead, lift);
             let d = ((rr - e[0]).powi(2) + (g - e[1]).powi(2) + (b - e[2]).powi(2)).sqrt();
             if d < best.1 { best = (*c, d); }
         }
@@ -126,12 +132,12 @@ fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
     votes.into_iter().max_by_key(|(_, (n, _))| *n).filter(|(_, (n, _))| *n >= 25).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
 }
 
-/// Portrait crop of the card icon: the whole icon area (hat, visor, body, backpack) plus a margin,
-/// as the player appears on the vote grid.
+/// Headshot crop of the card icon: hat, visor and shoulders with a comfortable margin
+/// (cell-local x 6..134, y 2..90), as the player appears on the vote grid.
 fn headshot_png(f: &Frame, cell: Rect) -> Option<String> {
     use base64::Engine;
     let sx = f.width as f32 / REF_W as f32;
-    let r = Rect::new(cell.x + (2.0 * sx) as u32, cell.y, (138.0 * sx) as u32, (107.0 * sx) as u32);
+    let r = Rect::new(cell.x + (6.0 * sx) as u32, cell.y + (2.0 * sx) as u32, (128.0 * sx) as u32, (88.0 * sx) as u32);
     let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
     let mut rgba = buf;
     for px in rgba.chunks_exact_mut(4) { px.swap(0, 2); px[3] = 255; }
@@ -141,7 +147,7 @@ fn headshot_png(f: &Frame, cell: Rect) -> Option<String> {
     Some(base64::engine::general_purpose::STANDARD.encode(out.into_inner()))
 }
 
-fn color_name(c: PlayerColor) -> &'static str {
+pub fn color_name(c: PlayerColor) -> &'static str {
     match c {
         PlayerColor::Red => "red", PlayerColor::Blue => "blue", PlayerColor::Green => "green", PlayerColor::Pink => "pink",
         PlayerColor::Orange => "orange", PlayerColor::Yellow => "yellow", PlayerColor::Black => "black", PlayerColor::White => "white",
