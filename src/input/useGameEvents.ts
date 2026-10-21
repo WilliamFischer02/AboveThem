@@ -221,6 +221,14 @@ export function useGameEvents() {
             continue;
           }
           if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+          if (!fromLobby) {
+            // Merge slot-less duplicates of this player (chat/lobby spellings): drop the one without a slot.
+            const live = useMatch.getState().match!;
+            for (const d of Object.values(live.players)) {
+              if (d.id === p.id || d.slot !== undefined || d.isMe) continue;
+              if (similarity(norm(d.name), norm(p.name)) >= 0.5 || similarity(norm(d.name), norm(en.name)) >= 0.5) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
+            }
+          }
           if (!fromLobby && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
           // Keep the freshest alive-time headshot (dead cards carry the X); take a dead one only if we have none.
           if (!fromLobby && en.avatar_png && (!en.dead || !useMatch.getState().avatars[p.id])) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);

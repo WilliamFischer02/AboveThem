@@ -21,7 +21,7 @@ use crate::chat::{read_chat, ChatMsg};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
-use crate::roster::{read_vote_grid, RosterEntry};
+use crate::roster::{brightness_factor, read_vote_grid, RosterEntry};
 
 pub const EV_PHASE: &str = "game://phase";
 pub const EV_ROSTER: &str = "game://roster";
@@ -324,7 +324,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 7. Roster from the vote grid: 1.2 s after the meeting opened (fade-in), then every 4 s; never with chat open.
         if let Some(since) = meeting_since {
-            if !chat_open && since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4) {
+            if !chat_open && since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4)
+                && (last_roster.len() > 0 || brightness_factor(&frame) < 1.12 || since.elapsed() > Duration::from_secs(6)) {
                 last_roster_read = Instant::now();
                 let known = shared.lock().unwrap().known_names.clone();
                 if let Ok(r) = read_vote_grid(&frame, &known) {

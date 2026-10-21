@@ -74,7 +74,7 @@ fn white_text_mask(bgra: &[u8], w: u32, h: u32) -> Vec<u8> {
 /// The dead X: a dim orange-red band (R≈128 G≈64 B≈48 on real frames) drawn along the two
 /// diagonals of the icon box. Counting band pixels *near the diagonals* separates it from red
 /// bodies, hats and card art (measured: dead ≥ 1500, alive ≤ ~150 at 1080p).
-fn dead_x_score(f: &Frame, cell: Rect) -> u32 {
+fn dead_x_score(f: &Frame, cell: Rect, gain: f32) -> u32 {
     let (ix, iy, iw, ih) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
     let r = Rect::new(cell.x + (ix as f32 * sx) as u32, cell.y + (iy as f32 * sx) as u32, (iw as f32 * sx) as u32, (ih as f32 * sx) as u32);
@@ -83,8 +83,8 @@ fn dead_x_score(f: &Frame, cell: Rect) -> u32 {
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
-            let (b, g, rr) = (buf[i] as i32, buf[i + 1] as i32, buf[i + 2] as i32);
-            if !(100..=175).contains(&rr) || !(40..=100).contains(&g) || !(25..=90).contains(&b) || rr - g < 35 { continue; }
+            let (b, g, rr) = ((buf[i] as f32 * gain) as i32, (buf[i + 1] as f32 * gain) as i32, (buf[i + 2] as f32 * gain) as i32);
+            if !(100..=185).contains(&rr) || !(40..=105).contains(&g) || !(25..=95).contains(&b) || rr - g < 35 { continue; }
             let u = x as f32 / w as f32;
             let v = y as f32 / h as f32;
             if (u - v).abs() < 0.09 || (u - (1.0 - v)).abs() < 0.09 { diag += 1; }
@@ -106,30 +106,30 @@ fn grid_expected(p: [u8; 3], dead: bool, lift: bool) -> [f32; 3] {
 
 /// Body colour from the icon's body patch (below the visor, right of the backpack), by plain
 /// RGB distance to the grid-rendered palette. Skips the X band on dead cards and outlines.
-fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32, Option<[u8; 3]>) {
+fn icon_color(f: &Frame, cell: Rect, dead: bool, gain: f32) -> (PlayerColor, f32, Option<[u8; 3]>) {
     let (ix, iy, _, _) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
     // Lower half of the body only: hats and held signs sit above y≈45 of the icon box.
     let r = Rect::new(cell.x + ((ix + 28) as f32 * sx) as u32, cell.y + ((iy + 48) as f32 * sx) as u32, (46.0 * sx) as u32, (40.0 * sx) as u32);
-    body_color_in_rgb(f, r, dead, true)
+    body_color_in_rgb(f, r, dead, true, gain)
 }
 
 /// Same classifier over any body patch. `lift` = vote-grid rendering (white lift); chat icons use false.
 pub fn body_color_in(f: &Frame, r: Rect, dead: bool, lift: bool) -> (PlayerColor, f32) {
-    let (c, d, _) = body_color_in_rgb(f, r, dead, lift);
+    let (c, d, _) = body_color_in_rgb(f, r, dead, lift, 1.0);
     (c, d)
 }
 
 /// As above, also returning the mean RGB of the winning pixels (used to calibrate from user picks).
 /// User-calibrated samples (same rendering) are matched first with a tighter radius; the fixed
 /// rendering model is the fallback.
-pub fn body_color_in_rgb(f: &Frame, r: Rect, dead: bool, lift: bool) -> (PlayerColor, f32, Option<[u8; 3]>) {
+pub fn body_color_in_rgb(f: &Frame, r: Rect, dead: bool, lift: bool, gain: f32) -> (PlayerColor, f32, Option<[u8; 3]>) {
     let (buf, _, _) = crop_bgra(f, r.x, r.y, r.w, r.h);
     let calib: Vec<(PlayerColor, [f32; 3])> = calibration().into_iter().filter(|s| s.lift == lift)
         .filter_map(|s| color_from_name(&s.color).map(|c| { let k = if dead { 0.45 } else { 1.0 }; let o = if dead { 20.0 } else { 0.0 }; (c, [k * s.rgb[0] as f32 + o, k * s.rgb[1] as f32 + o, k * s.rgb[2] as f32 + o]) })).collect();
     let mut votes: std::collections::HashMap<PlayerColor, (u32, f32, [f32; 3])> = Default::default();
     for px in buf.chunks_exact(4) {
-        let (b, g, rr) = (px[0] as f32, px[1] as f32, px[2] as f32);
+        let (b, g, rr) = ((px[0] as f32 * gain).min(255.0), (px[1] as f32 * gain).min(255.0), (px[2] as f32 * gain).min(255.0));
         if rr.max(g).max(b) < 35.0 { continue; } // outline
         if dead && (100.0..=175.0).contains(&rr) && (40.0..=100.0).contains(&g) && (25.0..=90.0).contains(&b) && rr - g >= 35.0 { continue; } // the X
         let mut best = (PlayerColor::Unknown, f32::MAX);
@@ -178,6 +178,25 @@ pub fn color_name(c: PlayerColor) -> &'static str {
     }
 }
 
+/// Meeting-panel fade-in: the cards animate in from dark. The brightest card background
+/// (plain grey cards read ≈ 245 when faded in, ≈ 186 mid-fade) gives a gain to normalise the frame.
+pub fn brightness_factor(f: &Frame) -> f32 {
+    let sx = f.width as f32 / REF_W as f32;
+    let mut best = 0u32;
+    for index in 0..(VoteCell::ROWS * VoteCell::COLS) {
+        let cell = cell_in_frame(index, f);
+        if cell.x + cell.w > f.width || cell.y + cell.h > f.height { break; }
+        if !cell_occupied(f, cell) { continue; }
+        // name-box background strip below the name text, right side of the card
+        let r = Rect::new(cell.x + (330.0 * sx) as u32, cell.y + (88.0 * sx) as u32, (140.0 * sx) as u32, (12.0 * sx) as u32);
+        let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+        let lum: u32 = buf.chunks_exact(4).map(|p| (p[0] as u32 + p[1] as u32 + p[2] as u32) / 3).sum::<u32>() / (w * h).max(1);
+        if lum > best { best = lum; }
+    }
+    if best < 100 { return 1.0; } // nothing readable
+    (245.0 / best as f32).clamp(1.0, 1.6)
+}
+
 /// Is the chat panel open (covering the vote grid)? Either the Send button or the "N/100" counter is readable.
 pub fn chat_is_open(f: &Frame) -> bool {
     let reg = crate::regions::Regions::default().for_frame(f.width, f.height);
@@ -198,6 +217,7 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
     let t0 = std::time::Instant::now();
     let mut entries = Vec::new();
     if chat_is_open(f) { return Ok(RosterRead { entries, ocr_ms: t0.elapsed().as_millis() as u64 }); }
+    let gain = brightness_factor(f);
     for index in 0..(VoteCell::ROWS * VoteCell::COLS) {
         let cell = cell_in_frame(index, f);
         if cell.x + cell.w > f.width || cell.y + cell.h > f.height { break; }
@@ -224,8 +244,8 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
             Some((n, score)) if !placeholder && score >= 0.6 => (n.to_string(), score),
             _ => (raw.clone(), if placeholder { 0.2 } else if known_names.is_empty() { 0.8 } else { 0.4 }),
         };
-        let dead = dead_x_score(f, cell) >= 700;
-        let (color, delta, body_rgb) = icon_color(f, cell, dead);
+        let dead = dead_x_score(f, cell, gain) >= 700;
+        let (color, delta, body_rgb) = icon_color(f, cell, dead, gain);
         entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb });
     }
     // The reporter/caller has a megaphone badge at the cell's top-right; approximate with a red-ish badge check.
@@ -267,8 +287,14 @@ mod tests {
         assert!(dead.iter().any(|n| n.contains("Bonsainew")));
         assert!(dead.iter().any(|n| n.contains("sekt")), "{dead:?}");
         assert!(r.entries.iter().any(|e| e.reporter && e.name.contains("Big")), "reporter badge: {:?}", r.entries.iter().map(|e| (e.name.clone(), e.reporter)).collect::<Vec<_>>());
-        // Colours: use the fully faded-in frame (frame 1 is mid fade-in and uniformly dim).
+        // Frame 1 is mid fade-in: brightness normalisation must still give the right colours.
+        let dim = |n: &str| r.entries.iter().find(|e| fuzzy_best(&e.name, [n]).unwrap().1 > 0.7).unwrap();
+        assert!(brightness_factor(&f) > 1.15, "frame 1 should read as dim: {}", brightness_factor(&f));
+        assert_eq!(dim("SHUSH").color, "blue", "{:?}", r.entries);
+        assert_eq!(dim("Timetrast").color, "cyan", "{:?}", r.entries);
+        assert_eq!(dim("Waxscarce").color, "orange", "{:?}", r.entries);
         let f2 = load_fixture("meeting_vote_grid_2");
+        assert!(brightness_factor(&f2) < 1.1, "frame 2 is faded in: {}", brightness_factor(&f2));
         let r2 = read_vote_grid(&f2, &[]).expect("read");
         let by = |n: &str| r2.entries.iter().find(|e| fuzzy_best(&e.name, [n]).unwrap().1 > 0.7).unwrap_or_else(|| panic!("{n} missing in {:?}", r2.entries.iter().map(|e| (e.name.clone(), e.color.clone(), e.dead)).collect::<Vec<_>>()));
         assert_eq!(by("SHUSH").color, "blue");
