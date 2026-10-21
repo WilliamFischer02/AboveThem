@@ -181,7 +181,7 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
   run(new RegExp(`\\b(?:i )?(?:saw|seen) ${P} (?:walk|walking|run|running|come|coming|leave|leaving|go|going)(?: away| out| straight)? from (?:the )?body`, 'g'), mm => {
     const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about, reason: 'left body' }); return true; } return false;
   });
-  run(new RegExp(`\\b${P} (?:was |is )?(?:near|next to|by|with|on|over|standing on|at) (?:the )?body`, 'g'), mm => {
+  run(new RegExp(`\\b${P} (?:was |is )?(?:around|near|next to|by|with|on|over|standing on|at|close to) (?:where )?(?:the )?body`, 'g'), mm => {
     const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about, reason: 'near body' }); return true; } return false;
   });
 
@@ -207,7 +207,10 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
     if (!about) return false;
     add({ type: 'accusation', about, reason: /vent|kill|fake|self|follow|chas|lying|lied/.test(verb) ? verb : undefined }); return true;
   });
-  run(new RegExp(`\\b(?:vote|vote out|eject|its|it s|it is|kick) ${P}\\b`, 'g'), mm => {
+  run(new RegExp(`\\b(?:i )?(?:dont|don t|do not) think (?:its |it s )?${P}\\b`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'defense', about }); return true; } return false;
+  });
+  run(new RegExp(`\\b(?:vote|voting|vote out|eject|its|it s|it is|kick|im voting|i m voting) ${P}\\b`, 'g'), mm => {
     const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about }); return true; } return false;
   });
   run(new RegExp(`\\b(?:i )?(?:saw|seen|watched) ${P} (?:vent|venting|kill|killing|fake|faking)`, 'g'), mm => {

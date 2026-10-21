@@ -46,6 +46,9 @@ describe('chat → claims', () => {
     expect(p('i saw green walk away from body', 'white')).toEqual([{ type: 'accusation', about: 'green', reason: 'left body' }]);
     expect(p('purpleeee is sus', 'white')).toEqual([{ type: 'accusation', about: 'purple', reason: undefined }]);
     expect(p('blue was near the body', 'white')).toEqual([{ type: 'accusation', about: 'blue', reason: 'near body' }]);
+    expect(p('yellow was around where the body was', 'white')).toEqual([{ type: 'accusation', about: 'yellow', reason: 'near body' }]);
+    expect(p('voting blue', 'white')).toEqual([{ type: 'accusation', about: 'blue', reason: undefined }]);
+    expect(p('i dont think its blue', 'white')).toEqual([{ type: 'defense', about: 'blue' }]);
   });
 
   it('tasks and bodies', () => {
