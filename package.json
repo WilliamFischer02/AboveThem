@@ -14,18 +14,21 @@
     "dev:replay": "echo 'TODO Phase 1: feed an .ndjson match into the UI' && exit 1"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "react": "^18",
-    "react-dom": "^18",
-    "zustand": "^5"
+    "@tauri-apps/api": "2.12.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "@vitejs/plugin-react": "^4",
-    "typescript": "^5",
-    "vite": "^5",
-    "vitest": "^2"
+    "@tauri-apps/cli": "2.12.3",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

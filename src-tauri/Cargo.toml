@@ -9,25 +9,27 @@ name = "abovethem_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.7.3", features = [] }
 
 [dependencies]
-# Versions intentionally unpinned for the scaffold. Pin on first successful build
-# and record them in docs/handoff.md.
-tauri = { version = "2", features = [] }
-tauri-plugin-global-shortcut = "2"
-tauri-plugin-clipboard-manager = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "1"
-anyhow = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-whatlang = "0.16"
+# Pinned on 2026-10-21 — the set that built on William's machine (see docs/handoff.md).
+# Bump deliberately; re-run `cargo check` + `npm run tauri dev` after any change.
+tauri = { version = "=2.12.4", features = [] }
+tauri-plugin-global-shortcut = "=2.4.1"
+tauri-plugin-clipboard-manager = "=2.5.0"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+thiserror = "=2.0.21"
+anyhow = "=1.0.104"
+tokio = { version = "=1.54.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+reqwest = { version = "=0.12.28", features = ["json", "rustls-tls"], default-features = false }
+whatlang = "=0.16.4"
 
 [target.'cfg(windows)'.dependencies]
-# Phase 2: enable the WinRT features we need. Candidate set — verify names against the crate version that resolves.
-windows = { version = "0.58", features = [
+# Same `windows` line as Tauri 2.12 / wry / webview2-com use, so there is one copy in the tree.
+# Features verified to exist and compile on windows 0.62.2 (Phase 0). Capture itself goes
+# through `windows-capture` (see ADR-006); the Graphics_* features stay for SoftwareBitmap interop.
+windows = { version = "=0.62.2", features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
   "Win32_Graphics_Gdi",
@@ -41,3 +43,6 @@ windows = { version = "0.58", features = [
   "Foundation_Collections",
   "Globalization",
 ] }
+# Windows Graphics Capture wrapper: frame-pool/D3D11 ceremony handled, BGRA frame callback.
+# Depends on windows ^0.62.2 — same copy as above. Used from Phase 2.
+windows-capture = "=2.0.1"

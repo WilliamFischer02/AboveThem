@@ -36,3 +36,34 @@ post-match learning loop can tune them without code changes.
 **Why:** wrong vent/visual/common-task data produces confidently wrong deductions.
 Every map file carries `_verified` per section; the engine lowers weight of any
 rule that depends on unverified data.
+
+## ADR-006 — Screen capture via the `windows-capture` crate, not raw `Graphics::Capture`
+**Date:** 2026-10-21
+**Status:** accepted (Phase 0; implementation lands in Phase 2)
+**Why:** both options sit on the same Windows Graphics Capture API. Raw
+`windows::Graphics::Capture` needs us to own the D3D11 device, the
+`Direct3D11CaptureFramePool`, the `GraphicsCaptureSession`, the interop
+`IDirect3DDxgiInterfaceAccess` → `ID3D11Texture2D` → staging-texture → `Map`
+copy, and the dispatcher-queue thread — ~300 lines of unsafe ceremony before
+the first BGRA byte. `windows-capture` 2.0.1 wraps exactly that and hands a
+callback a frame with a width/height/BGRA buffer, supports capture by HWND,
+lets us toggle the yellow border and cursor, and depends on `windows =
+^0.62.2` — the same copy Tauri 2.12 / wry / webview2-com already pull, so no
+duplicate `windows` build. Resolved and checked on 2026-10-21.
+**Consequences:** we keep the `windows` crate for `Media.Ocr` /
+`Graphics.Imaging` (OCR needs a `SoftwareBitmap`, which `windows-capture`
+does not produce; we build it from the BGRA buffer). If `windows-capture`
+stalls on a future `windows` bump, fallback is the raw API — the frame type
+in `capture.rs` is ours, so callers don't change.
+
+## ADR-007 — Frontend toolchain pinned to Vite 8 / Vitest 5 (not the scaffold's 5 / 2)
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** the scaffold's `vite@^5` resolved to 5.4.21 → `esbuild 0.21.5`
+(GHSA-67mh-4wv8-2f99: any website can hit the dev server), and `vitest@^2`
+→ `tinypool` with a prototype-pollution RCE. `tauri dev` runs that dev
+server every session. Vite 8.3.5 + Vitest 5.0.5 + `@vitejs/plugin-react`
+6.1.2 clear `npm audit` to zero and the 6 engine tests, `tsc --noEmit` and
+`vite build` all pass unchanged. React stays on 18.3.1 and TypeScript on
+5.9.3 (TS 7 is the native-port rewrite; no reason to be an early adopter in
+a build pipeline). All versions are exact-pinned in `package.json`.
