@@ -230,6 +230,9 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
     if (!about) return false;
     add({ type: 'accusation', about, reason: /vent|kill|fake|self|follow|chas|lying|lied/.test(verb) ? verb : undefined }); return true;
   });
+  run(new RegExp(`\\b(?:i|we|im|i m) (?:sus|suspect|suspecting|sussing) ${P}\\b`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about }); return true; } return false;
+  });
   run(new RegExp(`\\b(?:i )?(?:dont|don t|do not) think (?:its |it s )?${P}\\b`, 'g'), mm => {
     const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'defense', about }); return true; } return false;
   });

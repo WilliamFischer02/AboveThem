@@ -62,6 +62,7 @@ describe('chat → claims', () => {
   it('own colour statements and sus lists', () => {
     expect(p('im cyan', 'white')).toEqual([{ type: 'myColor', color: 'cyan' }]);
     expect(p('blue is in my sus list', 'white')).toEqual([{ type: 'accusation', about: 'blue' }]);
+    expect(p('i sus blue i barely see him', 'white')).toEqual([{ type: 'accusation', about: 'blue' }]);
   });
 
   it('tasks and bodies', () => {

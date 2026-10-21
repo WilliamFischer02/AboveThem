@@ -377,7 +377,9 @@ export function useGameEvents() {
               }
             }
           }
-          if (sender === 'unknown' && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
+          const slotted = Object.values(m.players).filter(p => p.slot !== undefined).length;
+          // Once the vote grid has established the roster, unknown chat senders are OCR misses, not new players.
+          if (sender === 'unknown' && slotted < 8 && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
             // Chat bubbles are a roster source too: a new name with a readable icon becomes a player.
             const color = (COLOR_IDS as string[]).includes(msg.color) && !others.some(p => p.color === msg.color) ? (msg.color as PlayerColor) : 'gray';
             const id = color !== 'gray' && !m.players[color] ? color : `chat${Object.keys(m.players).length + 1}`;
