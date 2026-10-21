@@ -46,8 +46,8 @@ export function Overlay() {
 
       <div className="ov-box">
         <div className="ov-legend">
-          {snap.colors.filter(c => c.inLobby).map(c => (
-            <span key={c.color} className="ov-k"><Crewmate color={c.color} size={18} /><kbd>{c.key}</kbd></span>
+          {snap.slots.map(sl => (
+            <span key={sl.key} className="ov-k" style={{ opacity: sl.dead ? 0.45 : 1 }}><kbd>{sl.key}</kbd><Crewmate color={sl.color} size={18} state={sl.dead ? 'dead' : 'alive'} />{sl.name}</span>
           ))}
         </div>
         <div className="ov-legend ov-rooms">

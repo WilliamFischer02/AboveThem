@@ -6,6 +6,7 @@ import { effective, type MatchEvent } from '../../state/events';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { impostorsRemaining } from '../../engine/suspicion';
 import { fmt } from '../../engine/evidence';
+import { slotOrder } from '../../input/useHotkeys';
 
 export interface OverlaySnapshot {
   phase: Phase;
@@ -18,6 +19,8 @@ export interface OverlaySnapshot {
   toast: string | null;
   prefix: string;
   colors: { color: PlayerColor; key: string; code: string; name: string; inLobby: boolean }[];
+  /** Roster in vote-grid order: digit key -> name. */
+  slots: { key: string; name: string; color: PlayerColor; dead: boolean }[];
   rooms: { key: string; name: string }[];
   recent: string[];
 }
@@ -42,6 +45,7 @@ export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[
     toast,
     prefix,
     colors: COLOR_IDS.map(c => ({ color: c, key: PALETTE[c].key, code: `Key${PALETTE[c].key.toUpperCase()}`, name: byColor.get(c)?.name ?? PALETTE[c].label, inLobby: byColor.has(c) })),
+    slots: slotOrder(m).slice(0, 10).map((id, i) => ({ key: String((i + 1) % 10), name: m.players[id].name, color: m.players[id].color, dead: m.players[id].status !== 'alive' })),
     rooms: m.map.rooms.map(r => ({ key: r.key, name: r.name })),
     recent,
   };

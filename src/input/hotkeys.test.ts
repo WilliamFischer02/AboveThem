@@ -13,17 +13,19 @@ describe('hotkey chords', () => {
 
   it('config registers 18 colours + 4 specials in layer 1', () => {
     const c = buildConfig(skeld);
-    expect(c.first).toHaveLength(22);
+    expect(c.first).toHaveLength(32);
     expect(c.immediate).toEqual(['KeyZ', 'Backquote']);
     expect(c.second).toContain('KeyE');
     expect(c.second).toContain('Shift+Digit1');
   });
 
   it('interprets colour+room, colour+action, body+room, my room, undo', () => {
-    expect(interpret(skeld, { first: 'KeyR', second: 'KeyE', cancelled: false })).toEqual({ kind: 'sighting', color: 'red', room: 'electrical' });
-    expect(interpret(skeld, { first: 'KeyB', second: 'Period', cancelled: false })).toEqual({ kind: 'withMe', color: 'blue' });
-    expect(interpret(skeld, { first: 'KeyG', second: 'Shift+Digit1', cancelled: false })).toEqual({ kind: 'sawVent', color: 'green' });
-    expect(interpret(skeld, { first: 'KeyG', second: 'Shift+Equal', cancelled: false })).toEqual({ kind: 'mark', color: 'green', mark: 'sus' });
+    expect(interpret(skeld, { first: 'KeyR', second: 'KeyE', cancelled: false })).toEqual({ kind: 'sighting', target: { color: 'red' }, room: 'electrical' });
+    expect(interpret(skeld, { first: 'KeyB', second: 'Period', cancelled: false })).toEqual({ kind: 'withMe', target: { color: 'blue' } });
+    expect(interpret(skeld, { first: 'KeyG', second: 'Shift+Digit1', cancelled: false })).toEqual({ kind: 'sawVent', target: { color: 'green' } });
+    expect(interpret(skeld, { first: 'KeyG', second: 'Shift+Equal', cancelled: false })).toEqual({ kind: 'mark', target: { color: 'green' }, mark: 'sus' });
+    expect(interpret(skeld, { first: 'Digit3', second: 'KeyE', cancelled: false })).toEqual({ kind: 'sighting', target: { slot: 3 }, room: 'electrical' });
+    expect(interpret(skeld, { first: 'Digit0', second: 'Period', cancelled: false })).toEqual({ kind: 'withMe', target: { slot: 10 } });
     expect(interpret(skeld, { first: 'Space', second: 'KeyE', cancelled: false })).toEqual({ kind: 'bodyFound', room: 'electrical' });
     expect(interpret(skeld, { first: 'Slash', second: 'KeyM', cancelled: false })).toEqual({ kind: 'myRoom', room: 'medbay' });
     expect(interpret(skeld, { first: 'KeyZ', second: null, cancelled: false })).toEqual({ kind: 'undo' });

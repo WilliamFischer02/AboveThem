@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useMatch } from '../state/store';
 import { isTauri } from '../state/persist';
-import { buildConfig, interpret, keyLabel, type ChordAction, type ChordEvent } from './hotkeys';
+import { buildConfig, interpret, keyLabel, type ChordAction, type ChordEvent, type Target } from './hotkeys';
 import { createChordMachine } from './chordMachine';
 import { PALETTE } from '../ui/palette';
 import type { MatchState, PlayerId, RoomId } from '../types/game';
@@ -14,6 +14,21 @@ import type { MatchState, PlayerId, RoomId } from '../types/game';
 export function playerByColor(m: MatchState, color: string): PlayerId | null {
   return Object.values(m.players).find(p => p.color === color)?.id ?? null;
 }
+
+/** Roster order: vote-grid slot when known, else insertion order. 1-based. */
+export function slotOrder(m: MatchState): PlayerId[] {
+  const ps = Object.values(m.players);
+  const withSlot = ps.filter(p => p.slot !== undefined).sort((a, b) => a.slot! - b.slot!);
+  const rest = ps.filter(p => p.slot === undefined);
+  return [...withSlot, ...rest].map(p => p.id);
+}
+
+export function resolveTarget(m: MatchState, t: Target): PlayerId | null {
+  if ('color' in t) return playerByColor(m, t.color);
+  return slotOrder(m)[t.slot - 1] ?? null;
+}
+
+const targetLabel = (t: Target) => 'color' in t ? (PALETTE[t.color as keyof typeof PALETTE]?.label ?? t.color) : `slot ${t.slot}`;
 
 /** Current round index for observation lookups (lobby/pre-round counts as round 0). */
 export const currentRound = (m: MatchState) => Math.max(0, m.phase.round);
@@ -41,7 +56,7 @@ export function applyAction(a: ChordAction): void {
   const s = useMatch.getState();
   const m = s.match;
   if (!m) return;
-  const pname = (c: string) => { const id = playerByColor(m, c); return id ? m.players[id].name : c; };
+  const pname = (t: Target) => { const id = resolveTarget(m, t); return id ? m.players[id].name : targetLabel(t); };
   switch (a.kind) {
     case 'undo': s.undo(); return;
     case 'toggleOverlay': return; // Phase 5 (overlay mode)
@@ -50,20 +65,21 @@ export function applyAction(a: ChordAction): void {
     case 'myRoom': s.observe({ type: 'myRoom', room: a.room }, `Me → ${roomName(m, a.room)}`); return;
     case 'bodyFound': s.observe({ type: 'bodyFound', victim: 'unknown', room: a.room }, `Body in ${roomName(m, a.room)} — click the victim in the roster`); return;
   }
-  const id = playerByColor(m, a.color);
-  if (!id) { s.showToast(`${PALETTE[a.color as keyof typeof PALETTE]?.label ?? a.color} is not in this lobby`); return; }
+  const id = resolveTarget(m, a.target);
+  if (!id) { s.showToast(`${targetLabel(a.target)} is not in this lobby`); return; }
+  const who = pname(a.target);
   const room = myRoomNow(m) ?? m.map.rooms[0].id;
   switch (a.kind) {
-    case 'sighting': s.observe({ type: 'sighting', player: id, room: a.room }, `${pname(a.color)} in ${roomName(m, a.room)}`); return;
+    case 'sighting': s.observe({ type: 'sighting', player: id, room: a.room }, `${who} in ${roomName(m, a.room)}`); return;
     case 'withMe': {
       const on = !withMeNow(m, id);
-      s.observe({ type: 'withMe', player: id, room, on }, on ? `${pname(a.color)} with me (${roomName(m, room)})` : `${pname(a.color)} left me`);
+      s.observe({ type: 'withMe', player: id, room, on }, on ? `${who} with me (${roomName(m, room)})` : `${who} left me`);
       return;
     }
-    case 'sawTask': s.observe({ type: 'sawTask', player: id, room, visualConfirmed: true }, `${pname(a.color)} did a VISUAL task in ${roomName(m, room)}`); return;
-    case 'sawVent': s.observe({ type: 'sawVent', player: id, room }, `${pname(a.color)} VENTED in ${roomName(m, room)} — impostor`); return;
-    case 'sawKill': s.observe({ type: 'sawKill', killer: id, victim: 'unknown', room }, `${pname(a.color)} KILLED in ${roomName(m, room)} — set victim in roster`); return;
-    case 'mark': s.observe({ type: 'manualMark', player: id, mark: a.mark }, `${pname(a.color)} marked ${a.mark}`); return;
+    case 'sawTask': s.observe({ type: 'sawTask', player: id, room, visualConfirmed: true }, `${who} did a VISUAL task in ${roomName(m, room)}`); return;
+    case 'sawVent': s.observe({ type: 'sawVent', player: id, room }, `${who} VENTED in ${roomName(m, room)} — impostor`); return;
+    case 'sawKill': s.observe({ type: 'sawKill', killer: id, victim: 'unknown', room }, `${who} KILLED in ${roomName(m, room)} — set victim in roster`); return;
+    case 'mark': s.observe({ type: 'manualMark', player: id, mark: a.mark }, `${who} marked ${a.mark}`); return;
   }
 }
 

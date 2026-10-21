@@ -25,13 +25,16 @@ export interface HotkeyConfig {
 
 export interface ChordEvent { first: string; second: string | null; cancelled: boolean }
 
+/** Who a chord is about: a colour letter, or a roster slot digit (1-9, 0 = 10). */
+export type Target = { color: PlayerColor } | { slot: number };
+
 export type ChordAction =
-  | { kind: 'sighting'; color: PlayerColor; room: RoomId }
-  | { kind: 'withMe'; color: PlayerColor }
-  | { kind: 'sawTask'; color: PlayerColor }
-  | { kind: 'sawVent'; color: PlayerColor }
-  | { kind: 'sawKill'; color: PlayerColor }
-  | { kind: 'mark'; color: PlayerColor; mark: 'sus' | 'clear' }
+  | { kind: 'sighting'; target: Target; room: RoomId }
+  | { kind: 'withMe'; target: Target }
+  | { kind: 'sawTask'; target: Target }
+  | { kind: 'sawVent'; target: Target }
+  | { kind: 'sawKill'; target: Target }
+  | { kind: 'mark'; target: Target; mark: 'sus' | 'clear' }
   | { kind: 'bodyFound'; room: RoomId }
   | { kind: 'myRoom'; room: RoomId }
   | { kind: 'undo' }
@@ -69,12 +72,15 @@ export function colorKeyCodes(): Record<string, PlayerColor> {
   return out;
 }
 
+export const SLOT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
+export const slotOfCode = (code: string): number | null => { const i = SLOT_KEYS.indexOf(code); return i < 0 ? null : i + 1; };
+
 export function buildConfig(map: MapData, prefix = 'Ctrl+Alt', timeoutMs = 1500): HotkeyConfig {
   const colors = Object.keys(colorKeyCodes());
   const rooms = Object.keys(roomKeyCodes(map));
   return {
     prefix,
-    first: [...colors, FIRST_SPECIAL.body, FIRST_SPECIAL.myRoom, FIRST_SPECIAL.undo, FIRST_SPECIAL.toggleOverlay],
+    first: [...colors, ...SLOT_KEYS, FIRST_SPECIAL.body, FIRST_SPECIAL.myRoom, FIRST_SPECIAL.undo, FIRST_SPECIAL.toggleOverlay],
     immediate: [FIRST_SPECIAL.undo, FIRST_SPECIAL.toggleOverlay],
     second: [...new Set([...rooms, ...Object.keys(ACTION_KEYS)])],
     chord_timeout_ms: timeoutMs,
@@ -97,12 +103,14 @@ export function interpret(map: MapData, ev: ChordEvent): ChordAction {
     return room ? { kind: 'myRoom', room } : { kind: 'unknown', first: ev.first, second: ev.second };
   }
   const color = colors[ev.first];
-  if (!color) return { kind: 'unknown', first: ev.first, second: ev.second };
+  const slot = slotOfCode(ev.first);
+  if (!color && slot === null) return { kind: 'unknown', first: ev.first, second: ev.second };
+  const target: Target = color ? { color } : { slot: slot! };
   const action = ACTION_KEYS[ev.second];
-  if (action === 'sus' || action === 'clear') return { kind: 'mark', color, mark: action };
-  if (action) return { kind: action, color } as ChordAction;
+  if (action === 'sus' || action === 'clear') return { kind: 'mark', target, mark: action };
+  if (action) return { kind: action, target } as ChordAction;
   const room = rooms[ev.second];
-  if (room) return { kind: 'sighting', color, room };
+  if (room) return { kind: 'sighting', target, room };
   return { kind: 'unknown', first: ev.first, second: ev.second };
 }
 

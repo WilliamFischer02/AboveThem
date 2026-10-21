@@ -57,7 +57,7 @@ export function playersFromRoster(entries: RosterEntry[], myName: string): { pla
     let color = (COLOR_IDS as string[]).includes(e.color) ? (e.color as PlayerColor) : 'gray';
     if (used.has(color)) color = COLOR_IDS.find(c => !used.has(c)) ?? 'unknown';
     used.add(color);
-    players.push({ id: color === 'unknown' ? `p${e.index}` : color, name: e.name, color, isMe: false, status: e.dead ? 'dead' : 'alive', knownRole: 'unknown' });
+    players.push({ id: color === 'unknown' ? `p${e.index}` : color, name: e.name, color, isMe: false, status: e.dead ? 'dead' : 'alive', knownRole: 'unknown', slot: e.index + 1 });
   }
   const mine = myName ? fuzzyFind(myName, players) : undefined;
   const me = mine ?? players[0];
@@ -144,13 +144,20 @@ export function useGameEvents() {
         const m = s.match;
         const existing = Object.values(m.players);
         for (const en of entries) {
-          const p = fuzzyFind(en.name, existing);
+          // Same vote-grid slot = same player, whatever OCR made of the name this time.
+          let p = existing.find(x => x.slot === en.index + 1) ?? fuzzyFind(en.name, existing);
+          if (!p && existing.length >= entries.length) {
+            // Lobby is full: never invent a player, take the closest unmatched name.
+            const taken = new Set(entries.map(x => fuzzyFind(x.name, existing)?.id).filter(Boolean));
+            p = existing.filter(x => !taken.has(x.id)).sort((a, b) => similarity(norm(en.name), norm(b.name)) - similarity(norm(en.name), norm(a.name)))[0];
+          }
           if (!p) {
             const { players } = playersFromRoster([en], '');
             const np = players[0];
             if (!m.players[np.id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, isMe: false } });
             continue;
           }
+          if (p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
           if (en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
         }
       }));

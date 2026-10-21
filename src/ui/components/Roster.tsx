@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Player, PlayerId, RoomId, SuspectScore } from '../../types/game';
+import type { Player, PlayerColor, PlayerId, RoomId, SuspectScore } from '../../types/game';
 import { useMatch } from '../../state/store';
 import { Crewmate } from './Crewmate';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
-import { PALETTE } from '../palette';
+import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
 
-type MenuMode = 'main' | 'seen' | 'victim' | 'kill';
+type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color';
 
 export function Roster({ scores }: { scores: SuspectScore[] }) {
   const match = useMatch(s => s.match);
@@ -76,7 +76,7 @@ function Chip({ p, score, open, onToggle, onClose }: { p: Player; score?: Suspec
           {verdict === 'softClear' && <span className="badge soft">SOFT</span>}
           {withMe && <span className="badge with">WITH ME</span>}
           {pct !== null && verdict !== 'certainCrew' && verdict !== 'certainImpostor' && <span>{pct}%</span>}
-          {!p.isMe && <span className="key">{PALETTE[p.color as keyof typeof PALETTE]?.key}</span>}
+          {!p.isMe && <span className="key" title="hotkey: prefix + this key, then room">{p.slot !== undefined ? p.slot % 10 : PALETTE[p.color as keyof typeof PALETTE]?.key}</span>}
         </div>
       </div>
       {pct !== null && p.status === 'alive' && (
@@ -101,6 +101,33 @@ function QuickActions({ p }: { p: Player }) {
         onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁 here</button>
       <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0].id, on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
       <button className="btn xs warn" onClick={() => observe({ type: 'manualMark', player: p.id, mark: 'sus' }, `${p.name} marked sus`)}>sus</button>
+    </div>
+  );
+}
+
+/** Adjust a player's colour (OCR guesses warm colours badly). Swaps with whoever already has it. */
+function ColorPicker({ p, onDone }: { p: Player; onDone: () => void }) {
+  const match = useMatch(s => s.match)!;
+  const dispatch = useMatch(s => s.dispatch);
+  const showToast = useMatch(s => s.showToast);
+  const pick = (color: PlayerColor) => {
+    if (color === p.color) { onDone(); return; }
+    const other = Object.values(match.players).find(o => o.color === color && o.id !== p.id);
+    if (other) dispatch({ kind: 'player', payload: { id: other.id, color: p.color } });
+    dispatch({ kind: 'player', payload: { id: p.id, color } });
+    showToast(`${p.name} is ${PALETTE[color as keyof typeof PALETTE].label}${other ? `, ${other.name} is ${PALETTE[p.color as keyof typeof PALETTE]?.label ?? p.color}` : ''}`, true);
+    onDone();
+  };
+  return (
+    <div className="col" style={{ gap: 4 }}>
+      <div className="muted small">{p.name}'s colour</div>
+      <div className="colors" style={{ gridTemplateColumns: 'repeat(9, 1fr)' }}>
+        {COLOR_IDS.map(c => (
+          <div key={c} className={`color-pick ${p.color === c ? 'on' : ''}`} title={PALETTE[c].label} onClick={() => pick(c)} style={{ padding: 2 }}>
+            <Crewmate color={c} size={24} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -134,6 +161,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             I am {match.myRole === 'impostor' ? 'crew' : 'impostor'} this game
           </button>
         </div>
+        <ColorPicker p={p} onDone={done} />
       </div>
     );
   }
@@ -160,6 +188,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => setMode('victim')}>Found dead…</button>}
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); done(); }}>Disconnected</button>}
             {p.status !== 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'alive' } }); done(); }}>Mark alive</button>}
+            <button className="btn sm ghost" onClick={() => setMode('color')}><Crewmate color={p.color} size={16} /> colour…</button>
           </div>
           <div className="row">
             <span className="muted small">Chord: prefix + <span className="key">{PALETTE[p.color as keyof typeof PALETTE]?.key}</span> then room</span>
@@ -180,6 +209,12 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
         <>
           <div className="muted small">Body of {p.name} found in…</div>
           {rooms(r => { observe({ type: 'bodyFound', victim: p.id, room: r }, `Body: ${p.name} in ${roomName(match, r)}`); done(); })}
+          <button className="btn xs" onClick={() => setMode('main')}>back</button>
+        </>
+      )}
+      {mode === 'color' && (
+        <>
+          <ColorPicker p={p} onDone={done} />
           <button className="btn xs" onClick={() => setMode('main')}>back</button>
         </>
       )}

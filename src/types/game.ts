@@ -32,6 +32,8 @@ export interface Player {
   knownRole: Role;
   /** Marked by user as "my impostor partner" (impostor mode only). */
   isPartner?: boolean;
+  /** 1-based position in the meeting vote grid (what the player sees); hotkey target prefix+digit. */
+  slot?: number;
 }
 
 // ---------------------------------------------------------------------------
