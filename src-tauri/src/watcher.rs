@@ -331,7 +331,16 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let next = next.or_else(|| if unknown_since.map(|t| t.elapsed() > UNKNOWN_TO_LOBBY).unwrap_or(false) && detector.current != Some(Phase::Lobby) { Some(Phase::Lobby) } else { None });
         if let Some(next) = next {
             if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
-            let needed = match next { Phase::Lobby => 4, Phase::Round => 2, Phase::GameOver => 2, _ => 1 };
+            // Leaving a meeting, the task bar shows for a moment before the ejection text: a round
+            // straight after a meeting needs ~2.5 s of evidence so the vote → eject → round sequence
+            // is not counted as two rounds.
+            let needed = match next {
+                Phase::Lobby => 4,
+                Phase::Round if matches!(detector.current, Some(Phase::MeetingDiscussion) | Some(Phase::MeetingVoting)) => 12,
+                Phase::Round => 2,
+                Phase::GameOver => 2,
+                _ => 1,
+            };
             if candidate_count >= needed {
                 if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
                     let name = phase_name(p);
