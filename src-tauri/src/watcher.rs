@@ -1,11 +1,12 @@
 //! Background game watcher — the "automatic" layer.
 //!
 //! Polls the latest captured frame (~5 Hz). For each marker region it keeps a
-//! perceptual hash; when a region's pixels change and then hold still for two
-//! polls, it OCRs that region (≈ 40 ms) and updates a marker. Markers feed the
-//! phase state machine; phase transitions, roster reads (vote grid), lobby code
-//! and ejection text are pushed to the frontend as `game://*` events. Nothing
-//! here is ever triggered by the user.
+//! perceptual hash; when a region's pixels change and then hold still for one
+//! poll, it OCRs that region (≈ 10–60 ms) and updates a marker. Markers feed the
+//! phase state machine; phase transitions, roster reads (vote grid / lobby),
+//! lobby code, ejection text, the room-name popup, nearby names, my task list,
+//! "DEAD" (I died) and the meeting banner are pushed to the frontend as
+//! `game://*` events. Nothing here is ever triggered by the user.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,11 +16,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame, Latest};
+use crate::lobby::read_lobby;
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
 use crate::roster::{read_vote_grid, RosterEntry};
-use crate::lobby::read_lobby;
 
 pub const EV_PHASE: &str = "game://phase";
 pub const EV_ROSTER: &str = "game://roster";
@@ -27,6 +28,12 @@ pub const EV_EJECT: &str = "game://eject";
 pub const EV_LOBBY: &str = "game://lobby";
 pub const EV_ROLE: &str = "game://role";
 pub const EV_STATUS: &str = "game://watcher";
+pub const EV_ROOM: &str = "game://room";
+pub const EV_NEARBY: &str = "game://nearby";
+pub const EV_TASKS: &str = "game://tasks";
+pub const EV_ME_DEAD: &str = "game://me_dead";
+pub const EV_BANNER: &str = "game://meeting_banner";
+pub const EV_MAP: &str = "game://map";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
@@ -48,6 +55,7 @@ pub struct WatcherStatus {
     pub ocr_calls: u64,
     pub frame_seq: u64,
     pub lobby_code: Option<String>,
+    pub room: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -57,6 +65,8 @@ pub struct Markers {
     pub meeting_header: bool,
     pub eject_text: bool,
     pub lobby_code: bool,
+    pub chat_open: bool,
+    pub banner: bool,
 }
 
 #[derive(Default)]
@@ -78,7 +88,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name"];
 
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
@@ -86,13 +96,13 @@ fn ocr_rect(f: &Frame, r: Rect, scale: u32) -> String {
     let (c, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
     let (u, uw, uh) = upscale_bgra(&c, w, h, scale);
     match ocr_bgra(&u, uw, uh, None) {
-        Ok(res) => res.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" "),
+        Ok(res) => res.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n"),
         Err(_) => String::new(),
     }
 }
 
-fn parse_eject(text: &str) -> Option<EjectEvent> {
-    let t = text.trim();
+pub fn parse_eject(text: &str) -> Option<EjectEvent> {
+    let t = text.trim().replace('\n', " ");
     if t.is_empty() { return None; }
     let lower = t.to_lowercase();
     if lower.contains("no one was ejected") || lower.contains("skipped") || lower.contains("tie") {
@@ -109,9 +119,20 @@ fn parse_eject(text: &str) -> Option<EjectEvent> {
     Some(EjectEvent { raw: t.to_string(), name: Some(name), was_impostor, skipped: false })
 }
 
-fn lobby_code_of(text: &str) -> Option<String> {
-    text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric()).to_uppercase())
-        .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_uppercase()))
+/// A 6-letter code, only when the panel title ("ROOM CODE") is in the same text.
+pub fn lobby_code_of(text: &str) -> Option<String> {
+    let up = text.to_uppercase();
+    if !up.contains("CODE") { return None; }
+    up.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric()).to_string())
+        .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_uppercase()) && w != "CODE")
+}
+
+fn room_label_of(text: &str) -> Option<String> {
+    let t = text.trim();
+    let n = t.chars().count();
+    if !(2..=20).contains(&n) || t.to_uppercase().contains("PING") { return None; }
+    if t.chars().filter(|c| c.is_alphabetic() || *c == ' ').count() * 10 < n * 8 { return None; }
+    Some(t.to_string())
 }
 
 pub fn start<R: Runtime>(app: AppHandle<R>, state: &WatcherState, latest: Latest) {
@@ -139,9 +160,16 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_roster_read = Instant::now() - Duration::from_secs(60);
     let mut last_lobby: Vec<RosterEntry> = Vec::new();
     let mut last_lobby_read = Instant::now() - Duration::from_secs(60);
+    let mut last_nearby_read = Instant::now() - Duration::from_secs(60);
+    let mut last_nearby: Vec<String> = Vec::new();
     let mut meeting_since: Option<Instant> = None;
     let mut last_eject_raw = String::new();
     let mut last_role_text = String::new();
+    let mut last_room = String::new();
+    let mut last_tasks = String::new();
+    let mut last_banner = String::new();
+    let mut last_map = String::new();
+    let mut me_dead_meeting: Option<u32> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
     { shared.lock().unwrap().status.running = true; }
@@ -153,7 +181,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         last_seq = frame.seq;
         let regions = Regions::default().for_frame(frame.width, frame.height);
 
-        // 1. Change detection per marker region.
+        // 1. Change detection per marker region (OCR only when changed and settled).
         let mut ocr_ms = 0u64;
         for (name, tr) in tracks.iter_mut() {
             let r = regions.get(name).unwrap();
@@ -162,30 +190,33 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if hamming(h, tr.hash) > 4 { tr.hash = h; tr.stable = 0; tr.dirty = true; } else { tr.stable += 1; }
             if tr.dirty && tr.stable >= 1 {
                 let t0 = Instant::now();
-                // Role card text is huge; 1× keeps the upscaled image under the OCR size limit.
-                tr.text = ocr_rect(&frame, r, if name == "role_card" { 1 } else { 2 });
+                // Role card / banner text is huge (1× keeps us under the OCR size limit); task list is small (3×).
+                let scale = match name.as_str() { "role_card" | "meeting_banner" => 1, "task_list" => 3, _ => 2 };
+                tr.text = ocr_rect(&frame, r, scale);
                 ocr_ms += t0.elapsed().as_millis() as u64;
                 ocr_calls += 1;
                 tr.dirty = false;
             }
         }
         let text = |n: &str| tracks.iter().find(|(k, _)| k == n).map(|(_, t)| t.text.clone()).unwrap_or_default();
+        let stable = |n: &str, k: u32| tracks.iter().find(|(key, _)| key == n).map(|(_, t)| t.stable >= k).unwrap_or(false);
 
         // 2. Markers from text.
         let task_bar = fuzzy_best(&text("task_bar"), ["TOTAL TASKS COMPLETED"]).map(|b| b.1 > 0.6).unwrap_or(false);
-        let eject = parse_eject(&text("eject_text"));
+        let chat_open = fuzzy_best(text("chat_send").trim(), ["Send"]).map(|b| b.1 > 0.7).unwrap_or(false);
         let header = text("meeting_header");
         let meeting = fuzzy_best(&header, ["Who Is The Impostor?", "Emergency Meeting", "Dead Body Reported"]).map(|b| b.1 > 0.65).unwrap_or(false);
-        // Role card: a standalone CREWMATE / IMPOSTOR word (either layout), never while the meeting
-        // header is up ("Who Is The Impostor?" sits inside the role-card region).
+        let me_dead_header = header.trim().to_uppercase() == "DEAD" || (header.trim().len() <= 5 && fuzzy_best(header.trim(), ["DEAD"]).map(|b| b.1 > 0.85).unwrap_or(false));
+        let eject = parse_eject(&text("eject_text"));
         let role_text = text("role_card").to_uppercase();
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
             .map(|w| if fuzzy_best(w, ["IMPOSTOR"]).unwrap().1 > fuzzy_best(w, ["CREWMATE"]).unwrap().1 { "impostor" } else { "crew" });
-        // A role card appears once per game, coming out of the lobby — never mid-round and never
-        // right after an ejection ("X was An Impostor" touches the bottom of this region).
         let at_game_start = matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver));
         let role_card = !meeting && at_game_start && eject.is_none() && role_word.is_some() && !role_text.contains("WHO IS");
+        let game_over = role_text.split_whitespace().any(|w| fuzzy_best(w, ["VICTORY", "DEFEAT"]).map(|b| b.1 > 0.85).unwrap_or(false));
+        let banner_text = text("meeting_banner").to_uppercase();
+        let banner = if banner_text.contains("DEAD") || banner_text.contains("BODY") { Some("body") } else if banner_text.contains("EMERGENCY") { Some("button") } else { None };
         let lobby_code = lobby_code_of(&text("lobby_code"));
 
         // 3. Role (once per card appearance).
@@ -195,26 +226,35 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         }
         if !role_card { last_role_text.clear(); }
 
-        // 4. Phase with hysteresis (2 consecutive agreeing polls before a transition is accepted).
-        let next = if eject.is_some() { Phase::Ejection }
-            else if meeting { Phase::MeetingDiscussion }
+        // 4. Phase with hysteresis.
+        let next = if game_over { Phase::GameOver }
+            else if eject.is_some() { Phase::Ejection }
+            else if meeting || me_dead_header { Phase::MeetingDiscussion }
             else if role_card { Phase::RoundStart }
             else if task_bar { Phase::Round }
             else { Phase::Lobby };
         if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
-        let needed = match next { Phase::Lobby => 6, Phase::Round => 2, _ => 1 }; // Lobby needs ~1.5 s of nothing
+        let needed = match next { Phase::Lobby => 6, Phase::Round => 2, Phase::GameOver => 2, _ => 1 };
         if candidate_count >= needed {
-            if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), false, matches!(next, Phase::Round)) {
+            if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
                 let name = phase_name(p);
                 let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting });
                 if p == Phase::MeetingDiscussion { meeting_since = Some(Instant::now()); last_roster.clear(); } else { meeting_since = None; }
             }
         }
 
+        // 4b. Meeting banner (reason) and "DEAD" header (I died) — once each.
+        if let Some(reason) = banner {
+            if banner_text != last_banner { last_banner = banner_text.clone(); let _ = app.emit(EV_BANNER, reason); }
+        } else { last_banner.clear(); }
+        if me_dead_header && me_dead_meeting != Some(detector.meeting) {
+            me_dead_meeting = Some(detector.meeting);
+            let _ = app.emit(EV_ME_DEAD, detector.meeting);
+        }
+
         // 5. Ejection text (emit once per distinct text, only when it stopped animating).
         if let Some(e) = &eject {
-            let stable = tracks.iter().find(|(k, _)| k == "eject_text").map(|(_, t)| t.stable >= 3).unwrap_or(false);
-            if stable && e.raw != last_eject_raw {
+            if stable("eject_text", 3) && e.raw != last_eject_raw {
                 last_eject_raw = e.raw.clone();
                 let _ = app.emit(EV_EJECT, e.clone());
             }
@@ -223,18 +263,49 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         }
 
         // 6. Lobby code.
-        if let Some(code) = lobby_code {
+        if let Some(code) = &lobby_code {
             let mut s = shared.lock().unwrap();
-            if s.status.lobby_code.as_deref() != Some(&code) {
+            if s.status.lobby_code.as_deref() != Some(code) {
                 s.status.lobby_code = Some(code.clone());
                 drop(s);
-                let _ = app.emit(EV_LOBBY, code);
+                let _ = app.emit(EV_LOBBY, code.clone());
             }
         }
 
-        // 7. Roster from the vote grid: 1.2 s after the meeting opened (fade-in), then every 4 s.
+        // 6a. Map name from the lobby settings panel (needs the room code title nearby, i.e. the panel is open).
+        if lobby_code.is_some() {
+            let mt = text("map_name");
+            if let Some((map, score)) = fuzzy_best(&mt, ["The Skeld", "MIRA HQ", "Polus", "The Airship", "The Fungle"]) {
+                if score > 0.55 && map != last_map {
+                    last_map = map.to_string();
+                    let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
+                    let _ = app.emit(EV_MAP, id);
+                }
+            }
+        }
+
+        // 6b. Room-name popup (transient, on entering a room) → my room.
+        if let Some(room) = room_label_of(&text("room_label")) {
+            if room != last_room && stable("room_label", 1) {
+                last_room = room.clone();
+                shared.lock().unwrap().status.room = Some(room.clone());
+                let _ = app.emit(EV_ROOM, room);
+            }
+        } else { last_room.clear(); }
+
+        // 6c. My task list (top-left) when it changes.
+        if task_bar {
+            let t = text("task_list");
+            if !t.trim().is_empty() && t != last_tasks && stable("task_list", 2) {
+                last_tasks = t.clone();
+                let lines: Vec<String> = t.lines().map(|l| l.trim().to_string()).filter(|l| l.len() >= 4).collect();
+                let _ = app.emit(EV_TASKS, lines);
+            }
+        }
+
+        // 7. Roster from the vote grid: 1.2 s after the meeting opened (fade-in), then every 4 s; never with chat open.
         if let Some(since) = meeting_since {
-            if since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4) {
+            if !chat_open && since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4) {
                 last_roster_read = Instant::now();
                 let known = shared.lock().unwrap().known_names.clone();
                 if let Ok(r) = read_vote_grid(&frame, &known) {
@@ -247,8 +318,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             }
         }
 
-        // 7b. Lobby roster from floating names: only on the lobby screen (room code visible), every 5 s.
-        if lobby_code_of(&text("lobby_code")).is_some() && matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting
+        // 7b. Lobby roster from floating names: only on the lobby screen (room code visible), every 5 s, chat closed.
+        if lobby_code.is_some() && !chat_open && matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting
             && last_lobby_read.elapsed() > Duration::from_secs(5) {
             last_lobby_read = Instant::now();
             if let Ok(r) = read_lobby(&frame) {
@@ -260,13 +331,26 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             }
         }
 
+        // 7c. Nearby names during a round (who is on screen with me), every 3 s.
+        if matches!(detector.current, Some(Phase::Round)) && !chat_open && last_nearby_read.elapsed() > Duration::from_secs(3) {
+            last_nearby_read = Instant::now();
+            if let Ok(r) = read_lobby(&frame) {
+                ocr_calls += 1;
+                let names: Vec<String> = r.entries.into_iter().map(|e| e.name).collect();
+                if names != last_nearby {
+                    last_nearby = names.clone();
+                    let _ = app.emit(EV_NEARBY, names);
+                }
+            }
+        }
+
         // 8. Status for the UI.
         {
             let mut s = shared.lock().unwrap();
             s.status.phase = detector.current.map(|p| phase_name(p).to_string());
             s.status.round = detector.round;
             s.status.meeting = detector.meeting;
-            s.status.markers = Markers { task_bar, role_card, meeting_header: meeting, eject_text: eject.is_some(), lobby_code: lobby_code_of(&text("lobby_code")).is_some() };
+            s.status.markers = Markers { task_bar, role_card, meeting_header: meeting, eject_text: eject.is_some(), lobby_code: lobby_code.is_some(), chat_open, banner: banner.is_some() };
             if ocr_ms > 0 { s.status.last_ocr_ms = ocr_ms; }
             s.status.ocr_calls = ocr_calls;
             s.status.frame_seq = frame.seq;
@@ -305,8 +389,17 @@ mod tests {
     }
 
     #[test]
-    fn finds_lobby_code() {
-        assert_eq!(lobby_code_of("ROOM CODE PFRXRG").as_deref(), Some("PFRXRG"));
+    fn finds_lobby_code_only_with_its_title() {
+        assert_eq!(lobby_code_of("ROOM CODE\nPFRXRG").as_deref(), Some("PFRXRG"));
         assert_eq!(lobby_code_of("ROOM CODE"), None);
+        assert_eq!(lobby_code_of("BRATZY"), None, "a six-capital player name is not a code");
+    }
+
+    #[test]
+    fn room_label_filter() {
+        assert_eq!(room_label_of("Electrical").as_deref(), Some("Electrical"));
+        assert_eq!(room_label_of("Upper Engine").as_deref(), Some("Upper Engine"));
+        assert_eq!(room_label_of("PING: 69 ms"), None);
+        assert_eq!(room_label_of("0/8"), None);
     }
 }

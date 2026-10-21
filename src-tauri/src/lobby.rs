@@ -16,6 +16,9 @@ const STOP: &[&str] = &[
     "CUSTOM", "SKELD", "MIRA", "POLUS", "AIRSHIP", "FUNGLE", "IMPOSTOR", "SPEED", "COOLDOWN", "TASKS", "VISUAL", "SET TO", "TOTAL",
     "STARTING", "PLAYER", "KILL", "VOTING", "DISCUSSION", "EMERGENCY", "CONFIRM", "ANONYMOUS", "TASK", "COMMON", "LONG", "SHORT",
     "CLASSIC", "HIDE", "SEEK", "FRIENDS", "SEND", "CHAT", "MAP", "ONLINE", "BACK", "ENTER", "FIND", "CREATE", "PLAY", "LOBBY",
+    // settings panel + role names
+    "ROLE", "SCIENTIST", "ENGINEER", "GUARDIAN", "ANGEL", "NOISEMAKER", "TRACKER", "SHAPESHIFTER", "PHANTOM", "DETECTIVE", "VIPER",
+    "CHANCE", "AMOUNT", "COSMETIC", "GENERAL", "FILTER", "APPLY", "RESET", "CLOSE", "REPORT", "USE", "SABOTAGE", "VENT", "DEAD",
 ];
 
 fn looks_like_name(text: &str) -> bool {

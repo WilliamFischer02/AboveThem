@@ -67,6 +67,12 @@ pub struct Regions {
     pub voting_timer: Rect,
     /// UNVERIFIED placeholder (no sabotage captured yet).
     pub sabotage_banner: Rect,
+    /// Transient room-name popup at the bottom centre when entering a room ("Electrical").
+    pub room_label: Rect,
+    /// The chat "Send" button — present whenever the chat panel is open (lobby or meeting).
+    pub chat_send: Rect,
+    /// Full-screen "DEAD BODY REPORTED" / "EMERGENCY MEETING" banner text.
+    pub meeting_banner: Rect,
 }
 
 impl Default for Regions {
@@ -79,7 +85,7 @@ impl Default for Regions {
             chat_panel:      Rect::new(345, 160, 1130, 620),
             chat_input:      Rect::new(350, 795, 1140, 100),
             lobby_settings:  Rect::new(1460, 200, 440, 560),
-            lobby_code:      Rect::new(1500, 225, 380, 90),
+            lobby_code:      Rect::new(1500, 205, 380, 110), // includes the "ROOM CODE" title so a 6-cap name can't fake it
             map_name:        Rect::new(1500, 345, 380, 90),
             // Measured on meeting_vote_grid.png / eject_text.png (2026-10-21).
             vote_grid:       Rect::new(200, 205, 1540, 680),
@@ -88,6 +94,9 @@ impl Default for Regions {
             voting_timer:    Rect::new(1300, 915, 430, 60),
             // UNVERIFIED placeholder (no sabotage captured yet).
             sabotage_banner: Rect::new(560, 120, 800, 90),
+            room_label:      Rect::new(600, 950, 720, 60),
+            chat_send:       Rect::new(1280, 800, 220, 100),
+            meeting_banner:  Rect::new(300, 250, 1320, 160),
         }
     }
 }
@@ -110,6 +119,9 @@ impl Regions {
             eject_text: self.eject_text.scaled(sx, sy),
             voting_timer: self.voting_timer.scaled(sx, sy),
             sabotage_banner: self.sabotage_banner.scaled(sx, sy),
+            room_label: self.room_label.scaled(sx, sy),
+            chat_send: self.chat_send.scaled(sx, sy),
+            meeting_banner: self.meeting_banner.scaled(sx, sy),
         }
     }
 
@@ -119,13 +131,14 @@ impl Regions {
             "chat_panel" => self.chat_panel, "chat_input" => self.chat_input, "lobby_settings" => self.lobby_settings,
             "lobby_code" => self.lobby_code, "map_name" => self.map_name, "vote_grid" => self.vote_grid,
             "meeting_header" => self.meeting_header, "eject_text" => self.eject_text, "voting_timer" => self.voting_timer, "sabotage_banner" => self.sabotage_banner,
+            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner,
             _ => return None,
         })
     }
 
     pub const NAMES: &'static [&'static str] = &[
         "task_list", "task_bar", "role_card", "chat_panel", "chat_input", "lobby_settings", "lobby_code", "map_name",
-        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner",
+        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner",
     ];
 }
 

@@ -192,6 +192,22 @@ mod tests {
     }
 
     #[test]
+    fn detects_chat_open_and_room_label() {
+        use crate::regions::Regions;
+        let f = load_fixture("meeting_chat");
+        let reg = Regions::default().for_frame(f.width, f.height);
+        let (c, w, h) = crop_bgra(&f, reg.chat_send.x, reg.chat_send.y, reg.chat_send.w, reg.chat_send.h);
+        let (u, uw, uh) = upscale_bgra(&c, w, h, 2);
+        let r = ocr_bgra(&u, uw, uh, None).unwrap();
+        assert!(r.lines.iter().any(|l| fuzzy_best(&l.text, ["Send"]).unwrap().1 > 0.7), "{:?}", r.lines);
+        let f = load_fixture("round_room_label");
+        let (c, w, h) = crop_bgra(&f, reg.room_label.x, reg.room_label.y, reg.room_label.w, reg.room_label.h);
+        let (u, uw, uh) = upscale_bgra(&c, w, h, 2);
+        let r = ocr_bgra(&u, uw, uh, None).unwrap();
+        assert!(r.lines.iter().any(|l| l.text.contains("Electrical")), "{:?}", r.lines);
+    }
+
+    #[test]
     fn reads_eject_text_and_meeting_header() {
         use crate::regions::Regions;
         let f = load_fixture("eject_text");

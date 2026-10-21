@@ -45,7 +45,7 @@ export function Overlay() {
       )}
 
       <div className="ov-box">
-        <div className="ov-legend">
+        <div className="ov-legend ov-slots">
           {snap.slots.map(sl => (
             <span key={sl.key} className={`ov-k ${sl.prime ? 'ov-prime' : ''} ${sl.cleared ? 'ov-cleared' : ''}`} style={{ opacity: sl.dead ? 0.45 : 1 }}><kbd>{sl.key}</kbd><Crewmate color={sl.color} size={18} state={sl.dead ? 'dead' : 'alive'} />{sl.name}{sl.prime ? ' ⚠' : sl.cleared ? ' ✓' : ''}</span>
           ))}
