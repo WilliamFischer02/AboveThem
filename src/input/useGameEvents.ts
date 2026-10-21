@@ -182,7 +182,14 @@ export function useGameEvents() {
         const ev = e.payload;
         const meeting = s.match.phase.meeting ?? 0;
         if (s.match.ejections.some(x => x.meeting === meeting)) return;
-        const player = ev.name ? fuzzyFind(ev.name, Object.values(s.match.players)) : undefined;
+        // Ejection text is animated and often read mid-typing; among ALIVE players accept a looser match.
+        const alive = Object.values(s.match.players).filter(p => p.status === 'alive');
+        let player = ev.name ? fuzzyFind(ev.name, alive) : undefined;
+        if (!player && ev.name && !ev.skipped) {
+          const n = norm(ev.name);
+          const ranked = alive.map(p => ({ p, score: Math.max(similarity(n, norm(p.name)), norm(p.name).startsWith(n.slice(0, 4)) ? 0.5 : 0) })).sort((a, b) => b.score - a.score);
+          if (ranked[0] && ranked[0].score >= 0.4) player = ranked[0].p;
+        }
         s.dispatch({ kind: 'ejection', payload: { meeting, player: player?.id ?? null, wasImpostor: ev.was_impostor } });
         s.showToast(player ? `${player.name} ejected${ev.was_impostor === true ? ' — IMPOSTOR' : ev.was_impostor === false ? ' — not impostor' : ''} (auto)` : `No ejection (auto)`);
       }));
