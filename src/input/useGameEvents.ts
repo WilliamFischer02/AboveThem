@@ -318,6 +318,9 @@ export function useGameEvents() {
             continue;
           }
           const m = useMatch.getState().match!;
+          // Re-reads of the same bubble can lose the name line: a long identical text seen recently is a duplicate.
+          const recent = m.chat.slice(-25);
+          if (msg.text.length >= 12 && recent.some(c => norm(c.original) === norm(msg.text))) continue;
           const others = Object.values(m.players).filter(p => !p.isMe);
           let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
