@@ -1,0 +1,19 @@
+/* Crisp, dark, no blur. Player colors = in-game palette. */
+:root {
+  --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --fg: #e8ebf2; --muted: #8b93a7;
+  --red:#C51111; --blue:#132ED1; --green:#117F2D; --pink:#ED54BA; --orange:#EF7D0D; --yellow:#F5F557;
+  --black:#3F474E; --white:#D6E0F0; --purple:#6B2FBB; --brown:#71491E; --cyan:#38FEDC; --lime:#50EF39;
+  --maroon:#6B2B3C; --rose:#ECC0D3; --banana:#F0E7A8; --gray:#708496; --tan:#928776; --coral:#EC7578;
+}
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 Inter, system-ui, sans-serif; }
+.shell { padding: 12px; }
+.bar { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 12px; }
+.muted { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid #000; margin-right: 6px; vertical-align: -1px; }
+.red{background:var(--red)} .blue{background:var(--blue)} .green{background:var(--green)} .pink{background:var(--pink)}
+.orange{background:var(--orange)} .yellow{background:var(--yellow)} .black{background:var(--black)} .white{background:var(--white)}
+.purple{background:var(--purple)} .brown{background:var(--brown)} .cyan{background:var(--cyan)} .lime{background:var(--lime)}
+.maroon{background:var(--maroon)} .rose{background:var(--rose)} .banana{background:var(--banana)} .gray{background:var(--gray)}
+.tan{background:var(--tan)} .coral{background:var(--coral)}

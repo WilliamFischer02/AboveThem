@@ -1,0 +1,91 @@
+{
+  "_doc": "Meeting script templates for crewmates. Keys are situations detected by the engine. Placeholders: {P} target player, {R} room, {T} time (m:ss), {W} witness, {V} victim, {TASK} task name, {N} number. Each entry: question templates (ask), statement templates (say), what to watch for. Keep lines ≤ 90 chars.",
+
+  "principles": [
+    "Give your own location + companion FIRST. It pre-empts accusations and models the behaviour you want.",
+    "Lead with hard clears. A confirmed-crew list is the most valuable thing you can say.",
+    "Ask questions whose answers can be checked against what someone else saw.",
+    "Make people commit to a story early; contradictions only exist once stories are on record.",
+    "Vote skip when nobody has evidence. A wrong eject is worth more than a kill to the impostors.",
+    "Watch who agrees without adding info. Bandwagons hide impostors.",
+    "Count. Alive crew vs impostors decides whether a skip is safe."
+  ],
+
+  "situations": {
+    "round_open": {
+      "say": ["I was in {R} with {W} the whole round.", "I saw {P} do {TASK} in {R} — visual, {P} is clear."],
+      "ask": ["Where was everyone when the body was found? Start with people near {R}."],
+      "watch": ["Anyone who answers with a question instead of a location."]
+    },
+    "self_report": {
+      "ask": ["{P}, you reported in {R} — who did you see on the way there and why were you going there?", "{P}, what task takes you to {R}? I don't have one there."],
+      "say": ["{P} reported alone in {R}. Nobody saw them arrive. Not an accusation yet — a question."],
+      "watch": ["If {P} names a task that isn't in {R} on this map.", "If {P} names a companion who then denies it."]
+    },
+    "body_in_dead_end": {
+      "ask": ["{R} is a dead end. Who was last seen going in or coming out? I saw {P} leaving around {T}."],
+      "say": ["Body in {R} — only one way in. Whoever was last through that doorway needs a reason."],
+      "watch": ["Vent networks touching {R}: anyone who 'appeared' nearby without passing the door."]
+    },
+    "last_seen_with_victim": {
+      "ask": ["{P}, you were with {V} in {R} at ~{T}. Where did you split and where did you go?"],
+      "say": ["Last person I saw with {V} was {P}, in {R}, around {T}."],
+      "watch": ["Whether {P} offers the split location unprompted or deflects."]
+    },
+    "common_task_claim": {
+      "ask": ["{P}, you said you did {TASK} in {R}. That's a common task — everyone has it. Who else has it?"],
+      "say": ["I don't have {TASK}. Common tasks are the same for all crew. Someone's list is wrong."],
+      "watch": ["Anyone who suddenly 'also has it' with no location.", "This is near-proof if the lobby's common tasks are known."]
+    },
+    "task_not_in_room": {
+      "say": ["{TASK} isn't in {R} on this map. {P}, which panel did you use?"],
+      "ask": ["{P}, where exactly in {R} is {TASK}?"],
+      "watch": ["Specificity. Crew can name the panel; impostors go vague."]
+    },
+    "visual_task_check": {
+      "ask": ["{P}, you claim {TASK} — that's visual. Who saw the animation?"],
+      "say": ["Visuals are on. If nobody saw {P}'s {TASK}, that claim is worthless until someone does."],
+      "watch": ["If {P} downgrades to a non-visual task after being asked."]
+    },
+    "lights_kill": {
+      "ask": ["When lights went down, who went to Electrical and who didn't? I saw {P} arrive late from {R}."],
+      "say": ["Kill happened during lights. Impostor vision isn't reduced — whoever was 'lost' is the question."],
+      "watch": ["Anyone who claims they were 'on the way' but arrived from the wrong direction."]
+    },
+    "sabotage_unfixed": {
+      "ask": ["{P}, reactor was called and you didn't show at either panel. Where were you?"],
+      "say": ["{W} and I fixed {TASK} together — {W} is clear for that window."],
+      "watch": ["Who benefits from a split: the impostor usually ends up on the smaller side."]
+    },
+    "contradiction": {
+      "say": ["{P} said {R} at {T}. {W} saw {P} in {R2} at the same time. One of those is wrong.", "That's not what {P} said last meeting."],
+      "ask": ["{P}, {W} says you were in {R2}, not {R}. Which is it?"],
+      "watch": ["Whether {P} attacks {W}'s credibility instead of answering."]
+    },
+    "accuser_no_evidence": {
+      "ask": ["{P}, what did you actually see? 'Sus' isn't a location."],
+      "say": ["{P} is pushing {P2} with no sighting. Where were you, {P}?"],
+      "watch": ["Impostors often accuse first to look proactive."]
+    },
+    "two_left_endgame": {
+      "say": ["Hard clears only now: {W} is confirmed crew (visual/kill-window). Everyone else is on the table.", "Count: {N} impostors left. We cannot skip."],
+      "ask": ["{P}, {P2} — each of you, where were you for the last kill? Precise room and time."],
+      "watch": ["The impostor will try to make it a vibe vote. Keep it to kill windows."]
+    },
+    "insufficient_info": {
+      "say": ["Nobody has evidence. Skip and stack — move in groups of two next round."],
+      "ask": ["Can everyone at least say their room and who they were with? Record it for next meeting."],
+      "watch": ["Who resists committing to a location."]
+    },
+    "pair_tell": {
+      "say": ["{P} hard-defended {P2} who just got confirmed impostor. That's a pair tell."],
+      "ask": ["{P}, why were you sure {P2} was clear?"],
+      "watch": ["Any two players who never vote each other across meetings."]
+    },
+    "stacked_kill": {
+      "say": ["Kill in a stack: {P}, {P2}, {P3} were all there. Impostor is in that group. Who was closest to {V}?"],
+      "ask": ["Each of you three: who did you see with the body before the report?"],
+      "watch": ["The one who claims they 'didn't notice' the kill."]
+    }
+  }
+}

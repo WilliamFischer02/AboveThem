@@ -1,0 +1,43 @@
+[package]
+name = "abovethem"
+version = "0.1.0"
+description = "AboveThem — Among Us companion backend (capture, OCR, hotkeys, translation)"
+edition = "2021"
+
+[lib]
+name = "abovethem_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Versions intentionally unpinned for the scaffold. Pin on first successful build
+# and record them in docs/handoff.md.
+tauri = { version = "2", features = [] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+whatlang = "0.16"
+
+[target.'cfg(windows)'.dependencies]
+# Phase 2: enable the WinRT features we need. Candidate set — verify names against the crate version that resolves.
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Gdi",
+  "Graphics_Capture",
+  "Graphics_DirectX",
+  "Graphics_DirectX_Direct3D11",
+  "Graphics_Imaging",
+  "Media_Ocr",
+  "Storage_Streams",
+  "Foundation",
+  "Foundation_Collections",
+  "Globalization",
+] }

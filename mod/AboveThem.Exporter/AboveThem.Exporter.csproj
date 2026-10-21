@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Phase 5. Reference BepInEx IL2CPP + the game's interop assemblies (generated on first run). -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>AboveThem.Exporter</AssemblyName>
+  </PropertyGroup>
+</Project>

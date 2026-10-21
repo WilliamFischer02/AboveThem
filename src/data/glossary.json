@@ -1,0 +1,18 @@
+{
+  "_doc": "Among Us slang kept stable across translation. Keys are canonical English; values are per-language equivalents to pre/post-substitute or pass as provider glossary. Extend as lobbies teach you new slang.",
+  "terms": {
+    "sus":          { "es": "sus", "pt": "sus", "fr": "sus", "de": "sus", "ru": "сус", "ja": "怪しい", "ko": "수상", "tr": "şüpheli", "id": "sus", "pl": "sus", "it": "sus" },
+    "vent":         { "es": "vent", "pt": "vent", "fr": "vent", "de": "Vent", "ru": "вент", "ja": "ベント", "ko": "벤트", "tr": "havalandırma", "id": "vent", "pl": "vent", "it": "vent" },
+    "self-report":  { "es": "self report", "pt": "self report", "fr": "self report", "de": "Self-Report", "ru": "селф репорт", "ja": "セルフレポート", "ko": "셀프리포트", "tr": "self report", "id": "self report", "pl": "self report", "it": "self report" },
+    "skip":         { "es": "skip", "pt": "skip", "fr": "skip", "de": "skippen", "ru": "скип", "ja": "スキップ", "ko": "스킵", "tr": "skip", "id": "skip", "pl": "skip", "it": "skip" },
+    "stack":        { "es": "stack", "pt": "stack", "fr": "stack", "de": "Stack", "ru": "стак", "ja": "スタック", "ko": "스택", "tr": "stack", "id": "stack", "pl": "stack", "it": "stack" },
+    "visual task":  { "es": "tarea visual", "pt": "tarefa visual", "fr": "tâche visuelle", "de": "visuelle Aufgabe", "ru": "визуальное задание", "ja": "ビジュアルタスク", "ko": "비주얼 태스크", "tr": "görsel görev", "id": "tugas visual", "pl": "zadanie wizualne", "it": "task visiva" },
+    "where":        { "es": "dónde", "pt": "onde", "fr": "où", "de": "wo", "ru": "где", "ja": "どこ", "ko": "어디", "tr": "nerede", "id": "di mana", "pl": "gdzie", "it": "dove" },
+    "body":         { "es": "cuerpo", "pt": "corpo", "fr": "corps", "de": "Leiche", "ru": "тело", "ja": "死体", "ko": "시체", "tr": "ceset", "id": "mayat", "pl": "ciało", "it": "corpo" }
+  },
+  "rooms_skeld": {
+    "electrical": { "es": "eléctrico", "pt": "elétrica", "fr": "électricité", "de": "Elektro", "ru": "электрика", "ja": "エレクトリカル", "ko": "일렉", "tr": "elektrik" },
+    "medbay":     { "es": "medbay", "pt": "medbay", "fr": "infirmerie", "de": "Medbay", "ru": "медбей", "ja": "メドベイ", "ko": "메드베이", "tr": "revir" },
+    "cafeteria":  { "es": "cafetería", "pt": "cafeteria", "fr": "cafétéria", "de": "Cafeteria", "ru": "кафетерий", "ja": "カフェ", "ko": "카페", "tr": "kafeterya" }
+  }
+}

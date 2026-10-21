@@ -1,0 +1,376 @@
+/**
+ * AboveThem — canonical domain model.
+ *
+ * Everything the engine reasons about is defined here. Keep it free of UI and
+ * Tauri concerns. Change deliberately; update all consumers in the same commit.
+ */
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+export type PlayerColor =
+  | 'red' | 'blue' | 'green' | 'pink' | 'orange' | 'yellow' | 'black' | 'white'
+  | 'purple' | 'brown' | 'cyan' | 'lime' | 'maroon' | 'rose' | 'banana' | 'gray'
+  | 'tan' | 'coral' | 'unknown';
+
+export type PlayerId = string; // stable per match; usually the color unless colors repeat (modded)
+
+export type MapId = 'skeld' | 'mira' | 'polus' | 'airship' | 'fungle';
+
+export type RoomId = string; // per-map key from data/maps/<map>.json
+
+export type Role = 'crew' | 'impostor' | 'unknown';
+
+export interface Player {
+  id: PlayerId;
+  name: string;
+  color: PlayerColor;
+  isMe: boolean;
+  status: 'alive' | 'dead' | 'ejected' | 'disconnected';
+  /** What we KNOW, not what we suspect. */
+  knownRole: Role;
+  /** Marked by user as "my impostor partner" (impostor mode only). */
+  isPartner?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Lobby settings that change the reasoning
+// ---------------------------------------------------------------------------
+
+export interface LobbySettings {
+  map: MapId;
+  impostorCount: number;
+  killCooldownSec: number;
+  visualTasksOn: boolean;
+  confirmEjectsOn: boolean;
+  anonymousVotes: boolean;
+  taskBarMode: 'always' | 'meetings' | 'never';
+  crewVision: number;
+  impostorVision: number;
+  playerSpeed: number;
+  emergencyMeetings: number;
+  discussionTimeSec: number;
+  votingTimeSec: number;
+  commonTasks: number;
+  longTasks: number;
+  shortTasks: number;
+}
+
+// ---------------------------------------------------------------------------
+// Time
+// ---------------------------------------------------------------------------
+
+/** Seconds since the current round started (round = play between meetings). */
+export type RoundTime = number;
+
+export interface Stamp {
+  round: number;        // 0 = first round after lobby
+  t: RoundTime;         // seconds into that round
+  wall: number;         // Date.now()
+}
+
+// ---------------------------------------------------------------------------
+// Observations — what the local player SAW (highest trust)
+// ---------------------------------------------------------------------------
+
+export type ObservationSource = 'me' | 'ocr' | 'mod' | 'manual';
+
+interface BaseObs {
+  id: string;
+  stamp: Stamp;
+  source: ObservationSource;
+  /** 0..1; 'me' sightings default 0.95 (humans misremember), ocr 0.8, mod 1.0 */
+  confidence: number;
+  note?: string;
+}
+
+export interface SightingObs extends BaseObs {
+  type: 'sighting';
+  player: PlayerId;
+  room: RoomId;
+  /** Was the player alone, with me, or with others? */
+  alone?: boolean;
+  withPlayers?: PlayerId[];
+  heading?: RoomId; // where they appeared to be going
+}
+
+export interface WithMeObs extends BaseObs {
+  type: 'withMe';
+  player: PlayerId;
+  room: RoomId;
+  on: boolean; // true = started being with me; false = left
+}
+
+export interface MyRoomObs extends BaseObs {
+  type: 'myRoom';
+  room: RoomId;
+}
+
+export interface SawTaskObs extends BaseObs {
+  type: 'sawTask';
+  player: PlayerId;
+  room: RoomId;
+  taskId?: string;
+  /** Only true if the animation itself was seen (visual tasks). Hard clear when visuals ON. */
+  visualConfirmed: boolean;
+  /** Seconds they stood there, if timed. */
+  durationSec?: number;
+  taskBarMoved?: boolean;
+}
+
+export interface SawVentObs extends BaseObs {
+  type: 'sawVent';
+  player: PlayerId;
+  room: RoomId;
+}
+
+export interface SawKillObs extends BaseObs {
+  type: 'sawKill';
+  killer: PlayerId;
+  victim: PlayerId;
+  room: RoomId;
+}
+
+export interface BodyFoundObs extends BaseObs {
+  type: 'bodyFound';
+  victim: PlayerId;
+  room: RoomId;
+  reporter?: PlayerId;
+  /** Who else was present when found/reported. */
+  present?: PlayerId[];
+}
+
+export interface SabotageObs extends BaseObs {
+  type: 'sabotage';
+  kind: 'lights' | 'reactor' | 'o2' | 'comms' | 'doors' | 'other';
+  phase: 'start' | 'end';
+  fixers?: PlayerId[];
+}
+
+export interface ManualMarkObs extends BaseObs {
+  type: 'manualMark';
+  player: PlayerId;
+  mark: 'sus' | 'clear' | 'neutral';
+  weight?: number;
+}
+
+export type Observation =
+  | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
+  | SawKillObs | BodyFoundObs | SabotageObs | ManualMarkObs;
+
+// ---------------------------------------------------------------------------
+// Meeting data — what people SAID (lower trust, checkable)
+// ---------------------------------------------------------------------------
+
+export interface ChatLine {
+  id: string;
+  meeting: number;
+  stamp: Stamp;
+  sender: PlayerId;
+  original: string;
+  translated?: string;
+  lang?: string;         // ISO 639-1
+  langConfidence?: number;
+  source: ObservationSource;
+}
+
+export type ClaimType = 'location' | 'companion' | 'task' | 'sighting' | 'accusation' | 'defense' | 'clear';
+
+export interface Claim {
+  id: string;
+  meeting: number;
+  stamp: Stamp;
+  by: PlayerId;
+  type: ClaimType;
+  /** Structured content; fields depend on type. */
+  room?: RoomId;
+  about?: PlayerId;        // companion / accused / cleared / sighted player
+  taskId?: string;
+  timeWindow?: [RoundTime, RoundTime];
+  text?: string;           // the raw line, for display
+  chatLineId?: string;
+  /** Set by the engine, not the user. */
+  verification?: 'confirmed' | 'contradicted' | 'pending';
+}
+
+export interface Vote {
+  meeting: number;
+  voter: PlayerId;
+  target: PlayerId | 'skip' | 'none';
+  /** Only known if lobby shows votes. */
+  known: boolean;
+}
+
+export interface Ejection {
+  meeting: number;
+  player: PlayerId | null;   // null = skipped/tie
+  wasImpostor: boolean | null; // null if confirm ejects OFF
+  impostorsRemaining?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Phases
+// ---------------------------------------------------------------------------
+
+export type Phase =
+  | 'lobby' | 'roundStart' | 'round' | 'meetingDiscussion' | 'meetingVoting'
+  | 'ejection' | 'gameOver';
+
+export interface PhaseChange {
+  phase: Phase;
+  wall: number;
+  round: number;
+  meeting?: number;
+  /** For meetings: who called it and why. */
+  calledBy?: PlayerId;
+  reason?: 'body' | 'button';
+}
+
+// ---------------------------------------------------------------------------
+// Map data
+// ---------------------------------------------------------------------------
+
+export interface MapRoom {
+  id: RoomId;
+  name: string;
+  key: string;              // hotkey suffix
+  deadEnd: boolean;
+  /** Neighbouring rooms and rough travel time in seconds at speed 1.0. */
+  adjacent: { room: RoomId; sec: number }[];
+}
+
+export interface MapVentNetwork {
+  id: string;
+  rooms: RoomId[];          // vents in this network connect all of these
+}
+
+export interface MapTask {
+  id: string;
+  name: string;
+  rooms: RoomId[];          // where it can be done (multi-stage tasks list all)
+  kind: 'common' | 'short' | 'long';
+  visual: boolean;
+  stages: number;
+  /** Seconds to complete one stage, roughly. */
+  stageDurationSec: number;
+}
+
+export interface MapData {
+  id: MapId;
+  name: string;
+  rooms: MapRoom[];
+  vents: MapVentNetwork[];
+  tasks: MapTask[];
+  _verified: { rooms: boolean; vents: boolean; tasks: boolean; durations: boolean };
+  _note?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Engine outputs
+// ---------------------------------------------------------------------------
+
+export interface EvidenceItem {
+  id: string;
+  player: PlayerId;
+  weight: number;           // log-odds contribution (+ = sus)
+  category: 'movement' | 'task' | 'meeting' | 'sabotage' | 'structural' | 'manual' | 'hard';
+  label: string;            // short human line
+  refs: string[];           // observation/claim ids
+  /** true if the rule depends on unverified map data */
+  shaky?: boolean;
+}
+
+export interface SuspectScore {
+  player: PlayerId;
+  /** 'certainImpostor' | 'certainCrew' short-circuit the score */
+  verdict: 'certainImpostor' | 'certainCrew' | 'hardClear' | 'softClear' | 'unknown';
+  logOdds: number;
+  probability: number;      // sigmoid(logOdds), 0..1
+  evidence: EvidenceItem[];
+  /** Per-kill clears, for multi-impostor lobbies */
+  clearedForKills: string[]; // bodyFound observation ids
+}
+
+export interface MeetingQuestion {
+  to: PlayerId | 'all';
+  text: string;
+  why: string[];            // evidence ids
+  expectedGain: number;
+}
+
+export interface MeetingScript {
+  meeting: number;
+  headline: string;
+  ask: MeetingQuestion[];
+  say: { text: string; why: string[] }[];
+  vote: { target: PlayerId | 'skip'; confidence: number; alternative?: PlayerId | 'skip'; reason: string };
+  watch: string[];
+  insufficientInfo: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Impostor mode
+// ---------------------------------------------------------------------------
+
+export interface LedgerClaim {
+  id: string;
+  meeting: number;
+  type: ClaimType;
+  room?: RoomId;
+  about?: PlayerId;
+  taskId?: string;
+  timeWindow?: [RoundTime, RoundTime];
+  text: string;
+  basedOn: string[];        // real observation ids this lie leans on
+  dependsOn: string[];      // other ledger claim ids
+  risk: number;             // 0..1
+  exposedBy?: string[];     // claim/observation ids that contradict it
+}
+
+export interface AlibiOption {
+  text: string;
+  room: RoomId;
+  companion?: PlayerId;
+  taskId?: string;
+  timeWindow: [RoundTime, RoundTime];
+  score: number;
+  weakPoint: string;
+  basedOn: string[];
+}
+
+export interface FakeTaskStop {
+  taskId: string;
+  room: RoomId;
+  standSec: number;
+  note: string;
+}
+
+export interface DefenseResponse {
+  accusationType: string;
+  response: string;
+  avoid: string[];
+  followup: string;
+  basedOn: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Whole-match snapshot (serialised to NDJSON as events; this is the reduced view)
+// ---------------------------------------------------------------------------
+
+export interface MatchState {
+  id: string;
+  startedAt: number;
+  settings: LobbySettings;
+  map: MapData;
+  me: PlayerId;
+  myRole: Role;
+  players: Record<PlayerId, Player>;
+  phase: PhaseChange;
+  observations: Observation[];
+  chat: ChatLine[];
+  claims: Claim[];
+  votes: Vote[];
+  ejections: Ejection[];
+  ledger: LedgerClaim[];
+}

@@ -1,0 +1,77 @@
+{
+  "_doc": "Log-odds weights for soft evidence. Positive = more suspicious. See docs/DEDUCTION_ENGINE.md §3. Tuned by the Phase 5 learning loop; edit here, not in code.",
+  "categoryCap": {
+    "movement": 3.0,
+    "task": 4.0,
+    "meeting": 3.0,
+    "sabotage": 2.0,
+    "structural": 2.5,
+    "manual": 2.0
+  },
+  "movement": {
+    "headingToBodyRoomInWindowAlone": 1.2,
+    "leavingBodyRoomBeforeReport": 1.5,
+    "selfReportAlone": 0.8,
+    "selfReportDeadEndBonus": 0.4,
+    "reportedInRoomWithNoTaskReason": 0.6,
+    "stackingNearVictim": 0.7,
+    "roamingNoTaskStops": 0.6,
+    "taskDurationMismatch": 0.5,
+    "unaccountedWholeRound": 0.4,
+    "peeledOffFromGroup": 0.4,
+    "ventOnlyReachable": 2.0
+  },
+  "task": {
+    "taskNotAtClaimedLocation": 2.0,
+    "claimedCommonTaskIDontHave": 2.5,
+    "taskLogicImpossible": 2.0,
+    "taskBarDidNotMove": 1.0,
+    "taskBarMoved": -1.0,
+    "visualWithoutAnimation": 3.0
+  },
+  "meeting": {
+    "accuseNoEvidence": 0.4,
+    "storyChanged": 1.5,
+    "contradictedByHardClear": 2.0,
+    "pushedVoteOnCrew": 0.9,
+    "defendedImpostor": 0.8,
+    "votedImpostor": -0.6,
+    "bandwagon": 0.3,
+    "lastSecondSwitch": 0.5,
+    "deflectsWithQuestions": 0.2,
+    "preciseUndisputedAlibi": -0.5,
+    "confirmedCompanionAlibi": -1.0,
+    "silentNearBody": 0.5,
+    "skipOnCriticalVote": 0.4
+  },
+  "sabotage": {
+    "oddArrivalAfterLights": 0.6,
+    "ignoredCriticalSabotage": 0.5,
+    "commsAfterVisualAnnounced": 0.4,
+    "fixedSabotageWithMe": -0.8
+  },
+  "structural": {
+    "neverVoteEachOther": 0.4,
+    "hardDefendedConfirmedImpostor": 1.2,
+    "impostorAlibiNamedThem": 1.5
+  },
+  "manual": {
+    "sus": 0.8,
+    "clear": -0.8
+  },
+  "sourceTrust": {
+    "me": 0.95,
+    "ocr": 0.8,
+    "mod": 1.0,
+    "manual": 0.9
+  },
+  "killWindow": {
+    "_doc": "Seconds before a body is found during which the kill plausibly happened, when no better bound exists.",
+    "defaultSec": 45,
+    "freshBodySec": 20
+  },
+  "vote": {
+    "threshold": 0.6,
+    "marginToSecond": 0.15
+  }
+}

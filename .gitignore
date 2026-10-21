@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.log
+.env
+settings.json
+matches/
+mod/**/bin/
+mod/**/obj/
+.DS_Store

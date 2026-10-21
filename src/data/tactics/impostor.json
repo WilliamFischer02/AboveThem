@@ -1,0 +1,127 @@
+{
+  "_doc": "Defense coach + deception tactics for impostor mode. The engine selects by accusationType and fills placeholders from the lie ledger and real sightings. {R} my claimed room, {W} companion from ledger/sightings, {A} accuser, {K} kill room, {T} time, {TASK} fakeable task, {X},{Y},{Z} other uncleared players actually seen alone.",
+
+  "universal": [
+    "Say less. Short, specific, calm. People who over-explain get voted.",
+    "Answer location questions FIRST, then ask the same of the accuser.",
+    "Give one true hard-clear of a crewmate early each game. Cheapest trust you'll ever buy.",
+    "Never contradict the ledger. If a lie is dead, pivot to a new angle; never double down.",
+    "Make crew suspect each other with questions, not accusations.",
+    "Do not hard-defend your partner. Mild doubt + alternative target, then vote with the majority if it's lost.",
+    "Vote with the room on obvious crew ejects; being on the losing side of a wrong eject is a tell later."
+  ],
+
+  "accusations": {
+    "where_were_you": {
+      "best": [
+        "{R} — {TASK}. Passed {W} on the way. Where were you, {A}?",
+        "{R} with {W} until ~{T}, then {R2}. {A}, same question."
+      ],
+      "avoid": ["I don't remember", "Why does it matter", "Everywhere"],
+      "followup": "If {A} is vague back, press them. Precision wins meetings."
+    },
+    "near_the_body": {
+      "best": [
+        "Yeah, I came through from {R} doing {TASK}. Body wasn't there yet. Who else was in that hallway? I saw {X}.",
+        "I was heading to {K} for {TASK}. If I killed, why would I stay nearby for {A} to see me?"
+      ],
+      "avoid": ["I was nowhere near it", "You're lying"],
+      "followup": "Redirect to timing: name someone real you saw leaving the area earlier."
+    },
+    "you_were_alone": {
+      "best": [
+        "So were {X}, {Y} and {Z}. Alone isn't evidence; a kill window is. Who has one on me?",
+        "I was alone in {R} doing {TASK} — {TASK} is in {R}, check your list."
+      ],
+      "avoid": ["So what", "Everyone's alone sometimes"],
+      "followup": "Offer a real sighting that puts someone else alone near {K}."
+    },
+    "saw_you_leave_kill_room": {
+      "uncleared_accuser": [
+        "I was never in {K}. Were you? You're the one placing yourself there.",
+        "Then you were at the door of {K} right when it happened. Why didn't you report?"
+      ],
+      "cleared_accuser": [
+        "I did walk past {K} — I was going {R}→{R2} for {TASK}. The body wasn't there when I passed. Who came after me?"
+      ],
+      "avoid": ["Denying the location when a cleared player saw you."],
+      "followup": "Concede the location, contest the kill. Timing and who came later."
+    },
+    "faked_task": {
+      "best": [
+        "Which task, exactly? Name it.",
+        "{TASK} has two stages. I did the first one; that's why the bar didn't move.",
+        "Comms were down / task bar is meetings-only — nobody can see the bar from that."
+      ],
+      "avoid": ["Explaining the animation in detail", "Getting angry"],
+      "followup": "Vague accusations collapse under specificity. Make them name it."
+    },
+    "didnt_vote_with_us": {
+      "best": [
+        "I skipped because nobody had info, not because of who it was.",
+        "I voted {P} because of the {R} thing. I'd rather be wrong on evidence than right on vibes."
+      ],
+      "avoid": ["Defensiveness"],
+      "followup": "Give one real observation afterwards to buy credit."
+    },
+    "partner_being_voted": {
+      "best": [
+        "Not sure about {P2}. I'd rather look at {P} for the {R} thing first.",
+        "If we're wrong on {P2} we hand them the game. Does anyone have a kill window?"
+      ],
+      "avoid": ["I know {P2} is clear", "{P2} was with me (unless true in ledger)"],
+      "followup": "If the vote is lost, vote with the room. Pair tells are fatal."
+    },
+    "fifty_fifty": {
+      "best": [
+        "If I'm the impostor, who killed in {K2} while I was with {W}? That one's not mine.",
+        "Count the kills. I'm clear for {K2} by {W}. {P} isn't clear for any."
+      ],
+      "avoid": ["Begging", "Emotion"],
+      "followup": "Use any kill you were provably away from; the ledger lists them."
+    },
+    "you_reported": {
+      "best": [
+        "Yes, I found {V} in {K} coming from {R} for {TASK}. {X} was behind me — ask them.",
+        "If I killed, why report? Bodies in {K} get found fast."
+      ],
+      "avoid": ["Not knowing why you were in {K}"],
+      "followup": "Have a map-valid task reason for {K} BEFORE you self-report. The planner checks this."
+    }
+  },
+
+  "deception": {
+    "alibi_rules": [
+      "Build alibis from real sightings. A true sentence with one word changed is unfalsifiable.",
+      "Name a real companion who was actually there; they'll confirm you without realising.",
+      "Pick rooms with a task on YOUR fake list and no cleared player inside during the window.",
+      "Never claim a visual task when visuals are on.",
+      "Never claim a common task you weren't dealt (your fake list shows the lobby's commons)."
+    ],
+    "fake_task_rules": [
+      "Stand for the real duration ±15%. Watchers notice short fakes.",
+      "Multi-stage tasks (wires, download/upload, fuel) are the best fakes: the bar isn't expected to move yet.",
+      "Fake in through-traffic rooms to be seen being boring; kill in dead-ends with no task reason for others.",
+      "If task bar = always, don't 'finish' in front of anyone."
+    ],
+    "kill_rules": [
+      "Kill where the walk-in time for the nearest crew is longer than your exit time.",
+      "Lights: kill away from Electrical; everyone converges there.",
+      "Comms: hides task bar and cameras. Use it to cover a 'finished task' claim.",
+      "Reactor/O2 splits the lobby; be on the half with your alibi, not your victim.",
+      "Vent only when both ends are unobserved and no cleared player is at the destination."
+    ],
+    "self_report_rules": [
+      "Good: you'd be found near the body anyway, or the room is on your fake-task route.",
+      "Bad: dead-end room with no task reason, or a cleared player saw you enter alone.",
+      "Pre-commit the story: room you came from, task, one real person you passed."
+    ],
+    "meeting_rules": [
+      "Speak early with a location and a companion. Late speakers look like they're constructing.",
+      "Ask 'who was near {K}?' before anyone asks you.",
+      "Agree with correct crew observations. Credibility compounds.",
+      "Push 50/50s between two crew; never between you and crew.",
+      "If a crewmate hard-clears you by mistake, accept it quietly and move on."
+    ]
+  }
+}

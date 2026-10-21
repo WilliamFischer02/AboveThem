@@ -1,0 +1,50 @@
+{
+  "id": "skeld",
+  "name": "The Skeld",
+  "_verified": { "rooms": true, "vents": false, "tasks": false, "durations": false },
+  "_note": "Rooms/adjacency are from memory and high-confidence; vents are high-confidence but CONFIRM IN-GAME; task list is close to complete but durations are rough guesses. Verify every section against the live game in Phase 1 and flip the flags. Travel seconds are at speed 1.0x, room-centre to room-centre, eyeballed.",
+  "rooms": [
+    { "id": "cafeteria",      "name": "Cafeteria",      "key": "c",  "deadEnd": false, "adjacent": [ { "room": "weapons", "sec": 6 }, { "room": "admin", "sec": 7 }, { "room": "medbay", "sec": 6 }, { "room": "upperEngine", "sec": 10 }, { "room": "storage", "sec": 9 } ] },
+    { "id": "weapons",        "name": "Weapons",        "key": "w",  "deadEnd": false, "adjacent": [ { "room": "cafeteria", "sec": 6 }, { "room": "o2", "sec": 5 }, { "room": "navigation", "sec": 8 } ] },
+    { "id": "o2",             "name": "O2",             "key": "o",  "deadEnd": false, "adjacent": [ { "room": "weapons", "sec": 5 }, { "room": "navigation", "sec": 5 }, { "room": "shields", "sec": 6 } ] },
+    { "id": "navigation",     "name": "Navigation",     "key": "n",  "deadEnd": true,  "adjacent": [ { "room": "weapons", "sec": 8 }, { "room": "o2", "sec": 5 }, { "room": "shields", "sec": 7 } ] },
+    { "id": "shields",        "name": "Shields",        "key": "sh", "deadEnd": false, "adjacent": [ { "room": "navigation", "sec": 7 }, { "room": "o2", "sec": 6 }, { "room": "communications", "sec": 4 }, { "room": "storage", "sec": 7 } ] },
+    { "id": "communications", "name": "Communications", "key": "cm", "deadEnd": true,  "adjacent": [ { "room": "shields", "sec": 4 }, { "room": "storage", "sec": 6 } ] },
+    { "id": "storage",        "name": "Storage",        "key": "st", "deadEnd": false, "adjacent": [ { "room": "cafeteria", "sec": 9 }, { "room": "admin", "sec": 5 }, { "room": "communications", "sec": 6 }, { "room": "shields", "sec": 7 }, { "room": "electrical", "sec": 5 }, { "room": "lowerEngine", "sec": 8 } ] },
+    { "id": "admin",          "name": "Admin",          "key": "a",  "deadEnd": true,  "adjacent": [ { "room": "cafeteria", "sec": 7 }, { "room": "storage", "sec": 5 } ] },
+    { "id": "electrical",     "name": "Electrical",     "key": "e",  "deadEnd": true,  "adjacent": [ { "room": "storage", "sec": 5 }, { "room": "lowerEngine", "sec": 6 } ] },
+    { "id": "lowerEngine",    "name": "Lower Engine",   "key": "le", "deadEnd": false, "adjacent": [ { "room": "electrical", "sec": 6 }, { "room": "storage", "sec": 8 }, { "room": "reactor", "sec": 6 }, { "room": "security", "sec": 5 } ] },
+    { "id": "upperEngine",    "name": "Upper Engine",   "key": "ue", "deadEnd": false, "adjacent": [ { "room": "cafeteria", "sec": 10 }, { "room": "medbay", "sec": 6 }, { "room": "reactor", "sec": 5 }, { "room": "security", "sec": 5 } ] },
+    { "id": "security",       "name": "Security",       "key": "sc", "deadEnd": true,  "adjacent": [ { "room": "upperEngine", "sec": 5 }, { "room": "lowerEngine", "sec": 5 }, { "room": "reactor", "sec": 4 } ] },
+    { "id": "reactor",        "name": "Reactor",        "key": "r",  "deadEnd": true,  "adjacent": [ { "room": "upperEngine", "sec": 5 }, { "room": "lowerEngine", "sec": 6 }, { "room": "security", "sec": 4 } ] },
+    { "id": "medbay",         "name": "MedBay",         "key": "mb", "deadEnd": true,  "adjacent": [ { "room": "cafeteria", "sec": 6 }, { "room": "upperEngine", "sec": 6 } ] }
+  ],
+  "vents": [
+    { "id": "cafe-admin-hall", "rooms": ["cafeteria", "admin", "weapons"], "_note": "Third vent is in the hallway between Cafeteria and Weapons; modelled as 'weapons' side for reachability. Confirm." },
+    { "id": "weapons-nav",     "rooms": ["weapons", "navigation"] },
+    { "id": "nav-shields",     "rooms": ["navigation", "shields"] },
+    { "id": "medbay-elec-sec", "rooms": ["medbay", "electrical", "security"] },
+    { "id": "reactor-upper",   "rooms": ["reactor", "upperEngine"] },
+    { "id": "reactor-lower",   "rooms": ["reactor", "lowerEngine"] }
+  ],
+  "tasks": [
+    { "id": "fixWiring",          "name": "Fix Wiring",             "rooms": ["electrical", "admin", "navigation", "cafeteria", "security", "storage"], "kind": "common", "visual": false, "stages": 3, "stageDurationSec": 4 },
+    { "id": "swipeCard",          "name": "Swipe Card",             "rooms": ["admin"],                       "kind": "common", "visual": false, "stages": 1, "stageDurationSec": 4 },
+    { "id": "alignEngine",        "name": "Align Engine Output",    "rooms": ["upperEngine", "lowerEngine"],  "kind": "short",  "visual": false, "stages": 2, "stageDurationSec": 3 },
+    { "id": "calibrateDistributor","name": "Calibrate Distributor", "rooms": ["electrical"],                  "kind": "short",  "visual": false, "stages": 1, "stageDurationSec": 6 },
+    { "id": "chartCourse",        "name": "Chart Course",           "rooms": ["navigation"],                  "kind": "short",  "visual": false, "stages": 1, "stageDurationSec": 4 },
+    { "id": "cleanO2Filter",      "name": "Clean O2 Filter",        "rooms": ["o2"],                          "kind": "short",  "visual": false, "stages": 1, "stageDurationSec": 5 },
+    { "id": "clearAsteroids",     "name": "Clear Asteroids",        "rooms": ["weapons"],                     "kind": "short",  "visual": true,  "stages": 1, "stageDurationSec": 12 },
+    { "id": "divertPower",        "name": "Divert Power",           "rooms": ["electrical", "navigation", "o2", "weapons", "shields", "communications", "security", "upperEngine", "lowerEngine"], "kind": "short", "visual": false, "stages": 2, "stageDurationSec": 3 },
+    { "id": "downloadUpload",     "name": "Download / Upload Data", "rooms": ["communications", "weapons", "navigation", "electrical", "cafeteria", "admin"], "kind": "short", "visual": false, "stages": 2, "stageDurationSec": 9 },
+    { "id": "primeShields",       "name": "Prime Shields",          "rooms": ["shields"],                     "kind": "short",  "visual": true,  "stages": 1, "stageDurationSec": 4 },
+    { "id": "stabilizeSteering",  "name": "Stabilize Steering",     "rooms": ["navigation"],                  "kind": "short",  "visual": false, "stages": 1, "stageDurationSec": 3 },
+    { "id": "unlockManifolds",    "name": "Unlock Manifolds",       "rooms": ["reactor"],                     "kind": "short",  "visual": false, "stages": 1, "stageDurationSec": 5 },
+    { "id": "emptyGarbage",       "name": "Empty Garbage",          "rooms": ["cafeteria", "storage"],        "kind": "long",   "visual": true,  "stages": 2, "stageDurationSec": 4, "_note": "Visual at the Storage chute." },
+    { "id": "emptyChute",         "name": "Empty Chute",            "rooms": ["o2", "storage"],               "kind": "long",   "visual": true,  "stages": 2, "stageDurationSec": 4 },
+    { "id": "inspectSample",      "name": "Inspect Sample",         "rooms": ["medbay"],                      "kind": "long",   "visual": false, "stages": 2, "stageDurationSec": 60, "_note": "Start, wait 60 s, return." },
+    { "id": "startReactor",       "name": "Start Reactor",          "rooms": ["reactor"],                     "kind": "long",   "visual": false, "stages": 1, "stageDurationSec": 20 },
+    { "id": "submitScan",         "name": "Submit Scan",            "rooms": ["medbay"],                      "kind": "long",   "visual": true,  "stages": 1, "stageDurationSec": 10 },
+    { "id": "fuelEngines",        "name": "Fuel Engines",           "rooms": ["storage", "upperEngine", "lowerEngine"], "kind": "long", "visual": false, "stages": 4, "stageDurationSec": 5 }
+  ]
+}

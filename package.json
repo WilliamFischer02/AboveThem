@@ -1,0 +1,31 @@
+{
+  "name": "abovethem",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Among Us companion: observation → deduction → meeting script, impostor playbook, live chat translation.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:replay": "echo 'TODO Phase 1: feed an .ndjson match into the UI' && exit 1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "react": "^18",
+    "react-dom": "^18",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4",
+    "typescript": "^5",
+    "vite": "^5",
+    "vitest": "^2"
+  }
+}

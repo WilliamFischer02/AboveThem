@@ -1,0 +1,9 @@
+{
+  "id": "polus",
+  "name": "TODO",
+  "_verified": { "rooms": false, "vents": false, "tasks": false, "durations": false },
+  "_note": "Stub. Fill from the live game in Phase 5 using skeld.json as the template. The engine refuses to use a map whose rooms are empty.",
+  "rooms": [],
+  "vents": [],
+  "tasks": []
+}
