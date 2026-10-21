@@ -220,7 +220,13 @@ export function useGameEvents() {
             if (!live.players[id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
             continue;
           }
-          if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+          if (!fromLobby && p.slot === undefined) {
+            s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+            // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
+            if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
+              s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
+            }
+          }
           if (!fromLobby) {
             // Merge slot-less duplicates of this player (chat/lobby spellings): drop the one without a slot.
             const live = useMatch.getState().match!;
