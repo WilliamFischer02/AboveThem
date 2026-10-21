@@ -101,6 +101,23 @@ export function ruleTaskClaims(m: MatchState): EvidenceItem[] {
   return out;
 }
 
+/** Claims a COMMON task I don't have: common tasks are identical for every crewmate (near-hard). */
+export function ruleCommonTaskClaims(m: MatchState): EvidenceItem[] {
+    const out: EvidenceItem[] = [];
+    if (!m.myTasks || m.myTasks.length === 0) return out;
+    const mine = new Set(m.myTasks.filter(t => t.matched).map(t => t.id));
+    const myCommons = m.map.tasks.filter(t => t.kind === 'common' && mine.has(t.id));
+    if (myCommons.length === 0 && m.settings.commonTasks > 0) return out; // my list didn't read well enough to trust
+    for (const c of m.claims) {
+        if (c.type !== 'task' || !c.taskId) continue;
+        const task = m.map.tasks.find(t => t.id === c.taskId);
+        if (!task || task.kind !== 'common' || mine.has(task.id)) continue;
+        out.push(ev(c.by, W.task.claimedCommonTaskIDontHave, 'task', `Claims ${task.name} — a common task I don't have`, [c.id], !m.map._verified.tasks, 'common_task_claim',
+            { P: pname(m, c.by), TASK: task.name, R: c.room ? roomName(m, c.room) : task.rooms.map(r => roomName(m, r)).join('/') }));
+    }
+    return out;
+}
+
 /** Accusations with nothing behind them; bandwagoning. */
 export function ruleAccusations(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
@@ -190,7 +207,7 @@ export function verifyClaims(m: MatchState): Map<string, Verdict> {
 }
 
 export const CLAIM_RULES: Array<(m: MatchState) => EvidenceItem[]> = [
-  ruleLocationClaims, ruleStoryChanged, ruleCompanionClaims, ruleTaskClaims, ruleAccusations, ruleEjectionFeedback, ruleSilentNearBody,
+  ruleLocationClaims, ruleStoryChanged, ruleCompanionClaims, ruleTaskClaims, ruleCommonTaskClaims, ruleAccusations, ruleEjectionFeedback, ruleSilentNearBody,
 ];
 
 export type { PlayerId };

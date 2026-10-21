@@ -8,7 +8,7 @@
  */
 import type {
   MatchState, Observation, Claim, Vote, Ejection, PhaseChange, ChatLine,
-  LobbySettings, MapId, Player, PlayerId, Role,
+  LobbySettings, MapId, Player, PlayerId, Role, MyTask,
 } from '../types/game';
 import { MAPS } from '../data/maps';
 
@@ -42,6 +42,8 @@ export type MatchEvent =
   | { kind: 'addPlayer'; wall: number; payload: Player }
   /** Drop a junk entry (OCR picked up a UI word as a name). */
   | { kind: 'removePlayer'; wall: number; payload: { id: PlayerId } }
+  /** My task list, read from the top-left of the screen. */
+  | { kind: 'myTasks'; wall: number; payload: MyTask[] }
   /** Removes the most recent not-yet-undone undoable event. */
   | { kind: 'undo'; wall: number };
 
@@ -117,6 +119,7 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       return { ...m, me: e.payload.id, players };
     }
     case 'addPlayer': return m.players[e.payload.id] ? m : { ...m, players: { ...m.players, [e.payload.id]: e.payload } };
+    case 'myTasks': return { ...m, myTasks: e.payload };
     case 'removePlayer': {
       if (!m.players[e.payload.id] || e.payload.id === m.me) return m;
       const players = { ...m.players };

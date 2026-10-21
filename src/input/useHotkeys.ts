@@ -68,7 +68,7 @@ export function applyAction(a: ChordAction): void {
   const id = resolveTarget(m, a.target);
   if (!id) { s.showToast(`${targetLabel(a.target)} is not in this lobby`); return; }
   const who = pname(a.target);
-  const room = myRoomNow(m) ?? m.map.rooms[0].id;
+  const room = myRoomNow(m) ?? m.map.rooms[0]?.id ?? 'unknown';
   switch (a.kind) {
     case 'sighting': s.observe({ type: 'sighting', player: id, room: a.room }, `${who} in ${roomName(m, a.room)}`); return;
     case 'withMe': {

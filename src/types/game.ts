@@ -379,4 +379,15 @@ export interface MatchState {
   votes: Vote[];
   ejections: Ejection[];
   ledger: LedgerClaim[];
+  /** My own task list as read from the screen (Phase 2). Enables the common-task rule. */
+  myTasks?: MyTask[];
+}
+
+export interface MyTask {
+  /** Map task id when matched, else the raw text. */
+  id: string;
+  name: string;
+  room?: RoomId;
+  progress?: string;
+  matched: boolean;
 }

@@ -304,3 +304,6 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .ov-legend.ov-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 10px; font-size: 14px; }
 .ov-legend.ov-slots .ov-k { white-space: normal; line-height: 1.15; }
 .ov-legend.ov-slots .ov-k kbd { font-size: 13px; min-width: 20px; }
+
+.tasks-line { gap: 4px; }
+.tasks-line .badge { font-weight: 600; }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { scoreAll, hardFacts } from './suspicion';
 import { buildMeetingScript } from './meetingScript';
 import { buildAlibiGraph, killWindowClears, contradictsTogether } from './alibi';
-import { ruleLocationClaims, ruleCompanionClaims, ruleTaskClaims, ruleAccusations, ruleEjectionFeedback, ruleStoryChanged, verifyClaims } from './contradictions';
+import { ruleLocationClaims, ruleCompanionClaims, ruleTaskClaims, ruleAccusations, ruleEjectionFeedback, ruleStoryChanged, ruleCommonTaskClaims, verifyClaims } from './contradictions';
 import { ruleLastSeenWithVictim, ruleUnaccounted, ruleTaskObservations, ruleProximityToKill } from './rules';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { fixture2 } from './__fixtures__/skeld_match_02_two_imp';
@@ -55,6 +55,13 @@ describe('claim rules', () => {
     const ev = ruleTaskClaims(fixture2);
     expect(ev.some(e => e.player === 'black' && e.kind === 'task_not_in_room' && e.weight >= 2)).toBe(true);
   });
+  it('flags a common task I do not have, only when my list is known', () => {
+    expect(ruleCommonTaskClaims(fixture2)).toHaveLength(0);
+    const m: MatchState = { ...fixture2, myTasks: [{ id: 'fixWiring', name: 'Fix Wiring', matched: true }, { id: 'chartCourse', name: 'Chart Course', matched: true }] };
+    const ev = ruleCommonTaskClaims(m); // Black claimed Swipe Card (common) — not on my list
+    expect(ev.some(e => e.player === 'black' && e.weight === 2.5 && e.kind === 'common_task_claim')).toBe(true);
+  });
+
   it('distinguishes a baseless accusation from a bandwagon', () => {
     const ev = ruleAccusations(fixture2);
     expect(ev.find(e => e.player === 'black')?.weight).toBeCloseTo(0.4);

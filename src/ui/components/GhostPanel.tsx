@@ -42,7 +42,7 @@ export function GhostPanel() {
   const killObs = [...match.observations].reverse().find(o => o.type === 'sawKill' && o.victim === match.me);
   const killer: Player | undefined = killObs && killObs.type === 'sawKill' ? match.players[killObs.killer] : undefined;
   const alive = slotOrder(match).map(id => match.players[id]).filter(p => p.status === 'alive' && !p.isMe);
-  const here = myRoomNow(match) ?? match.map.rooms[0].id;
+  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
 
   return (
     <section className="panel ghost">

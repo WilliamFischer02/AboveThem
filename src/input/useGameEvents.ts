@@ -15,7 +15,9 @@ import { isTauri } from '../state/persist';
 import { loadSettings, type AppSettings } from '../state/settings';
 import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
-import type { Phase, Player, PlayerColor, PlayerId } from '../types/game';
+import { MAPS } from '../data/maps';
+import { myRoomNow } from './useHotkeys';
+import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId } from '../types/game';
 
 export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean }
 interface PhaseEvent { phase: string; round: number; meeting: number }
@@ -108,6 +110,9 @@ export function useGameEvents() {
     let cancelled = false;
     let creating = false;
     let role: 'crew' | 'impostor' | null = null;
+    let pendingMap: MapId | null = null;
+    let bannerReason: 'body' | 'button' | null = null;
+    const lastAutoSighting = new Map<string, number>();
     (async () => {
       const { listen } = await import('@tauri-apps/api/event');
       const { invoke } = await import('@tauri-apps/api/core');
@@ -142,7 +147,9 @@ export function useGameEvents() {
           const fromLobby = source === 'lobby';
           if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
           const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
-          s.newMatch({ settings: preset?.settings ?? DEFAULT_SETTINGS, map: (preset?.settings ?? DEFAULT_SETTINGS).map, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
+          const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
+          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
+          s.newMatch({ settings: { ...baseSettings, map: mapId }, map: mapId, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
           if (!fromLobby) useMatch.getState().setPhase('meetingDiscussion', { reason: 'body' });
           useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
           invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
@@ -190,7 +197,8 @@ export function useGameEvents() {
         const phase = map[e.payload.phase];
         if (!phase || s.match.phase.phase === phase) return;
         if (phase === 'lobby' && s.match.phase.phase !== 'gameOver') return; // never bounce a live match back to lobby on a missed frame
-        s.setPhase(phase, phase === 'meetingDiscussion' ? { reason: 'body' } : undefined);
+        s.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
+        if (phase === 'meetingDiscussion') bannerReason = null;
         s.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
       }));
 
@@ -210,6 +218,70 @@ export function useGameEvents() {
         }
         s.dispatch({ kind: 'ejection', payload: { meeting, player: player?.id ?? null, wasImpostor: ev.was_impostor } });
         s.showToast(player ? `${player.name} ejected${ev.was_impostor === true ? ' — IMPOSTOR' : ev.was_impostor === false ? ' — not impostor' : ''} (auto)` : `No ejection (auto)`);
+      }));
+
+      guard(await listen<MapId>('game://map', e => {
+        const id = e.payload;
+        const s = useMatch.getState();
+        if (!MAPS[id] || MAPS[id].rooms.length === 0) { s.showToast(`Map ${id} detected — no map data yet, room features off`); pendingMap = null; return; }
+        pendingMap = id;
+        if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
+      }));
+
+      guard(await listen<string>('game://meeting_banner', e => { bannerReason = e.payload === 'button' ? 'button' : 'body'; }));
+
+      guard(await listen<number>('game://me_dead', () => {
+        const s = useMatch.getState();
+        const me = s.match?.players[s.match.me];
+        if (me && me.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: me.id, status: 'dead' } }); s.showToast('You died (read from the meeting screen) — ghost mode'); }
+      }));
+
+      guard(await listen<string>('game://room', e => {
+        const s = useMatch.getState();
+        const m = s.match;
+        if (!m || m.map.rooms.length === 0) return;
+        const room = fuzzyFind(e.payload, m.map.rooms.map(r => ({ name: r.name, id: r.id })));
+        if (!room) return;
+        if (myRoomNow(m) === room.id) return;
+        s.observe({ type: 'myRoom', room: room.id, source: 'ocr', confidence: 0.85 }, `You → ${room.name} (auto)`);
+      }));
+
+      guard(await listen<string[]>('game://nearby', e => {
+        const s = useMatch.getState();
+        const m = s.match;
+        if (!m || m.phase.phase !== 'round') return;
+        const room = myRoomNow(m);
+        if (!room) return;
+        const now = Date.now();
+        for (const name of e.payload) {
+          const p = fuzzyFind(name, Object.values(m.players));
+          if (!p || p.isMe || p.status !== 'alive') continue;
+          const key = `${p.id}|${room}`;
+          if (now - (lastAutoSighting.get(key) ?? 0) < 20_000) continue;
+          lastAutoSighting.set(key, now);
+          useMatch.getState().observe({ type: 'sighting', player: p.id, room, source: 'ocr', confidence: 0.75 });
+        }
+      }));
+
+      guard(await listen<string[]>('game://tasks', e => {
+        const s = useMatch.getState();
+        const m = s.match;
+        if (!m) return;
+        const lines = e.payload;
+        if (lines.some(l => /fake/i.test(l)) && m.myRole !== 'impostor') s.dispatch({ kind: 'myRole', payload: { role: 'impostor' } });
+        const tasks: MyTask[] = [];
+        for (const raw of lines) {
+          if (/total tasks|fake tasks/i.test(raw)) continue;
+          const progress = raw.match(/\((\d+)\s*\/\s*(\d+)\)/)?.[0];
+          const body = raw.replace(/\(.*?\)/g, '').trim();
+          const [roomPart, taskPart] = body.includes(':') ? body.split(':').map(x => x.trim()) : ['', body];
+          const task = taskPart && m.map.tasks.length ? fuzzyFind(taskPart.replace(/ to .*$/i, ''), m.map.tasks.map(t => ({ name: t.name, id: t.id }))) : undefined;
+          const room = roomPart && m.map.rooms.length ? fuzzyFind(roomPart, m.map.rooms.map(r => ({ name: r.name, id: r.id }))) : undefined;
+          if (!task && body.length < 4) continue;
+          tasks.push({ id: task?.id ?? body, name: task?.name ?? body, room: room?.id, progress, matched: !!task });
+        }
+        const prev = JSON.stringify(m.myTasks ?? []);
+        if (tasks.length && JSON.stringify(tasks) !== prev) s.dispatch({ kind: 'myTasks', payload: tasks });
       }));
     })();
     return () => { cancelled = true; unlisten.forEach(u => u()); };

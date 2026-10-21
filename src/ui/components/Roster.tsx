@@ -107,7 +107,7 @@ function QuickActions({ p }: { p: Player }) {
     <div className="quick" onClick={stop} onMouseDown={stop}>
       <button className="btn xs" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first (prefix + / + room)'} disabled={!here}
         onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁 here</button>
-      <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0].id, on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
+      <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0]?.id ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
       <button className="btn xs warn" onClick={() => observe({ type: 'manualMark', player: p.id, mark: 'sus' }, `${p.name} marked sus`)}>sus</button>
     </div>
   );
@@ -147,7 +147,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
   const [mode, setMode] = useState<MenuMode>('main');
   const [alone, setAlone] = useState(false);
   const stop = (e: React.MouseEvent) => e.stopPropagation();
-  const here = myRoomNow(match) ?? match.map.rooms[0].id;
+  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
   const done = () => { setMode('main'); onClose(); };
   const others = Object.values(match.players).filter(o => o.id !== p.id && o.status === 'alive');
 

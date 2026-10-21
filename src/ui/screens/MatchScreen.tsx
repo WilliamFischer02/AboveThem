@@ -7,7 +7,7 @@ import { Roster } from '../components/Roster';
 import { Timeline } from '../components/Timeline';
 import { MeetingPanel } from '../components/MeetingPanel';
 import { Toast } from '../components/Toast';
-import { useHotkeys } from '../../input/useHotkeys';
+import { useHotkeys, myRoomNow } from '../../input/useHotkeys';
 import { buildConfig, keyLabel, ACTION_KEYS, FIRST_SPECIAL } from '../../input/hotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useOverlay } from '../overlay/useOverlay';
@@ -38,6 +38,8 @@ export function MatchScreen() {
   const st = stamp();
   const phase = match.phase.phase;
   const ghost = match.players[match.me]?.status !== 'alive';
+  const myRoomId = myRoomNow(match);
+  const myRoom = myRoomId ? match.map.rooms.find(r => r.id === myRoomId)?.name ?? myRoomId : null;
   const alive = Object.values(match.players).filter(p => p.status === 'alive').length;
   const impLeft = match.settings.impostorCount - match.ejections.filter(e => e.wasImpostor).length;
 
@@ -49,6 +51,7 @@ export function MatchScreen() {
         <span className={`phase-pill right ${phase === 'lobby' ? 'lobby' : phase === 'gameOver' ? 'over' : inMeeting ? 'meeting' : phase === 'ejection' ? 'ejection' : 'round'}`} key={phase}>
           {phase === 'lobby' ? '⌂ LOBBY' : phase === 'gameOver' ? 'GAME OVER' : inMeeting ? '🔔 MEETING' : phase === 'ejection' ? '🗳 VOTED' : '▶ ROUND'}
           {phase !== 'lobby' && phase !== 'gameOver' && <span className="clock">R{st.round + 1} {fmt(st.t)}</span>}
+          {myRoom && <span className="muted small">· {myRoom}</span>}
         </span>
       </header>
       <div className="content">
@@ -62,6 +65,12 @@ export function MatchScreen() {
           <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
         </div>
         <AutoStatus />
+        {match.myTasks && match.myTasks.length > 0 && (
+          <div className="row small tasks-line">
+            <span className="muted">my tasks:</span>
+            {match.myTasks.map((t, i) => <span key={i} className={`badge ${t.matched ? 'dim' : ''}`} title={t.room}>{t.name}{t.progress ? ' ' + t.progress : ''}</span>)}
+          </div>
+        )}
         <div className="row small">
           <span className={hk.registered === 'global' ? 'status-ok' : 'muted'}>
             hotkeys: {hk.registered === 'global' ? 'global (work while Among Us is focused)' : hk.registered === 'window' ? 'window only' : 'off'}
