@@ -1,47 +1,182 @@
 /**
- * Match store (Zustand). Phase 1 fills this in. Shape mirrors MatchState; every
- * mutation is an appended event so the NDJSON log and the store never diverge.
+ * Match store (Zustand).
+ *
+ * The store holds the raw event log and the MatchState derived from it. Every
+ * mutation is an event: it is appended to the log, applied to the state, and
+ * written to `%APPDATA%/AboveThem/matches/<id>.ndjson` through `persist`.
+ * Undo appends an `undo` event and replays, so disk and memory never diverge.
  */
 import { create } from 'zustand';
-import type { MatchState, Observation, Claim, Vote, Ejection, PhaseChange, ChatLine } from '../types/game';
+import type { MatchState, Observation, Phase, PhaseChange, Stamp } from '../types/game';
+import {
+  type MatchEvent, type InitPayload, reduce, replay, effective, lastUndoable, newId,
+} from './events';
+import { type ClockState, initialClock, clockOnPhase, stampAt } from './clock';
+import { persist } from './persist';
 
-type Event =
-  | { kind: 'observation'; payload: Observation }
-  | { kind: 'claim'; payload: Claim }
-  | { kind: 'vote'; payload: Vote }
-  | { kind: 'ejection'; payload: Ejection }
-  | { kind: 'phase'; payload: PhaseChange }
-  | { kind: 'chat'; payload: ChatLine };
+export interface Toast { id: number; text: string; undoable: boolean; at: number }
+
+type Dispatchable = Exclude<MatchEvent, { kind: 'init' } | { kind: 'undo' }>;
+type WithoutWall<E> = E extends { wall: number } ? Omit<E, 'wall'> : never;
+
+/** Fields the caller supplies for an observation; id/stamp/source/confidence are filled in. */
+export type ObservationInput = {
+  [K in Observation['type']]: Omit<Extract<Observation, { type: K }>, 'id' | 'stamp' | 'source' | 'confidence'> &
+    { source?: Observation['source']; confidence?: number; stamp?: Stamp };
+}[Observation['type']];
 
 interface Store {
+  matchId: string | null;
+  log: MatchEvent[];
   match: MatchState | null;
-  log: Event[];
-  dispatch: (e: Event) => void;
+  clock: ClockState;
+  toast: Toast | null;
+  /** Last persist error, if any (shown in the status bar; the app keeps working). */
+  diskError: string | null;
+
+  newMatch: (init: Omit<InitPayload, 'id' | 'startedAt'>) => string;
+  loadMatch: (id: string) => Promise<boolean>;
+  closeMatch: () => void;
+  dispatch: (e: WithoutWall<Dispatchable>) => void;
+  observe: (o: ObservationInput, toastText?: string) => Observation;
+  setPhase: (phase: Phase, extra?: Partial<Omit<PhaseChange, 'phase' | 'wall'>>) => void;
   undo: () => void;
+  stamp: () => Stamp;
+  showToast: (text: string, undoable?: boolean) => void;
+  clearToast: () => void;
 }
 
-export const useMatch = create<Store>((set) => ({
-  match: null,
-  log: [],
-  dispatch: (e) => set((s) => ({ log: [...s.log, e], match: s.match ? apply(s.match, e) : s.match })),
-  undo: () => set((s) => {
-    const log = s.log.slice(0, -1);
-    return { log, match: s.match ? replay(s.match, log) : s.match };
-  }),
-}));
+const SOURCE_CONFIDENCE: Record<Observation['source'], number> = { me: 0.95, ocr: 0.8, mod: 1, manual: 0.9 };
 
-function apply(m: MatchState, e: Event): MatchState {
+function clockFromLog(log: readonly MatchEvent[]): ClockState {
+  let c = initialClock;
+  for (const e of effective(log)) if (e.kind === 'phase') c = clockOnPhase(c, e.payload);
+  return c;
+}
+
+let toastSeq = 0;
+
+export const useMatch = create<Store>((set, get) => {
+  const append = (e: MatchEvent) => {
+    const id = get().matchId;
+    if (!id) return;
+    persist.appendEvent(id, e).catch(err => set({ diskError: String(err) }));
+  };
+
+  return {
+    matchId: null,
+    log: [],
+    match: null,
+    clock: initialClock,
+    toast: null,
+    diskError: null,
+
+    newMatch: (init) => {
+      const startedAt = Date.now();
+      const id = new Date(startedAt).toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+      const e: MatchEvent = { kind: 'init', wall: startedAt, payload: { ...init, id, startedAt } };
+      set({ matchId: id, log: [e], match: reduce(null as unknown as MatchState, e), clock: initialClock, toast: null, diskError: null });
+      append(e);
+      return id;
+    },
+
+    loadMatch: async (id) => {
+      const log = await persist.readMatch(id);
+      const match = replay(log);
+      if (!match) return false;
+      set({ matchId: id, log, match, clock: clockFromLog(log), toast: null });
+      return true;
+    },
+
+    closeMatch: () => set({ matchId: null, log: [], match: null, clock: initialClock, toast: null }),
+
+    dispatch: (partial) => {
+      const s = get();
+      if (!s.match) return;
+      const e = { ...partial, wall: Date.now() } as MatchEvent;
+      const match = reduce(s.match, e);
+      const clock = e.kind === 'phase' ? clockOnPhase(s.clock, e.payload) : s.clock;
+      set({ log: [...s.log, e], match, clock });
+      append(e);
+    },
+
+    observe: (input, toastText) => {
+      const s = get();
+      const source = input.source ?? 'me';
+      const obs = {
+        ...input,
+        id: newId('o'),
+        stamp: input.stamp ?? s.stamp(),
+        source,
+        confidence: input.confidence ?? SOURCE_CONFIDENCE[source],
+      } as Observation;
+      s.dispatch({ kind: 'observation', payload: obs });
+      if (toastText) s.showToast(toastText, true);
+      return obs;
+    },
+
+    setPhase: (phase, extra) => {
+      const s = get();
+      if (!s.match) return;
+      const nextClock = clockOnPhase(s.clock, { phase, wall: Date.now(), round: s.clock.round });
+      const meetings = effective(s.log).filter(e => e.kind === 'phase' && e.payload.phase === 'meetingDiscussion').length;
+      const payload: PhaseChange = {
+        phase,
+        wall: Date.now(),
+        round: Math.max(0, nextClock.round),
+        meeting: phase === 'meetingDiscussion' ? meetings : s.match.phase.meeting,
+        ...extra,
+      };
+      s.dispatch({ kind: 'phase', payload });
+    },
+
+    undo: () => {
+      const s = get();
+      if (!s.match) return;
+      const target = lastUndoable(s.log);
+      if (!target) { s.showToast('Nothing to undo', false); return; }
+      const e: MatchEvent = { kind: 'undo', wall: Date.now() };
+      const log = [...s.log, e];
+      const match = replay(log);
+      set({ log, match, clock: clockFromLog(log) });
+      append(e);
+      s.showToast(`Undid: ${describe(target)}`, false);
+    },
+
+    stamp: () => stampAt(get().clock, Date.now()),
+
+    showToast: (text, undoable = false) => set({ toast: { id: ++toastSeq, text, undoable, at: Date.now() } }),
+    clearToast: () => set({ toast: null }),
+  };
+});
+
+/** One-line human description of an event, for toasts and the timeline. */
+export function describe(e: MatchEvent): string {
   switch (e.kind) {
-    case 'observation': return { ...m, observations: [...m.observations, e.payload] };
-    case 'claim': return { ...m, claims: [...m.claims, e.payload] };
-    case 'vote': return { ...m, votes: [...m.votes, e.payload] };
-    case 'ejection': return { ...m, ejections: [...m.ejections, e.payload] };
-    case 'phase': return { ...m, phase: e.payload };
-    case 'chat': return { ...m, chat: [...m.chat, e.payload] };
+    case 'init': return 'match start';
+    case 'undo': return 'undo';
+    case 'observation': {
+      const o = e.payload;
+      switch (o.type) {
+        case 'sighting': return `${o.player} in ${o.room}${o.heading ? ' → ' + o.heading : ''}${o.alone ? ' (alone)' : ''}`;
+        case 'withMe': return `${o.player} ${o.on ? 'with me' : 'left me'} in ${o.room}`;
+        case 'myRoom': return `me → ${o.room}`;
+        case 'sawTask': return `${o.player} ${o.visualConfirmed ? 'VISUAL task' : 'task'} in ${o.room}`;
+        case 'sawVent': return `${o.player} VENTED in ${o.room}`;
+        case 'sawKill': return `${o.killer} KILLED ${o.victim} in ${o.room}`;
+        case 'bodyFound': return `body: ${o.victim} in ${o.room}${o.reporter ? ' (reported by ' + o.reporter + ')' : ''}`;
+        case 'sabotage': return `sabotage ${o.kind} ${o.phase}`;
+        case 'manualMark': return `${o.player} marked ${o.mark}`;
+      }
+      return 'observation';
+    }
+    case 'claim': return `${e.payload.by} claims ${e.payload.type}${e.payload.room ? ' ' + e.payload.room : ''}${e.payload.about ? ' re ' + e.payload.about : ''}`;
+    case 'vote': return `${e.payload.voter} voted ${e.payload.target}`;
+    case 'ejection': return e.payload.player ? `${e.payload.player} ejected` : 'no ejection';
+    case 'phase': return `phase → ${e.payload.phase}`;
+    case 'chat': return `chat: ${e.payload.sender}`;
+    case 'player': return `player ${e.payload.id} updated`;
+    case 'settings': return 'settings updated';
+    case 'myRole': return `my role: ${e.payload.role}`;
   }
-}
-
-function replay(base: MatchState, log: Event[]): MatchState {
-  const empty: MatchState = { ...base, observations: [], claims: [], votes: [], ejections: [], chat: [] };
-  return log.reduce(apply, empty);
 }

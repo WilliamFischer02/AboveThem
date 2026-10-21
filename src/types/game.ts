@@ -279,6 +279,10 @@ export interface EvidenceItem {
   refs: string[];           // observation/claim ids
   /** true if the rule depends on unverified map data */
   shaky?: boolean;
+  /** Situation key from data/tactics/crew.json this evidence maps to (drives the meeting script). */
+  kind?: string;
+  /** Template variables for that situation: P, R, T, W, V, TASK, P2, R2... */
+  vars?: Record<string, string>;
 }
 
 export interface SuspectScore {

@@ -14,20 +14,28 @@
       {
         "title": "AboveThem",
         "label": "main",
-        "width": 420,
-        "height": 800,
+        "width": 560,
+        "height": 900,
         "resizable": true,
         "alwaysOnTop": true,
         "decorations": true,
         "transparent": false,
-        "focus": false
+        "focus": false,
+        "minWidth": 420,
+        "minHeight": 600
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
-    "icon": ["icons/icon.ico"]
+    "targets": [
+      "msi"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ]
   }
 }
