@@ -4,21 +4,21 @@ Each phase has acceptance criteria. Don't start the next phase until the current
 one's criteria pass on William's actual machine.
 
 ## Phase 0 — Scaffold builds (≤ 1 session)
-- [ ] `npm install && npm run tauri dev` opens an empty always-on-top window on Windows
-- [ ] `npm test` runs Vitest; `src/engine/suspicion.test.ts` passes
-- [ ] Rust side compiles with the `windows` crate feature set we need (Graphics.Capture, Media.Ocr, Graphics.Imaging)
-- [ ] `docs/handoff.md` updated with exact toolchain versions that worked
+- [x] `npm install && npm run tauri dev` opens an empty always-on-top window on Windows
+- [x] `npm test` runs Vitest; `src/engine/suspicion.test.ts` passes
+- [x] Rust side compiles with the `windows` crate feature set we need (Graphics.Capture, Media.Ocr, Graphics.Imaging)
+- [x] `docs/handoff.md` updated with exact toolchain versions that worked
 
 ## Phase 1 — Manual-input companion (the MVP that's already useful)
 No OCR yet. Everything typed/clicked/hotkeyed.
-- [ ] Lobby preset entry (players, colors, names, impostor count, settings)
-- [ ] Hotkey chords log sightings/with-me/visual/vent/kill/body with toast + undo
-- [ ] Timeline + roster panels
-- [ ] Engine: hard constraints, alibi graph, soft scoring, explanations
-- [ ] Meeting panel renders a `MeetingScript` for a hand-logged fixture match
-- [ ] Vote outcome entry → impostor count + clears updated
-- [ ] NDJSON match log + `dev:replay`
-- [ ] Skeld map data verified against the live game (rooms, vents, visuals, commons, durations)
+- [x] Lobby preset entry (players, colors, names, impostor count, settings)
+- [x] Hotkey chords log sightings/with-me/visual/vent/kill/body with toast + undo (verified with Notepad focused; Among Us itself pending)
+- [x] Timeline + roster panels
+- [x] Engine: hard constraints, alibi graph, soft scoring, explanations
+- [x] Meeting panel renders a `MeetingScript` for a hand-logged fixture match
+- [x] Vote outcome entry → impostor count + clears updated
+- [x] NDJSON match log + `dev:replay` (= "Open / replay" on the setup screen)
+- [~] Skeld map data verified against the wiki (rooms, vents, visuals, commons); durations + 2 items still need the live game
 **Acceptance:** play 3 real lobbies with it docked on a second monitor; it should be
 *faster* than a notepad and the meeting script should be usable at least once per game.
 

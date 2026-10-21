@@ -67,3 +67,41 @@ server every session. Vite 8.3.5 + Vitest 5.0.5 + `@vitejs/plugin-react`
 `vite build` all pass unchanged. React stays on 18.3.1 and TypeScript on
 5.9.3 (TS 7 is the native-port rewrite; no reason to be an early adopter in
 a build pipeline). All versions are exact-pinned in `package.json`.
+
+## ADR-008 — Undo is an event; the NDJSON log is append-only
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** `MatchState` is the reduction of the event log (`src/state/events.ts`).
+Rewriting the file on undo would let disk and memory drift and lose the
+record of what the user retracted. An `undo` line removes the latest
+surviving undoable event at replay time, so a crash mid-match loses at most
+the last line and a replay reproduces exactly what was shown.
+**Consequences:** `init` can't be undone; the store replays from scratch on
+undo (N is tiny); `dev:replay` is just "load the file".
+
+## ADR-009 — Hotkey chords via RegisterHotKey with a temporary second layer
+**Date:** 2026-10-21
+**Status:** accepted (fallback documented)
+**Why:** `tauri-plugin-global-shortcut` (RegisterHotKey) already in the tree.
+Prefix chords (`Ctrl+Alt+<key>`) are permanent; on a prefix press the bare
+second-layer keys (rooms, `.`, `v`, `!`, `k`, `+`, `-`) are registered for
+≤ 1.5 s and unregistered on completion/timeout. Verified end to end with
+Notepad focused: chords reach the app and land in the NDJSON log. Cost: for
+that ≤ 1.5 s window the game does not receive those keys — acceptable, since
+the user is mid-chord. UNVERIFIED with Among Us itself in fullscreen-windowed.
+**Fallback:** a `WH_KEYBOARD_LL` hook thread in `hotkeys.rs` if the game
+swallows RegisterHotKey events; same `hotkey://chord` contract, no frontend
+change.
+**Consequences:** room keys must be single characters (chord = exactly two
+keypresses, per CLAUDE.md §1). `docs/UI_SPEC.md` had `b` (body) and `t`
+(translator) colliding with Blue/Tan: body is now `Space`; translator moves
+to Phase 3 with its own key.
+
+## ADR-010 — Among Us look without game assets
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** William wants the companion to look like the game (crewmate heads,
+game-like font). We don't ship Innersloth assets. The crewmate is our own SVG
+(`src/ui/components/Crewmate.tsx`) coloured from the palette; the font is
+Fredoka (SIL OFL, bundled) with an optional git-ignored
+`src/assets/fonts/custom/ui.ttf` slot that wins if present.

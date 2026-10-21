@@ -25,25 +25,31 @@ Global chord prefix:  Ctrl+Alt       (configurable; must not collide with game)
 Color keys:           r red, b blue, g green, p pink, o orange, y yellow,
                       k black, w white, u purple, n brown, c cyan, l lime,
                       m maroon, s rose, a banana, e gray, t tan, x coral
-Room keys:            per map, 1–2 chars (see data/maps/*.json "key")
+Room keys:            per map, exactly ONE char (see data/maps/*.json "key") so a
+                      chord is two keypresses. Skeld: c cafe, w weapons, o O2, n nav,
+                      h shields, q comms, t storage, a admin, e electrical, l lower eng,
+                      u upper eng, s security, r reactor, m medbay
 
 Sighting:        <prefix> + <color> , <room>          "Red in Electrical"
 With me:         <prefix> + <color> , .               toggle companion
 Saw visual task: <prefix> + <color> , v
-Saw vent:        <prefix> + <color> , !
-Saw kill:        <prefix> + <color> , k
-Body found:      <prefix> + b , <room>
-Mark sus:        <prefix> + <color> , +
+Saw vent:        <prefix> + <color> , !               (Shift+1)
+Saw kill:        <prefix> + <color> , k               (victim picked in roster)
+Body found:      <prefix> + Space , <room>            (victim picked in roster)
+Mark sus:        <prefix> + <color> , +               (Shift+=)
 Mark clear:      <prefix> + <color> , -
 My room:         <prefix> + / , <room>                 (where *you* are; anchors "with me")
-Undo:            Ctrl+Z (overlay focused)  /  <prefix> + z (global)
-Translator focus:<prefix> + t
-Paste translated:<prefix> + Enter
-Toggle overlay:  <prefix> + `
-Impostor: kill done <prefix> + k k ; sabotage start <prefix> + s <l|r|o|c|d>
+Undo:            <prefix> + z (global; also the toast's Undo button)
+Toggle overlay:  <prefix> + `                          (Phase 5)
+Translator / paste: Phase 3 — keys TBD (must not reuse colour letters)
+Impostor chords: Phase 4 — keys TBD (the old `k`/`s` collide with Black/Rose)
 ```
 
-Chord feedback: a 1.5-s toast in the overlay corner shows what was logged.
+Implementation: ADR-009. The 18 colour letters own the whole first layer, so
+every non-colour chord uses a non-letter first key.
+
+Chord feedback: a 1.5-s toast in the overlay corner shows what was logged; while
+a chord is pending the toast shows the first key and waits for the second.
 
 ## Visual rules
 

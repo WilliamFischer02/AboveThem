@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:replay": "echo 'TODO Phase 1: feed an .ndjson match into the UI' && exit 1"
+    "dev:replay": "echo Open the app and use Recent matches -> Open / replay (logs live in %APPDATA%/AboveThem/matches)"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
