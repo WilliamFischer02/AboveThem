@@ -6,6 +6,7 @@
 //!   ocr       — Windows.Media.Ocr wrapper (Phase 2)
 //!   colors    — player-color swatch sampling in CIELAB (Phase 2)
 //!   phase     — game phase state machine from UI markers (Phase 2)
+//!   lobby     — floating-name reader for the lobby screen (Phase 2)
 //!   roster    — vote-grid reader: names, colours, dead, reporter (Phase 2)
 //!   watcher   — background loop: markers → phase/roster/eject events, no user trigger (Phase 2)
 //!   hotkeys   — global hotkey chords → typed events (Phase 1)
@@ -22,6 +23,7 @@ pub mod colors;
 pub mod files;
 pub mod hotkeys;
 pub mod ipc;
+pub mod lobby;
 pub mod ocr;
 pub mod overlay;
 pub mod phase;

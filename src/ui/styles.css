@@ -251,3 +251,7 @@ body {
 .chip .quick { grid-column: 1 / -1; display: flex; gap: 4px; }
 .chip .quick .btn { flex: 1; padding: 2px 4px; font-size: 12px; }
 .auto-status { padding: 2px 4px; }
+
+/* An open card menu must paint above the cards that follow it. */
+.chip.menu-open { z-index: 40; }
+.menu { z-index: 41; }

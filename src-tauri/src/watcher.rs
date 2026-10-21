@@ -19,6 +19,7 @@ use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
 use crate::roster::{read_vote_grid, RosterEntry};
+use crate::lobby::read_lobby;
 
 pub const EV_PHASE: &str = "game://phase";
 pub const EV_ROSTER: &str = "game://roster";
@@ -29,6 +30,9 @@ pub const EV_STATUS: &str = "game://watcher";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct RosterEvent { pub source: &'static str, pub entries: Vec<RosterEntry> }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct EjectEvent { pub raw: String, pub name: Option<String>, pub was_impostor: Option<bool>, pub skipped: bool }
@@ -133,6 +137,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut candidate_count = 0u32;
     let mut last_roster: Vec<RosterEntry> = Vec::new();
     let mut last_roster_read = Instant::now() - Duration::from_secs(60);
+    let mut last_lobby: Vec<RosterEntry> = Vec::new();
+    let mut last_lobby_read = Instant::now() - Duration::from_secs(60);
     let mut meeting_since: Option<Instant> = None;
     let mut last_eject_raw = String::new();
     let mut last_role_text = String::new();
@@ -235,8 +241,21 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                     ocr_calls += r.entries.len() as u64;
                     if r.entries.len() >= 3 && r.entries != last_roster {
                         last_roster = r.entries.clone();
-                        let _ = app.emit(EV_ROSTER, r.entries);
+                        let _ = app.emit(EV_ROSTER, RosterEvent { source: "grid", entries: r.entries });
                     }
+                }
+            }
+        }
+
+        // 7b. Lobby roster from floating names: only on the lobby screen (room code visible), every 5 s.
+        if lobby_code_of(&text("lobby_code")).is_some() && matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting
+            && last_lobby_read.elapsed() > Duration::from_secs(5) {
+            last_lobby_read = Instant::now();
+            if let Ok(r) = read_lobby(&frame) {
+                ocr_calls += 1;
+                if r.entries.len() >= 2 && r.entries != last_lobby {
+                    last_lobby = r.entries.clone();
+                    let _ = app.emit(EV_ROSTER, RosterEvent { source: "lobby", entries: r.entries });
                 }
             }
         }

@@ -122,9 +122,9 @@ export function useGameEvents() {
         s.showToast(`You are ${role === 'impostor' ? 'IMPOSTOR' : 'crew'} (read from the role card)`);
       }));
 
-      guard(await listen<RosterEntry[]>('game://roster', async e => {
+      guard(await listen<{ source: 'lobby' | 'grid'; entries: RosterEntry[] }>('game://roster', async e => {
         const s = useMatch.getState();
-        const entries = e.payload;
+        const { source, entries } = e.payload;
         if (!s.match) {
           if (creating) return;
           creating = true;
@@ -133,19 +133,22 @@ export function useGameEvents() {
           const preset = lobbyCode ? presets[lobbyCode] : undefined;
           const { players, me, meGuessed } = playersFromRoster(entries, settings.myName);
           setMeGuessed(meGuessed);
-          s.newMatch({ settings: preset?.settings ?? DEFAULT_SETTINGS, map: (preset?.settings ?? DEFAULT_SETTINGS).map, me, myRole: role ?? 'crew', players, lobbyCode: lobbyCode ?? undefined });
-          // The watcher fires in a meeting, so the match starts in meeting phase.
-          useMatch.getState().setPhase('meetingDiscussion', { reason: 'body' });
-          useMatch.getState().showToast(`Roster read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
+          const fromLobby = source === 'lobby';
+          const ps = fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players;
+          s.newMatch({ settings: preset?.settings ?? DEFAULT_SETTINGS, map: (preset?.settings ?? DEFAULT_SETTINGS).map, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
+          if (!fromLobby) useMatch.getState().setPhase('meetingDiscussion', { reason: 'body' });
+          useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
           invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
           creating = false;
           return;
         }
         const m = s.match;
         const existing = Object.values(m.players);
+        const fromLobby = source === 'lobby';
+        if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
         for (const en of entries) {
           // Same vote-grid slot = same player, whatever OCR made of the name this time.
-          let p = existing.find(x => x.slot === en.index + 1) ?? fuzzyFind(en.name, existing);
+          let p = (fromLobby ? undefined : existing.find(x => x.slot === en.index + 1)) ?? fuzzyFind(en.name, existing);
           if (!p && existing.length >= entries.length) {
             // Lobby is full: never invent a player, take the closest unmatched name.
             const taken = new Set(entries.map(x => fuzzyFind(x.name, existing)?.id).filter(Boolean));
@@ -154,14 +157,15 @@ export function useGameEvents() {
           if (!p) {
             const live = useMatch.getState().match!;
             const { players } = playersFromRoster([en], '');
-            const np = players[0];
+            const np = { ...players[0], slot: fromLobby ? undefined : players[0].slot };
             // Ids must be unique: fall back to a slot id when that colour is already taken.
             const id = live.players[np.id] || Object.values(live.players).some(x => x.color === np.color) ? `slot${en.index + 1}` : np.id;
             if (!live.players[id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
             continue;
           }
-          if (p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
-          if (en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
+          if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+          if (!fromLobby && en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
+          if (fromLobby && en.color !== 'unknown' && en.color !== p.color && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
         }
       }));
 
