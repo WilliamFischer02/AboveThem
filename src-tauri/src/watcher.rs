@@ -367,7 +367,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             last_nearby_read = Instant::now();
             if let Ok(r) = read_lobby(&frame) {
                 ocr_calls += 1;
-                let names: Vec<String> = r.entries.into_iter().map(|e| e.name).collect();
+                let names: Vec<String> = r.entries.iter().map(|e| format!("{}{}", if e.red_name { "!" } else { "" }, e.name)).collect();
                 if names != last_nearby {
                     last_nearby = names.clone();
                     let _ = app.emit(EV_NEARBY, names);

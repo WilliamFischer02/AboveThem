@@ -424,10 +424,21 @@ export function useGameEvents() {
         const s = useMatch.getState();
         const m = s.match;
         if (!m || m.phase.phase !== 'round') return;
+        // Red floating names: only an impostor sees them — on me (role) or on a partner.
+        for (const raw of e.payload) {
+          if (!raw.startsWith('!')) continue;
+          const nm = raw.slice(1);
+          const live = useMatch.getState().match!;
+          const p = fuzzyFind(nm, Object.values(live.players));
+          if (!p) continue;
+          if (live.myRole !== 'impostor') { s.dispatch({ kind: 'myRole', payload: { role: 'impostor' } }); s.dispatch({ kind: 'player', payload: { id: live.me, knownRole: 'impostor' } }); s.showToast('Red name seen — you are IMPOSTOR (auto)'); }
+          if (!p.isMe && !p.isPartner) { s.dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor' } }); s.showToast(`${p.name} is your partner (red name)`); }
+        }
         const room = myRoomNow(m);
         if (!room) return;
         const now = Date.now();
-        for (const name of e.payload) {
+        for (const raw of e.payload) {
+          const name = raw.startsWith('!') ? raw.slice(1) : raw;
           const p = fuzzyFind(name, Object.values(m.players));
           if (!p || p.isMe || p.status !== 'alive') continue;
           const key = `${p.id}|${room}`;

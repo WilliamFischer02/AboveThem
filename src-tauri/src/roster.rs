@@ -26,6 +26,9 @@ pub struct RosterEntry {
     /// Mean RGB of the body pixels that voted for `color` (for user calibration).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_rgb: Option<[u8; 3]>,
+    /// Floating name drawn in red = an impostor from the local player's point of view (me or my partner).
+    #[serde(default)]
+    pub red_name: bool,
 }
 
 impl PartialEq for RosterEntry {
@@ -246,7 +249,7 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
         };
         let dead = dead_x_score(f, cell, gain) >= 700;
         let (color, delta, body_rgb) = icon_color(f, cell, dead, gain);
-        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb });
+        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb, red_name: false });
     }
     // The reporter/caller has a megaphone badge at the cell's top-right; approximate with a red-ish badge check.
     for e in entries.iter_mut() {

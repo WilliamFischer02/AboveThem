@@ -77,7 +77,8 @@ function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Playe
         <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
         <div className="meta">
           {p.status !== 'alive' && <span className="badge dim">{p.status}</span>}
-          {p.knownRole === 'impostor' && <span className="badge imp">IMPOSTOR</span>}
+          {p.isPartner && <span className="badge imp">PARTNER</span>}
+          {p.knownRole === 'impostor' && !p.isPartner && <span className="badge imp">IMPOSTOR</span>}
           {p.knownRole === 'crew' && !p.isMe && <span className="badge crew">CREW</span>}
           {verdict === 'certainImpostor' && p.knownRole !== 'impostor' && <span className="badge imp">IMPOSTOR</span>}
           {verdict === 'certainCrew' && p.knownRole !== 'crew' && <span className="badge crew">CLEAR</span>}
