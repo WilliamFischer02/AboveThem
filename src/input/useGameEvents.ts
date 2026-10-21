@@ -298,7 +298,10 @@ export function useGameEvents() {
           if (cur.phase.phase === 'lobby' || (!playedRounds && cur.phase.phase !== 'gameOver')) return; // nothing to roll over, or a missed frame
           const avatars = useMatch.getState().avatars;
           const samples = useMatch.getState().bodySamples;
-          const players = Object.values(cur.players).map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? ('unknown' as const) : ('unknown' as const), isPartner: false, slot: undefined }));
+          // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
+          const players = Object.values(cur.players)
+            .filter(p => p.isMe || (!p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
+            .map(p => ({ ...p, status: 'alive' as const, knownRole: 'unknown' as const, isPartner: false, slot: undefined }));
           s2.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: 'crew', players, lobbyCode: lobbyCode ?? undefined });
           for (const [id, url] of Object.entries(avatars)) useMatch.getState().setAvatar(id, url);
           for (const [id, rgb] of Object.entries(samples)) useMatch.getState().setBodySample(id, rgb);
