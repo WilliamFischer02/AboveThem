@@ -20,7 +20,8 @@ export interface OverlaySnapshot {
   prefix: string;
   colors: { color: PlayerColor; key: string; code: string; name: string; inLobby: boolean }[];
   /** Roster in vote-grid order: digit key -> name. */
-  slots: { key: string; name: string; color: PlayerColor; dead: boolean; prime: boolean; cleared: boolean }[];
+  slots: { key: string; name: string; color: PlayerColor; dead: boolean; prime: boolean; cleared: boolean; red: boolean }[];
+  impostor: boolean;
   rooms: { key: string; name: string }[];
   recent: string[];
   /** My current room (from the room popup or the / chord). */
@@ -51,10 +52,11 @@ export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[
       const scores = scoreAll(m);
       const prime = scores.find(x => (x.verdict === 'unknown' || x.verdict === 'softClear') && x.evidence.some(e => e.weight > 0))?.player;
       const cleared = new Set(scores.filter(x => x.verdict === 'certainCrew' || x.verdict === 'hardClear').map(x => x.player));
-      return slotOrder(m).slice(0, 10).map((id, i) => ({ key: String((i + 1) % 10), name: m.players[id].name, color: m.players[id].color, dead: m.players[id].status !== 'alive', prime: id === prime, cleared: cleared.has(id) }));
+      return slotOrder(m).slice(0, 10).map((id, i) => ({ key: String((i + 1) % 10), name: m.players[id].name, color: m.players[id].color, dead: m.players[id].status !== 'alive', prime: id === prime, cleared: cleared.has(id), red: (m.myRole === 'impostor' && id === m.me) || !!m.players[id].isPartner }));
     })(),
     rooms: m.map.rooms.map(r => ({ key: r.key, name: r.name })),
     recent,
+    impostor: m.myRole === 'impostor',
     myRoom: (() => { const r = myRoomNow(m); return r ? (m.map.rooms.find(x => x.id === r)?.name ?? r) : null; })(),
   };
 }

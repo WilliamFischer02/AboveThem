@@ -74,7 +74,7 @@ function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Playe
       {flashKey && <span className="flash" key={flashKey} />}
       <PlayerIcon id={p.id} color={p.color} size={46} state={state} />
       <div style={{ minWidth: 0 }}>
-        <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
+        <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''} ${(p.isMe && match.myRole === 'impostor') || p.isPartner ? 'red-name' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
         <div className="meta">
           {p.status !== 'alive' && <span className="badge dim">{p.status}</span>}
           {p.isPartner && <span className="badge imp">PARTNER</span>}

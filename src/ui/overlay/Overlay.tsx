@@ -32,7 +32,7 @@ export function Overlay() {
     <div className="ov">
       <div className="ov-box ov-clock">
         <span className="ov-time">R{snap.round + 1} {fmt(t)}</span>
-        <span className="ov-phase">{phaseLabel}</span>
+        <span className="ov-phase" style={snap.impostor ? { color: '#ff4d4d' } : undefined}>{snap.impostor ? 'IMPOSTOR · ' : ''}{phaseLabel}</span>
         <span className="ov-count">{snap.myRoom ? `${snap.myRoom} · ` : ''}{snap.alive} alive · {snap.impLeft} imp</span>
       </div>
 
@@ -47,7 +47,7 @@ export function Overlay() {
       <div className="ov-box">
         <div className="ov-legend ov-slots">
           {snap.slots.map(sl => (
-            <span key={sl.key} className={`ov-k ${sl.prime ? 'ov-prime' : ''} ${sl.cleared ? 'ov-cleared' : ''}`} style={{ opacity: sl.dead ? 0.45 : 1 }}><kbd>{sl.key}</kbd><Crewmate color={sl.color} size={18} state={sl.dead ? 'dead' : 'alive'} />{sl.name}{sl.prime ? ' ⚠' : sl.cleared ? ' ✓' : ''}</span>
+            <span key={sl.key} className={`ov-k ${sl.prime ? 'ov-prime' : ''} ${sl.cleared ? 'ov-cleared' : ''} ${sl.red ? 'ov-red' : ''}`} style={{ opacity: sl.dead ? 0.45 : 1 }}><kbd>{sl.key}</kbd><Crewmate color={sl.color} size={18} state={sl.dead ? 'dead' : 'alive'} />{sl.name}{sl.prime ? ' ⚠' : sl.cleared ? ' ✓' : ''}</span>
           ))}
         </div>
         <div className="ov-legend ov-rooms">

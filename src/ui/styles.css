@@ -318,3 +318,14 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .tl.push.agree { border-color: #2bd45a; }
 .tl.push.disagree { border-color: #d8232a; }
 .tl.push.neutral { border-color: #f5b54b; }
+
+/* Impostor mode: the game shows your name (and your partner's) in red. */
+.shell.impostor .topbar { background: #5e0f17; border-bottom-color: #2a0608; box-shadow: inset 0 -2px 0 #a01d2a; }
+.shell.impostor .brand span { color: #ff4d4d; }
+.chip .name.red-name { color: #ff3b3b; }
+.role-pill { font-size: 12px; margin-left: 6px; }
+.panel.impostor-panel { background: #3a2126; border-color: #d8232a; box-shadow: 0 4px 0 #1a1d23, inset 0 2px 0 #6b2b33; }
+.impostor-panel h3 { color: #ffb3b3; }
+.shell.impostor .phase-pill.round { background: #d8232a; color: #fff; }
+
+.ov-red { color: #ff4d4d; font-weight: 700; }

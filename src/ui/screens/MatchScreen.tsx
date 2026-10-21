@@ -15,6 +15,7 @@ import { CapturePanel } from '../components/CapturePanel';
 import { AutoStatus } from '../components/AutoStatus';
 import { useAuto } from '../App';
 import { GhostPanel } from '../components/GhostPanel';
+import { ImpostorPanel } from '../components/ImpostorPanel';
 
 function useNow(ms = 500) {
   const [, setTick] = useState(0);
@@ -40,15 +41,17 @@ export function MatchScreen() {
   const st = stamp();
   const phase = match.phase.phase;
   const ghost = match.players[match.me]?.status !== 'alive';
+  const impostor = match.myRole === 'impostor';
   const myRoomId = myRoomNow(match);
   const myRoom = myRoomId ? match.map.rooms.find(r => r.id === myRoomId)?.name ?? myRoomId : null;
   const alive = Object.values(match.players).filter(p => p.status === 'alive').length;
   const impLeft = match.settings.impostorCount - match.ejections.filter(e => e.wasImpostor).length;
 
   return (
-    <div className="shell">
+    <div className={`shell ${impostor ? 'impostor' : ''}`}>
       <header className="topbar">
         <div className="brand">Above<span>Them</span></div>
+        {impostor && <span className="badge imp role-pill">IMPOSTOR</span>}
         <span className="muted small">{match.map.name} · {alive} alive · {impLeft} imp</span>
         <span className={`phase-pill right ${phase === 'lobby' ? 'lobby' : phase === 'gameOver' ? 'over' : inMeeting ? 'meeting' : phase === 'ejection' ? 'ejection' : 'round'}`} key={phase}>
           {phase === 'lobby' ? '⌂ LOBBY' : phase === 'gameOver' ? 'GAME OVER' : inMeeting ? '🔔 MEETING' : phase === 'ejection' ? '🗳 VOTED' : '▶ ROUND'}
@@ -84,7 +87,9 @@ export function MatchScreen() {
           {matchId && <span className="muted right">log: matches/{matchId}.ndjson</span>}
         </div>
         {ghost && <GhostPanel />}
-        {script && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
+        {impostor && !ghost && <ImpostorPanel scores={scores} inMeeting={inMeeting} />}
+        {script && !impostor && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
+        {script && impostor && !ghost && <details className="fold panel tight"><summary>What the crew engine sees (their likely vote)</summary><MeetingPanel script={script} scores={scores} ghost={true} /></details>}
         <Roster scores={scores} />
         <Timeline />
         <details className="fold panel tight"><summary>Screen reading (auto)</summary><CapturePanel knownNames={Object.values(match.players).map(p => p.name)} /></details>
