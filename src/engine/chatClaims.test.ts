@@ -52,6 +52,13 @@ describe('chat → claims', () => {
     expect(p('i dont think its blue', 'white')).toEqual([{ type: 'defense', about: 'blue' }]);
   });
 
+  it('two suspects, short verdicts, dead statements, second report', () => {
+    expect(p('Its yellow or white', 'green')).toEqual([{ type: 'accusation', about: 'yellow' }, { type: 'accusation', about: 'white' }]);
+    expect(p('so yellow', 'green')).toEqual([{ type: 'accusation', about: 'yellow' }]);
+    expect(p('yellow is dead', 'green')).toEqual([{ type: 'dead', about: 'yellow' }]);
+    expect(p('yell this is your second report', 'green')).toEqual([{ type: 'accusation', about: 'yellow', reason: 'self report' }]);
+  });
+
   it('tasks and bodies', () => {
     expect(p('i did wires in elec', 'green')).toEqual([{ type: 'task', taskId: 'fixWiring', room: 'electrical' }]);
     expect(p('body in storage', 'green')).toEqual([{ type: 'body', room: 'storage' }]);

@@ -91,7 +91,7 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length];
 }
 
-export type ParsedKind = ClaimType | 'body';
+export type ParsedKind = ClaimType | 'body' | 'dead';
 export interface ParsedClaim { type: ParsedKind; room?: RoomId; about?: PlayerId; about2?: PlayerId; taskId?: string; reason?: string }
 
 /** Resolve a word (colour or name fragment) to a player. */
@@ -169,6 +169,21 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
   // 1. Body location: "body in elec", "found/reported (the) body in storage", "dead body (in|at) X".
   run(new RegExp(`\\b(?:found |reported |saw |the )?(?:dead )?body (?:was |is )?(?:in|at|near) ${ROOM}`, 'g'), mm => {
     const room = resolveRoom(mm[1], m); if (room) { add({ type: 'body', room }); return true; } return false;
+  });
+
+  // 1b. "X is dead" / "X died" / "X got killed" → status, not a claim.
+  run(new RegExp(`\\b${P} (?:is dead|died|got killed|was killed|is ded|dead)\\b`, 'g'), mm => {
+    const about = resolveAny(mm[1], m); if (about) { add({ type: 'dead', about }); return true; } return false;
+  });
+  // 1c. "its X or Y" / "X or Y" (two suspects) and "so X" (short verdict).
+  run(new RegExp(`\\b(?:its |it s |it is |either )?${P} or ${P}\\b`, 'g'), mm => {
+    const a = resolveAny(mm[1], m, sender); const b = resolveAny(mm[2], m, sender);
+    if (a || b) { if (a) add({ type: 'accusation', about: a }); if (b) add({ type: 'accusation', about: b }); return true; } return false;
+  });
+  if (/^ so [a-z0-9_]+ ?$/.test(t)) { const a = resolveAny(t.trim().slice(3), m, sender); if (a) add({ type: 'accusation', about: a }); }
+  // 1d. "X (this is) your second report" → self-report pattern.
+  run(new RegExp(`\\b${P} (?:this is )?(?:ur|your) (?:second|2nd|third|3rd|\\d+(?:st|nd|rd|th)) report`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about, reason: 'self report' }); return true; } return false;
   });
 
   // 2. Reasons that name a victim: "X killed Y", "X did it".
@@ -270,7 +285,7 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
 
 /** Turn parsed claims into Claim records (body locations are observations, handled by the caller). */
 export function toClaims(parsed: ParsedClaim[], base: Omit<Claim, 'type' | 'room' | 'about' | 'text' | 'id'>, text: string, idGen: () => string): Claim[] {
-  return parsed.filter(p => p.type !== 'body').map(p => ({
+  return parsed.filter(p => p.type !== 'body' && p.type !== 'dead').map(p => ({
     ...base, id: idGen(), type: p.type as ClaimType, room: p.room, about: p.about, taskId: p.taskId,
     text: p.reason ? `${text} [${p.reason}]` : p.about2 ? `${text} [+${p.about2}]` : undefined, verification: 'pending',
   }));

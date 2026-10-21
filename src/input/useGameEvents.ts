@@ -235,7 +235,7 @@ export function useGameEvents() {
             const live = useMatch.getState().match!;
             for (const d of Object.values(live.players)) {
               if (d.id === p.id || d.slot !== undefined || d.isMe) continue;
-              if (similarity(norm(d.name), norm(p.name)) >= 0.5 || similarity(norm(d.name), norm(en.name)) >= 0.5) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
+              if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
             }
           }
           if (!fromLobby && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
@@ -315,7 +315,10 @@ export function useGameEvents() {
         if (!s.match) return;
         const meeting = s.match.phase.meeting ?? 0;
         for (const msg of e.payload) {
-          if (msg.system) {
+          if (!msg.system && msg.text.trim().length === 0) continue;
+          // Garbled system lines ("sillynorny nas votea. z remyalmng.") still carry 'vot' + 'rem' fragments.
+          const system = msg.system || (/vot/i.test(msg.text) && /rem/i.test(msg.text) && !/(vote|voting) [a-z]/i.test(msg.text)) || /left the game|joined the game/i.test(msg.text);
+          if (system) {
             const left = msg.text.match(/^(.*?) (?:has )?left the game/i);
             if (left) { const mm = useMatch.getState().match!; const p = fuzzyFind(left[1], Object.values(mm.players)); if (p && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); }
             continue;
@@ -364,6 +367,11 @@ export function useGameEvents() {
             if (!live.observations.some(o => o.type === 'bodyFound' && o.stamp.round === round)) {
               useMatch.getState().observe({ type: 'bodyFound', victim: 'unknown', room: b.room!, source: 'ocr', confidence: 0.6 }, `Body in ${live.map.rooms.find(r => r.id === b.room)?.name ?? b.room} (chat)`);
             }
+          }
+          for (const d of parsed.filter(x => x.type === 'dead' && x.about)) {
+            const live = useMatch.getState().match!;
+            const pl = live.players[d.about!];
+            if (pl && pl.status === 'alive') { s.dispatch({ kind: 'player', payload: { id: pl.id, status: 'dead' } }); s.showToast(`${pl.name} is dead (chat)`); }
           }
           const claims = toClaims(parsed, { meeting, stamp, by: sender }, msg.text, () => newId('c'));
           for (const c of claims) {
