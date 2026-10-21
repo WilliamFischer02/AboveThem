@@ -21,7 +21,7 @@ import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId } from '../types/game';
 
-export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string }
+export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number] }
 interface PhaseEvent { phase: string; round: number; meeting: number }
 interface EjectEvent { raw: string; name: string | null; was_impostor: boolean | null; skipped: boolean }
 export interface WatcherStatus { running: boolean; phase: string | null; round: number; meeting: number; markers: Record<string, boolean>; last_ocr_ms: number; ocr_calls: number; frame_seq: number; lobby_code: string | null }
@@ -36,6 +36,7 @@ const lobbySeen = new Map<string, number>();
 
 function fuzzyFind<T extends { name: string }>(name: string, list: T[]): T | undefined {
   const n = norm(name);
+  if (n.length < 2) return undefined;
   let best: { item: T; score: number } | null = null;
   for (const item of list) {
     const m = norm(item.name);
@@ -157,6 +158,8 @@ export function useGameEvents() {
       guard(await listen<{ source: 'lobby' | 'grid'; entries: RosterEntry[] }>('game://roster', async e => {
         const s = useMatch.getState();
         const { source, entries } = e.payload;
+        // A grid read with several unreadable cells is occluded (chat panel, fade) — ignore it.
+        if (source === 'grid' && entries.filter(x => x.name.startsWith('#')).length >= 3) return;
         if (!s.match) {
           if (creating) return;
           creating = true;
@@ -172,7 +175,7 @@ export function useGameEvents() {
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
           s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
           if (!fromLobby) {
-            for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); }
+            for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); }
             useMatch.getState().setPhase('meetingDiscussion', { reason: bannerReason ?? 'body' });
           }
           useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
@@ -218,6 +221,7 @@ export function useGameEvents() {
             continue;
           }
           if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+          if (!fromLobby && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
           // Keep the freshest alive-time headshot (dead cards carry the X); take a dead one only if we have none.
           if (!fromLobby && en.avatar_png && (!en.dead || !useMatch.getState().avatars[p.id])) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`);
           if (!fromLobby && !p.colorLocked && en.color !== 'unknown' && en.color !== p.color) {
@@ -226,7 +230,7 @@ export function useGameEvents() {
             colorVotes.set(p.id, { color: en.color, n });
             const live = useMatch.getState().match!;
             const clash = Object.values(live.players).find(x => x.id !== p.id && x.color === en.color);
-            if (n >= 2 && (!clash || !clash.colorLocked)) {
+            if (n >= 3 && (!clash || !clash.colorLocked)) {
               if (clash) s.dispatch({ kind: 'player', payload: { id: clash.id, color: p.color } });
               s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
               colorVotes.delete(p.id);

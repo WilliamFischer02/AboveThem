@@ -210,7 +210,9 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 2. Markers from text.
         let task_bar = fuzzy_best(&text("task_bar"), ["TOTAL TASKS COMPLETED"]).map(|b| b.1 > 0.6).unwrap_or(false);
-        let chat_open = fuzzy_best(text("chat_send").trim(), ["Send"]).map(|b| b.1 > 0.7).unwrap_or(false);
+        let counter = text("chat_counter");
+        let chat_open = fuzzy_best(text("chat_send").trim(), ["Send"]).map(|b| b.1 > 0.7).unwrap_or(false)
+            || counter.contains("/100") || counter.contains("/ 100") || counter.contains("I100");
         let header = text("meeting_header");
         let meeting = fuzzy_best(&header, ["Who Is The Impostor?", "Emergency Meeting", "Dead Body Reported"]).map(|b| b.1 > 0.65).unwrap_or(false);
         let me_dead_header = header.trim().to_uppercase() == "DEAD" || (header.trim().len() <= 5 && fuzzy_best(header.trim(), ["DEAD"]).map(|b| b.1 > 0.85).unwrap_or(false));

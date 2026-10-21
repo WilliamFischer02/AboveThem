@@ -138,6 +138,21 @@ pub fn watcher_set_names(w: State<crate::watcher::WatcherState>, names: Vec<Stri
     w.shared.lock().unwrap().known_names = names;
 }
 
+/// User set a colour by hand: remember the measured body pixels as an exact reference (persisted).
+#[tauri::command]
+pub fn calibrate_color(color: String, rgb: [u8; 3], lift: bool) -> Result<usize, String> {
+    let all = crate::colors::add_calibration(crate::colors::CalibSample { color, rgb, lift });
+    let json = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
+    crate::files::write_app_file("color_calibration.json".into(), json)?;
+    Ok(all.len())
+}
+
+pub fn load_color_calibration() {
+    if let Ok(Some(text)) = crate::files::read_app_file("color_calibration.json".into()) {
+        if let Ok(v) = serde_json::from_str::<Vec<crate::colors::CalibSample>>(&text) { crate::colors::set_calibration(v); }
+    }
+}
+
 #[tauri::command]
 pub fn ocr_languages() -> Vec<String> {
     ocr::available_languages()

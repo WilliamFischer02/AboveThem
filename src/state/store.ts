@@ -38,6 +38,9 @@ interface Store {
   /** In-game headshots per player (data URLs). Not part of the event log. */
   avatars: Record<string, string>;
   setAvatar: (id: string, dataUrl: string) => void;
+  /** Last measured body RGB per player from the vote grid (for colour calibration). */
+  bodySamples: Record<string, [number, number, number]>;
+  setBodySample: (id: string, rgb: [number, number, number]) => void;
 
   newMatch: (init: Omit<InitPayload, 'id' | 'startedAt'>) => string;
   loadMatch: (id: string) => Promise<boolean>;
@@ -79,6 +82,8 @@ export const useMatch = create<Store>((set, get) => {
     diskError: null,
     avatars: {},
     setAvatar: (id, dataUrl) => set(s => ({ avatars: { ...s.avatars, [id]: dataUrl } })),
+    bodySamples: {},
+    setBodySample: (id, rgb) => set(s => ({ bodySamples: { ...s.bodySamples, [id]: rgb } })),
 
     newMatch: (init) => {
       const startedAt = Date.now();

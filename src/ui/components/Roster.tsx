@@ -5,6 +5,7 @@ import { Crewmate, PlayerIcon } from './Crewmate';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
+import { isTauri } from '../../state/persist';
 
 type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color' | 'rename';
 
@@ -123,6 +124,9 @@ function ColorPicker({ p, onDone }: { p: Player; onDone: () => void }) {
     const other = Object.values(match.players).find(o => o.color === color && o.id !== p.id);
     if (other) dispatch({ kind: 'player', payload: { id: other.id, color: p.color, colorLocked: true } });
     dispatch({ kind: 'player', payload: { id: p.id, color, colorLocked: true } });
+    // Teach the detector: this player's measured body pixels now mean `color`.
+    const sample = useMatch.getState().bodySamples[p.id];
+    if (sample && isTauri()) import('@tauri-apps/api/core').then(({ invoke }) => invoke('calibrate_color', { color, rgb: sample, lift: true })).then(() => showToast(`Colour detector calibrated: ${PALETTE[color as keyof typeof PALETTE].label}`)).catch(() => {});
     showToast(`${p.name} is ${PALETTE[color as keyof typeof PALETTE].label}${other ? `, ${other.name} is ${PALETTE[p.color as keyof typeof PALETTE]?.label ?? p.color}` : ''}`, true);
     onDone();
   };

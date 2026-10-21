@@ -70,3 +70,44 @@ mod tests {
         assert_eq!(classify([0xA0, 0x10, 0x10]).0, PlayerColor::Red);
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// User calibration: colours the user assigned by hand, with the body pixels we measured for
+// that card. These become exact references for the classifier (ADR-014), persisted per machine.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CalibSample {
+    pub color: String,
+    pub rgb: [u8; 3],
+    /// true = vote-grid rendering (white lift), false = chat/lobby sprite rendering.
+    pub lift: bool,
+}
+
+static CALIBRATION: std::sync::Mutex<Vec<CalibSample>> = std::sync::Mutex::new(Vec::new());
+
+pub fn calibration() -> Vec<CalibSample> { CALIBRATION.lock().map(|c| c.clone()).unwrap_or_default() }
+
+pub fn set_calibration(samples: Vec<CalibSample>) { if let Ok(mut c) = CALIBRATION.lock() { *c = samples; } }
+
+/// Add a sample; keeps at most 6 per (colour, rendering) so a bad click can't dominate.
+pub fn add_calibration(sample: CalibSample) -> Vec<CalibSample> {
+    let mut c = CALIBRATION.lock().unwrap_or_else(|e| e.into_inner());
+    c.push(sample.clone());
+    let n = c.iter().filter(|s| s.color == sample.color && s.lift == sample.lift).count();
+    if n > 6 {
+        if let Some(i) = c.iter().position(|s| s.color == sample.color && s.lift == sample.lift) { c.remove(i); }
+    }
+    c.clone()
+}
+
+pub fn color_from_name(name: &str) -> Option<PlayerColor> {
+    Some(match name {
+        "red" => PlayerColor::Red, "blue" => PlayerColor::Blue, "green" => PlayerColor::Green, "pink" => PlayerColor::Pink,
+        "orange" => PlayerColor::Orange, "yellow" => PlayerColor::Yellow, "black" => PlayerColor::Black, "white" => PlayerColor::White,
+        "purple" => PlayerColor::Purple, "brown" => PlayerColor::Brown, "cyan" => PlayerColor::Cyan, "lime" => PlayerColor::Lime,
+        "maroon" => PlayerColor::Maroon, "rose" => PlayerColor::Rose, "banana" => PlayerColor::Banana, "gray" => PlayerColor::Gray,
+        "tan" => PlayerColor::Tan, "coral" => PlayerColor::Coral, _ => return None,
+    })
+}

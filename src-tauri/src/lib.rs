@@ -57,6 +57,7 @@ pub fn run() {
             ipc::ocr_region,
             ipc::ocr_languages,
             ipc::read_roster,
+            ipc::calibrate_color,
             ipc::watcher_start,
             ipc::watcher_stop,
             ipc::watcher_status,
@@ -75,6 +76,7 @@ pub fn run() {
             overlay::set_overlay_clickthrough,
             overlay::overlay_visible,
         ])
+        .setup(|_app| { ipc::load_color_calibration(); Ok(()) })
         .run(tauri::generate_context!())
         .expect("error while running AboveThem");
 }

@@ -93,10 +93,13 @@ pub fn read_chat(f: &Frame, known: &[String]) -> anyhow::Result<Vec<ChatMsg>> {
             // body of that sprite (measured: SHUSH's blue at icon-local x 20..60, y 30..75); plain palette rendering
             let body = Rect::new(icon.x + (20.0 * sx) as u32, icon.y + (30.0 * sx) as u32, (40.0 * sx) as u32, (45.0 * sx) as u32);
             let color = color_name(body_color_in(f, body, false, false).0).to_string();
-            match looks_like_name(&t, known) {
-                Some((name, _)) => cur = Some(ChatMsg { sender: name, text: String::new(), mine, system: false, y: l.y, color }),
-                None => cur = Some(ChatMsg { sender: "?".into(), text: t.clone(), mine, system: false, y: l.y, color }),
-            }
+            // The first line of a bubble is the sender: snap to a known name when close, else keep it raw.
+            let sender = match looks_like_name(&t, known) {
+                Some((name, _)) => name,
+                None => if t.chars().count() <= 20 { t.clone() } else { "?".into() },
+            };
+            let text = if sender == "?" { t.clone() } else { String::new() };
+            cur = Some(ChatMsg { sender, text, mine, system: false, y: l.y, color });
         } else if let Some(m) = cur.as_mut() {
             // A name line right after a name line (no text yet) means the previous bubble was empty.
             if m.text.is_empty() {

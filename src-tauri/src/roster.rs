@@ -6,7 +6,7 @@
 //! of strongly red pixels in the icon box (the X is #E8232A-ish on a grey card).
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame};
-use crate::colors::{PlayerColor, PALETTE};
+use crate::colors::{calibration, color_from_name, PlayerColor, PALETTE};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::regions::{Rect, VoteCell, REF_H, REF_W};
 
@@ -23,6 +23,9 @@ pub struct RosterEntry {
     /// Base64 PNG headshot cropped from the icon (hat + visor + upper body), as rendered in game.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_png: Option<String>,
+    /// Mean RGB of the body pixels that voted for `color` (for user calibration).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_rgb: Option<[u8; 3]>,
 }
 
 impl PartialEq for RosterEntry {
@@ -103,33 +106,51 @@ fn grid_expected(p: [u8; 3], dead: bool, lift: bool) -> [f32; 3] {
 
 /// Body colour from the icon's body patch (below the visor, right of the backpack), by plain
 /// RGB distance to the grid-rendered palette. Skips the X band on dead cards and outlines.
-fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
+fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32, Option<[u8; 3]>) {
     let (ix, iy, _, _) = VoteCell::ICON;
     let sx = f.width as f32 / REF_W as f32;
     // Lower half of the body only: hats and held signs sit above y≈45 of the icon box.
     let r = Rect::new(cell.x + ((ix + 28) as f32 * sx) as u32, cell.y + ((iy + 48) as f32 * sx) as u32, (46.0 * sx) as u32, (40.0 * sx) as u32);
-    body_color_in(f, r, dead, true)
+    body_color_in_rgb(f, r, dead, true)
 }
 
 /// Same classifier over any body patch. `lift` = vote-grid rendering (white lift); chat icons use false.
 pub fn body_color_in(f: &Frame, r: Rect, dead: bool, lift: bool) -> (PlayerColor, f32) {
+    let (c, d, _) = body_color_in_rgb(f, r, dead, lift);
+    (c, d)
+}
+
+/// As above, also returning the mean RGB of the winning pixels (used to calibrate from user picks).
+/// User-calibrated samples (same rendering) are matched first with a tighter radius; the fixed
+/// rendering model is the fallback.
+pub fn body_color_in_rgb(f: &Frame, r: Rect, dead: bool, lift: bool) -> (PlayerColor, f32, Option<[u8; 3]>) {
     let (buf, _, _) = crop_bgra(f, r.x, r.y, r.w, r.h);
-    let mut votes: std::collections::HashMap<PlayerColor, (u32, f32)> = Default::default();
+    let calib: Vec<(PlayerColor, [f32; 3])> = calibration().into_iter().filter(|s| s.lift == lift)
+        .filter_map(|s| color_from_name(&s.color).map(|c| { let k = if dead { 0.45 } else { 1.0 }; let o = if dead { 20.0 } else { 0.0 }; (c, [k * s.rgb[0] as f32 + o, k * s.rgb[1] as f32 + o, k * s.rgb[2] as f32 + o]) })).collect();
+    let mut votes: std::collections::HashMap<PlayerColor, (u32, f32, [f32; 3])> = Default::default();
     for px in buf.chunks_exact(4) {
         let (b, g, rr) = (px[0] as f32, px[1] as f32, px[2] as f32);
         if rr.max(g).max(b) < 35.0 { continue; } // outline
         if dead && (100.0..=175.0).contains(&rr) && (40.0..=100.0).contains(&g) && (25.0..=90.0).contains(&b) && rr - g >= 35.0 { continue; } // the X
         let mut best = (PlayerColor::Unknown, f32::MAX);
-        for (c, p) in PALETTE {
-            let e = grid_expected(*p, dead, lift);
+        for (c, e) in &calib {
             let d = ((rr - e[0]).powi(2) + (g - e[1]).powi(2) + (b - e[2]).powi(2)).sqrt();
-            if d < best.1 { best = (*c, d); }
+            if d < 30.0 && d < best.1 { best = (*c, d * 0.5); } // calibrated: tighter radius, preferred
         }
-        if best.1 > 42.0 { continue; } // hats, skins, card art, visor
-        let e = votes.entry(best.0).or_insert((0, 0.0));
-        e.0 += 1; e.1 += best.1;
+        if best.0 == PlayerColor::Unknown {
+            for (c, p) in PALETTE {
+                let e = grid_expected(*p, dead, lift);
+                let d = ((rr - e[0]).powi(2) + (g - e[1]).powi(2) + (b - e[2]).powi(2)).sqrt();
+                if d < best.1 { best = (*c, d); }
+            }
+            if best.1 > 42.0 { continue; } // hats, skins, card art, visor
+        }
+        let e = votes.entry(best.0).or_insert((0, 0.0, [0.0; 3]));
+        e.0 += 1; e.1 += best.1; e.2[0] += rr; e.2[1] += g; e.2[2] += b;
     }
-    votes.into_iter().max_by_key(|(_, (n, _))| *n).filter(|(_, (n, _))| *n >= 25).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
+    votes.into_iter().max_by_key(|(_, (n, _, _))| *n).filter(|(_, (n, _, _))| *n >= 25)
+        .map(|(c, (n, d, sum))| (c, d / n as f32, Some([(sum[0] / n as f32) as u8, (sum[1] / n as f32) as u8, (sum[2] / n as f32) as u8])))
+        .unwrap_or((PlayerColor::Unknown, 99.0, None))
 }
 
 /// Headshot crop of the card icon: hat, visor and shoulders with a comfortable margin
@@ -157,10 +178,26 @@ pub fn color_name(c: PlayerColor) -> &'static str {
     }
 }
 
+/// Is the chat panel open (covering the vote grid)? Either the Send button or the "N/100" counter is readable.
+pub fn chat_is_open(f: &Frame) -> bool {
+    let reg = crate::regions::Regions::default().for_frame(f.width, f.height);
+    let read = |r: Rect| -> String {
+        let (c, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+        let (u, uw, uh) = upscale_bgra(&c, w, h, 2);
+        ocr_bgra(&u, uw, uh, None).map(|o| o.lines.iter().map(|l| l.text.clone()).collect::<Vec<_>>().join(" ")).unwrap_or_default()
+    };
+    let send = read(reg.chat_send);
+    if fuzzy_best(send.trim(), ["Send"]).map(|b| b.1 > 0.7).unwrap_or(false) { return true; }
+    let counter = read(reg.chat_counter);
+    counter.contains("/100") || counter.contains("/ 100") || counter.contains("I100")
+}
+
 /// Read every occupied vote-grid cell. `known_names` (from the lobby or a previous read) snaps OCR output.
+/// Returns an empty read when the chat panel covers the grid.
 pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<RosterRead> {
     let t0 = std::time::Instant::now();
     let mut entries = Vec::new();
+    if chat_is_open(f) { return Ok(RosterRead { entries, ocr_ms: t0.elapsed().as_millis() as u64 }); }
     for index in 0..(VoteCell::ROWS * VoteCell::COLS) {
         let cell = cell_in_frame(index, f);
         if cell.x + cell.w > f.width || cell.y + cell.h > f.height { break; }
@@ -188,8 +225,8 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
             _ => (raw.clone(), if placeholder { 0.2 } else if known_names.is_empty() { 0.8 } else { 0.4 }),
         };
         let dead = dead_x_score(f, cell) >= 700;
-        let (color, delta) = icon_color(f, cell, dead);
-        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell) });
+        let (color, delta, body_rgb) = icon_color(f, cell, dead);
+        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell), body_rgb });
     }
     // The reporter/caller has a megaphone badge at the cell's top-right; approximate with a red-ish badge check.
     for e in entries.iter_mut() {
