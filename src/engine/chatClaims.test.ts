@@ -59,6 +59,11 @@ describe('chat → claims', () => {
     expect(p('yell this is your second report', 'green')).toEqual([{ type: 'accusation', about: 'yellow', reason: 'self report' }]);
   });
 
+  it('own colour statements and sus lists', () => {
+    expect(p('im cyan', 'white')).toEqual([{ type: 'myColor', color: 'cyan' }]);
+    expect(p('blue is in my sus list', 'white')).toEqual([{ type: 'accusation', about: 'blue' }]);
+  });
+
   it('tasks and bodies', () => {
     expect(p('i did wires in elec', 'green')).toEqual([{ type: 'task', taskId: 'fixWiring', room: 'electrical' }]);
     expect(p('body in storage', 'green')).toEqual([{ type: 'body', room: 'storage' }]);

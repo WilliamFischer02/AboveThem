@@ -91,8 +91,8 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length];
 }
 
-export type ParsedKind = ClaimType | 'body' | 'dead';
-export interface ParsedClaim { type: ParsedKind; room?: RoomId; about?: PlayerId; about2?: PlayerId; taskId?: string; reason?: string }
+export type ParsedKind = ClaimType | 'body' | 'dead' | 'myColor';
+export interface ParsedClaim { type: ParsedKind; room?: RoomId; about?: PlayerId; about2?: PlayerId; taskId?: string; reason?: string; color?: string }
 
 /** Resolve a word (colour or name fragment) to a player. */
 export function resolvePlayer(word: string, m: MatchState, exclude?: PlayerId): PlayerId | undefined {
@@ -155,7 +155,7 @@ const ROOM = '([a-z0-9 ]{2,20})';
 export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): ParsedClaim[] {
   let t = ' ' + norm(text) + ' ';
   const out: ParsedClaim[] = [];
-  const add = (c: ParsedClaim) => { if (!out.some(o => o.type === c.type && o.room === c.room && o.about === c.about && o.taskId === c.taskId)) out.push(c); };
+  const add = (c: ParsedClaim) => { if (!out.some(o => o.type === c.type && o.room === c.room && o.about === c.about && o.taskId === c.taskId && o.color === c.color)) out.push(c); };
   // Run a pattern, call `f` on each match, and blank the matched span so later patterns don't reuse it.
   const run = (re: RegExp, f: (mm: RegExpMatchArray) => boolean) => {
     for (const mm of [...t.matchAll(re)]) {
@@ -174,6 +174,14 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
   // 1b. "X is dead" / "X died" / "X got killed" → status, not a claim.
   run(new RegExp(`\\b${P} (?:is dead|died|got killed|was killed|is ded|dead)\\b`, 'g'), mm => {
     const about = resolveAny(mm[1], m); if (about) { add({ type: 'dead', about }); return true; } return false;
+  });
+  // 1a. "im cyan" / "i am red": the sender states their own colour (association signal).
+  run(new RegExp(`\\b(?:im|i m|i am|i'm) (red|blue|green|pink|orange|yellow|black|white|purple|brown|cyan|lime|maroon|rose|banana|gray|grey|tan|coral)\\b`, 'g'), mm => {
+    add({ type: 'myColor', color: mm[1] === 'grey' ? 'gray' : mm[1] }); return true;
+  });
+  // 1c'. "X is in my sus list" / "X on my sus list".
+  run(new RegExp(`\\b${P} (?:is |s )?(?:in|on) my sus(?:pect)? list`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about }); return true; } return false;
   });
   // 1c. "its X or Y" / "X or Y" (two suspects) and "so X" (short verdict).
   run(new RegExp(`\\b(?:its |it s |it is |either )?${P} or ${P}\\b`, 'g'), mm => {
@@ -285,7 +293,7 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
 
 /** Turn parsed claims into Claim records (body locations are observations, handled by the caller). */
 export function toClaims(parsed: ParsedClaim[], base: Omit<Claim, 'type' | 'room' | 'about' | 'text' | 'id'>, text: string, idGen: () => string): Claim[] {
-  return parsed.filter(p => p.type !== 'body' && p.type !== 'dead').map(p => ({
+  return parsed.filter(p => p.type !== 'body' && p.type !== 'dead' && p.type !== 'myColor').map(p => ({
     ...base, id: idGen(), type: p.type as ClaimType, room: p.room, about: p.about, taskId: p.taskId,
     text: p.reason ? `${text} [${p.reason}]` : p.about2 ? `${text} [+${p.about2}]` : undefined, verification: 'pending',
   }));

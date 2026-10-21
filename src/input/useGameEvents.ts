@@ -369,6 +369,16 @@ export function useGameEvents() {
               useMatch.getState().observe({ type: 'bodyFound', victim: 'unknown', room: b.room!, source: 'ocr', confidence: 0.6 }, `Body in ${live.map.rooms.find(r => r.id === b.room)?.name ?? b.room} (chat)`);
             }
           }
+          for (const mc of parsed.filter(x => x.type === 'myColor' && x.color)) {
+            const live = useMatch.getState().match!;
+            const pl = live.players[sender];
+            const clash = Object.values(live.players).find(x => x.id !== sender && x.color === mc.color);
+            if (pl && !pl.colorLocked && pl.color !== mc.color && (!clash || !clash.colorLocked)) {
+              if (clash) s.dispatch({ kind: 'player', payload: { id: clash.id, color: pl.color } });
+              s.dispatch({ kind: 'player', payload: { id: pl.id, color: mc.color as PlayerColor } });
+              s.showToast(`${pl.name} says they are ${mc.color} (chat)`);
+            }
+          }
           for (const d of parsed.filter(x => x.type === 'dead' && x.about)) {
             const live = useMatch.getState().match!;
             const pl = live.players[d.about!];
