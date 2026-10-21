@@ -298,13 +298,32 @@ export function useGameEvents() {
         if (!s.match) return;
         const meeting = s.match.phase.meeting ?? 0;
         for (const msg of e.payload) {
-          if (msg.system) continue;
+          if (msg.system) {
+            const left = msg.text.match(/^(.*?) (?:has )?left the game/i);
+            if (left) { const mm = useMatch.getState().match!; const p = fuzzyFind(left[1], Object.values(mm.players)); if (p && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); }
+            continue;
+          }
           const m = useMatch.getState().match!;
           const others = Object.values(m.players).filter(p => !p.isMe);
           let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
             const byColor = others.filter(p => p.color === msg.color);
             if (byColor.length === 1 && msg.sender && similarity(norm(msg.sender), norm(byColor[0].name)) > 0.4) sender = byColor[0].id;
+          }
+          // Chat icon colours (plain palette, reliable): a second vote for an unlocked card colour.
+          if (sender !== 'unknown' && !msg.mine && msg.color && msg.color !== 'unknown') {
+            const p = m.players[sender];
+            if (p && !p.colorLocked && p.color !== msg.color) {
+              const v = colorVotes.get(p.id);
+              const n = v && v.color === msg.color ? v.n + 1 : 1;
+              colorVotes.set(p.id, { color: msg.color, n });
+              const clash = Object.values(m.players).find(x => x.id !== p.id && x.color === msg.color);
+              if (n >= 2 && (!clash || !clash.colorLocked)) {
+                if (clash) s.dispatch({ kind: 'player', payload: { id: clash.id, color: p.color } });
+                s.dispatch({ kind: 'player', payload: { id: p.id, color: msg.color as PlayerColor } });
+                colorVotes.delete(p.id);
+              }
+            }
           }
           if (sender === 'unknown' && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
             // Chat bubbles are a roster source too: a new name with a readable icon becomes a player.

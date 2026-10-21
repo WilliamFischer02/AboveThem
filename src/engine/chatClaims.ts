@@ -22,7 +22,7 @@ const ROOM_ALIASES: Record<string, string[]> = {
   medbay: ['med', 'medbay', 'medical', 'scan room'],
   security: ['sec', 'security', 'cams', 'cameras', 'cam'],
   communications: ['comms', 'coms', 'communications', 'com', 'comm'],
-  o2: ['o2', 'oxygen'],
+  o2: ['o2', 'oxygen', '02', 'o 2', 'oz'],
   storage: ['storage', 'store'],
   shields: ['shields', 'shield'],
   weapons: ['weapons', 'weps', 'weapon'],
@@ -79,6 +79,8 @@ const TASK_ALIASES: Record<string, string[]> = {
 const COLOR_WORDS = ['red', 'blue', 'green', 'pink', 'orange', 'yellow', 'black', 'white', 'purple', 'brown', 'cyan', 'lime', 'maroon', 'rose', 'banana', 'gray', 'grey', 'tan', 'coral'];
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+/** "limeeee" → "lime", "reddd" → "red": collapse letters repeated 3+ times. */
+const squash = (w: string) => w.replace(/(.)\1{2,}/g, '$1');
 
 function levenshtein(a: string, b: string): number {
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -97,8 +99,12 @@ export function resolvePlayer(word: string, m: MatchState, exclude?: PlayerId): 
   const w = norm(word);
   if (!w || w === 'me' || w === 'i' || w === 'you' || w === 'u') return undefined;
   const players = Object.values(m.players).filter(p => p.id !== exclude);
-  const cw = w === 'grey' ? 'gray' : w;
+  const cw = squash(w === 'grey' ? 'gray' : w);
   if (COLOR_WORDS.includes(cw)) return players.find(p => p.color === cw)?.id;
+  if (cw === 'purp') return players.find(p => p.color === 'purple')?.id;
+  if (cw === 'yel' || cw === 'yellw') return players.find(p => p.color === 'yellow')?.id;
+  if (cw === 'blu') return players.find(p => p.color === 'blue')?.id;
+  if (cw === 'org' || cw === 'orng') return players.find(p => p.color === 'orange')?.id;
   let best: { id: PlayerId; score: number } | null = null;
   for (const p of players) {
     const n = norm(p.name);
@@ -171,6 +177,14 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
     if (about) { add({ type: 'accusation', about, about2: victim, reason: 'kill' }); return true; } return false;
   });
 
+  // 2b. Near the body: "saw X (walk|run|come) (away )?from (the )?body", "X was (near|next to|by|with) (the )?body", "X ran from body".
+  run(new RegExp(`\\b(?:i )?(?:saw|seen) ${P} (?:walk|walking|run|running|come|coming|leave|leaving|go|going)(?: away| out| straight)? from (?:the )?body`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about, reason: 'left body' }); return true; } return false;
+  });
+  run(new RegExp(`\\b${P} (?:was |is )?(?:near|next to|by|with|on|over|standing on|at) (?:the )?body`, 'g'), mm => {
+    const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'accusation', about, reason: 'near body' }); return true; } return false;
+  });
+
   // 3. Defenses / negations: "not blue", "blue is not sus", "blue is fine/innocent", "wasnt blue", "its not blue".
   run(new RegExp(`\\b(?:its |it s |it is )?(?:not|wasnt|wasn t|isnt|isn t) ${P}\\b`, 'g'), mm => {
     const about = resolveAny(mm[1], m, sender); if (about) { add({ type: 'defense', about }); return true; } return false;
@@ -236,6 +250,9 @@ export function parseChatClaims(text: string, sender: PlayerId, m: MatchState): 
   });
 
   // 10. My location (subject must be me): "i was in X", "im in X", "i went to X", "was in X" at sentence start, "in X the whole time".
+  run(new RegExp(`(?:^|\\s)(?:i was coming out from|i was coming from|i came from|coming from|came from|i just left|i left|leaving) ${ROOM}`, 'g'), mm => {
+    const room = resolveRoom(mm[1], m); if (room) { add({ type: 'location', room }); return true; } return false;
+  });
   run(new RegExp(`(?:^|\\s)(?:i was|i m|im|i am|i went|i have been|ive been|i stayed|was|went|been|i) (?:in|at|to|near|by) ${ROOM}`, 'g'), mm => {
     const room = resolveRoom(mm[1], m); if (room) { add({ type: 'location', room }); return true; } return false;
   });
