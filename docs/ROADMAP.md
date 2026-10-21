@@ -23,12 +23,12 @@ No OCR yet. Everything typed/clicked/hotkeyed.
 *faster* than a notepad and the meeting script should be usable at least once per game.
 
 ## Phase 2 — Screen capture + phase detection + roster OCR
-- [ ] Capture Among Us window via Windows Graphics Capture; calibration screen with draggable ROIs saved per resolution
-- [ ] Phase state machine from UI markers (lobby/round/meeting/voting/eject/end)
-- [ ] Vote grid OCR → roster auto-populated (names + colors + alive/dead)
-- [ ] Ejection text OCR → engine update
-- [ ] Own task list OCR; detects Impostor via "Fake Tasks" header or role card
-- [ ] Fixture screenshots in `src-tauri/fixtures/screens/` with an OCR regression test
+- [x] Capture Among Us window via Windows Graphics Capture (calibration screen still TODO; ROIs measured for 1920×1080)
+- [x] Phase state machine from UI markers (lobby/round/meeting/eject; game-over TODO)
+- [x] Vote grid OCR → roster auto-populated (names + alive/dead reliable; colours best-effort)
+- [x] Ejection text OCR → engine update
+- [~] Role card OCR → my role (task list OCR works, not wired)
+- [x] Fixture screenshots in `src-tauri/fixtures/screens/` with an OCR regression test
 **Acceptance:** start a lobby, app auto-fills roster and flips to meeting mode by itself ≥ 90 % of meetings.
 
 ## Phase 3 — Chat OCR + translator

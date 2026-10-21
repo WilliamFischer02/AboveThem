@@ -45,8 +45,11 @@ Translator / paste: Phase 3 — keys TBD (must not reuse colour letters)
 Impostor chords: Phase 4 — keys TBD (the old `k`/`s` collide with Black/Rose)
 ```
 
-Implementation: ADR-009. The 18 colour letters own the whole first layer, so
-every non-colour chord uses a non-letter first key.
+Implementation: ADR-009 + ADR-013 — the prefix is HELD for both keys
+(`Ctrl+Alt+R` then `Ctrl+Alt+E`), so WASD/E/R/Q are never intercepted. The 18
+colour letters own the whole first layer, so every non-colour chord uses a
+non-letter first key. Each roster chip also has one-click `here` / `with me` /
+`sus` buttons, and clicking a chip shows the room grid directly.
 
 Chord feedback: a 1.5-s toast in the overlay corner shows what was logged; while
 a chord is pending the toast shows the first key and waits for the second.

@@ -105,3 +105,32 @@ game-like font). We don't ship Innersloth assets. The crewmate is our own SVG
 (`src/ui/components/Crewmate.tsx`) coloured from the palette; the font is
 Fredoka (SIL OFL, bundled) with an optional git-ignored
 `src/assets/fonts/custom/ui.ttf` slot that wins if present.
+
+## ADR-011 — Automatic game reading: pull-based watcher, markers by dhash + OCR
+**Date:** 2026-10-21
+**Status:** accepted (live-tested once)
+**Why:** William wants zero-trigger operation. A background thread polls the
+latest captured frame at 5 Hz, hashes five small marker regions and OCRs a
+region only when its pixels changed and settled (≈ 40 ms each). Markers drive
+the phase state machine with hysteresis; roster/eject/role/lobby are emitted
+as `game://*` events the frontend applies to the store. Pull-based + latest-
+frame-only means a slow OCR never backs up and the game is never touched.
+**Consequences:** the frontend's manual controls become fallbacks; every auto
+action shows a toast with "(auto)" so mistakes are visible and undoable.
+
+## ADR-012 — Colour classification is brightness-invariant; names are identity
+**Date:** 2026-10-21
+**Status:** accepted
+**Why:** vote-grid icons are shaded half-bodies behind cosmetics and dead cards
+are dimmed; Lab ΔE mislabelled them. Comparing the RGB *direction* (normalised
+by max channel) with a saturation term and a "cannot be brighter than the
+candidate" penalty gets strong hues right; warm hues stay ambiguous. So the
+roster keys on OCR'd names (snapped to known names), colour is a hint the user
+can correct with one click, and the engine never depends on colour.
+
+## ADR-013 — Hotkey chords hold the prefix for both keys
+**Date:** 2026-10-21
+**Status:** accepted (supersedes ADR-009's temporary bare second layer)
+**Why:** William plays with WASD; registering bare letters even for 1.5 s was a
+risk. Both keys now carry `Ctrl+Alt`; the same physical shortcut is a colour
+as first key and a room as second, disambiguated by the pending state.
