@@ -10,6 +10,9 @@ import { Toast } from '../components/Toast';
 import { useHotkeys } from '../../input/useHotkeys';
 import { buildConfig, keyLabel, ACTION_KEYS, FIRST_SPECIAL } from '../../input/hotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
+import { useOverlay } from '../overlay/useOverlay';
+import { CapturePanel } from '../components/CapturePanel';
+import { AutoStatus } from '../components/AutoStatus';
 
 function useNow(ms = 500) {
   const [, setTick] = useState(0);
@@ -24,6 +27,7 @@ export function MatchScreen() {
   const diskError = useMatch(s => s.diskError);
   const matchId = useMatch(s => s.matchId);
   const hk = useHotkeys();
+  const ov = useOverlay(hk.pending);
   useNow();
 
   const scores = useMemo(() => scoreAll(match), [match]);
@@ -52,19 +56,23 @@ export function MatchScreen() {
           {phase === 'round' && <button className="btn warn" onClick={() => setPhase('meetingDiscussion', { reason: 'button' })}>🔔 Emergency meeting</button>}
           {inMeeting && <button className="btn" onClick={() => setPhase('ejection')}>Voting done</button>}
           {phase !== 'gameOver' && phase !== 'lobby' && <button className="btn ghost sm" onClick={() => setPhase('gameOver')}>Game over</button>}
-          <button className="btn ghost sm right" onClick={closeMatch}>Close match</button>
+          <button className={`btn sm right ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
+          <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
         </div>
+        <AutoStatus />
         <div className="row small">
           <span className={hk.registered === 'global' ? 'status-ok' : 'muted'}>
             hotkeys: {hk.registered === 'global' ? 'global (work while Among Us is focused)' : hk.registered === 'window' ? 'window only' : 'off'}
           </span>
           {hk.error && <span className="status-err">{hk.error}</span>}
+          {ov.error && <span className="status-err">overlay: {ov.error}</span>}
           {diskError && <span className="status-err">disk: {diskError}</span>}
           {matchId && <span className="muted right">log: matches/{matchId}.ndjson</span>}
         </div>
         {script && <MeetingPanel script={script} scores={scores} />}
         <Roster scores={scores} />
         <Timeline />
+        <CapturePanel knownNames={Object.values(match.players).map(p => p.name)} />
         <CheatSheet />
       </div>
       <Toast pending={hk.pending} />

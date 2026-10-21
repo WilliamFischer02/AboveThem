@@ -69,7 +69,8 @@ export function applyAction(a: ChordAction): void {
 
 export function useHotkeys(): { pending: string | null; registered: 'global' | 'window' | 'off'; error: string | null } {
   const map = useMatch(s => s.match?.map ?? null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPendingLocal] = useState<string | null>(null);
+  const setPending = (code: string | null) => { setPendingLocal(code); useMatch.getState().setPending(code); };
   const [registered, setRegistered] = useState<'global' | 'window' | 'off'>('off');
   const [error, setError] = useState<string | null>(null);
 

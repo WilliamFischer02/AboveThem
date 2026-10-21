@@ -1,6 +1,6 @@
 //! Player color classification by nearest palette entry in CIELAB.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlayerColor {
     Red, Blue, Green, Pink, Orange, Yellow, Black, White, Purple, Brown, Cyan, Lime,
     Maroon, Rose, Banana, Gray, Tan, Coral, Unknown,
@@ -19,25 +19,32 @@ pub const PALETTE: &[(PlayerColor, [u8; 3])] = &[
     (PlayerColor::Tan,    [0x92, 0x87, 0x76]), (PlayerColor::Coral,  [0xEC, 0x75, 0x78]),
 ];
 
-fn srgb_to_lab(rgb: [u8; 3]) -> [f32; 3] {
-    let f = |c: u8| { let c = c as f32 / 255.0; if c > 0.04045 { ((c + 0.055) / 1.055).powf(2.4) } else { c / 12.92 } };
-    let (r, g, b) = (f(rgb[0]), f(rgb[1]), f(rgb[2]));
-    let x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047;
-    let y =  r * 0.2126 + g * 0.7152 + b * 0.0722;
-    let z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
-    let g = |t: f32| if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16.0 / 116.0 };
-    let (fx, fy, fz) = (g(x), g(y), g(z));
-    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+/// Brightness-invariant colour direction: RGB divided by its max channel, plus saturation.
+fn direction(rgb: [u8; 3]) -> ([f32; 3], f32) {
+    let max = rgb.iter().copied().max().unwrap().max(1) as f32;
+    let min = rgb.iter().copied().min().unwrap() as f32;
+    ([rgb[0] as f32 / max, rgb[1] as f32 / max, rgb[2] as f32 / max], (max - min) / max)
 }
 
-/// Nearest palette color and the ΔE distance. Callers should treat ΔE > ~18 as Unknown.
+/// Nearest palette colour and a distance (0 = exact; treat > ~35 as Unknown).
+///
+/// Sprites are shaded and vote cards are dimmed, so plain ΔE in Lab mislabels dark
+/// bodies (dark blue → black/purple). Comparing the *direction* of the colour (RGB
+/// normalised by its max channel) with a small saturation term is invariant to
+/// uniform darkening and was validated on real vote-grid frames.
 pub fn classify(rgb: [u8; 3]) -> (PlayerColor, f32) {
-    let lab = srgb_to_lab(rgb);
+    let (d, s) = direction(rgb);
     let mut best = (PlayerColor::Unknown, f32::MAX);
+    let obs_max = rgb.iter().copied().max().unwrap() as f32;
     for (c, p) in PALETTE {
-        let l = srgb_to_lab(*p);
-        let d = ((lab[0]-l[0]).powi(2) + (lab[1]-l[1]).powi(2) + (lab[2]-l[2]).powi(2)).sqrt();
-        if d < best.1 { best = (*c, d); }
+        let (pd, ps) = direction(*p);
+        let mut dist = ((d[0]-pd[0]).powi(2) + (d[1]-pd[1]).powi(2) + (d[2]-pd[2]).powi(2)).sqrt() * 100.0 + (s - ps).abs() * 30.0;
+        // Shading/dimming only ever darkens: a pixel clearly brighter than the candidate cannot be
+        // that candidate (separates brown/orange, maroon/red, black/gray/white, tan/banana).
+        let pal_max = p.iter().copied().max().unwrap() as f32;
+        let ratio = obs_max / pal_max;
+        if ratio > 1.3 { dist += (ratio - 1.3) * 150.0; }
+        if dist < best.1 { best = (*c, dist); }
     }
     best
 }
@@ -48,6 +55,15 @@ mod tests {
     #[test]
     fn exact_palette_matches() {
         for (c, p) in PALETTE { assert_eq!(classify(*p).0, *c); }
+    }
+    #[test]
+    fn dimmed_and_shaded_bodies_keep_their_colour() {
+        assert_eq!(classify([48, 96, 240]).0, PlayerColor::Blue);   // SHUSH's body on a real frame
+        assert_eq!(classify([96, 240, 240]).0, PlayerColor::Cyan);  // Timetrast
+        assert!(matches!(classify([240, 144, 72]).0, PlayerColor::Orange | PlayerColor::Coral)); // Waxscarce (icon shading)
+        assert_eq!(classify([0x09, 0x15, 0x8E]).0, PlayerColor::Blue); // blue sprite shadow
+        assert_eq!(classify([0x0A, 0x4D, 0x2E]).0, PlayerColor::Green); // green sprite shadow
+        assert_eq!(classify([0x7A, 0x08, 0x38]).0, PlayerColor::Red);   // red sprite shadow (maroon-ish, still red)
     }
     #[test]
     fn shaded_red_is_still_red() {

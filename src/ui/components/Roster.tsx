@@ -4,13 +4,32 @@ import { useMatch } from '../../state/store';
 import { Crewmate } from './Crewmate';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE } from '../palette';
+import { useAuto } from '../App';
 
 type MenuMode = 'main' | 'seen' | 'victim' | 'kill';
 
 export function Roster({ scores }: { scores: SuspectScore[] }) {
   const match = useMatch(s => s.match);
+  const dispatch = useMatch(s => s.dispatch);
+  const auto = useAuto();
   const [open, setOpen] = useState<PlayerId | null>(null);
   if (!match) return null;
+  if (auto?.meGuessed) {
+    const pick = (id: PlayerId) => { dispatch({ kind: 'me', payload: { id } }); auto.setMeGuessed(false); };
+    return (
+      <section className="panel">
+        <h3>Which crewmate is you?</h3>
+        <div className="roster">
+          {Object.values(match.players).map(p => (
+            <div key={p.id} className="chip" onClick={() => pick(p.id)}>
+              <Crewmate color={p.color} size={46} state={p.status === 'alive' ? 'alive' : 'dead'} />
+              <div className="name">{p.name}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
   const byId = Object.fromEntries(scores.map(s => [s.player, s]));
   const players = Object.values(match.players).sort((a, b) => (a.isMe ? -1 : b.isMe ? 1 : 0) || a.name.localeCompare(b.name));
   return (
@@ -63,7 +82,25 @@ function Chip({ p, score, open, onToggle, onClose }: { p: Player; score?: Suspec
       {pct !== null && p.status === 'alive' && (
         <div className="bar"><i style={{ width: `${verdict === 'certainImpostor' ? 100 : verdict === 'certainCrew' || verdict === 'hardClear' ? 0 : pct}%` }} /></div>
       )}
+      {!p.isMe && p.status === 'alive' && <QuickActions p={p} />}
       {open && <ChipMenu p={p} onClose={onClose} />}
+    </div>
+  );
+}
+
+/** One-click actions that cover ~80 % of what gets logged in a round. */
+function QuickActions({ p }: { p: Player }) {
+  const match = useMatch(s => s.match)!;
+  const observe = useMatch(s => s.observe);
+  const here = myRoomNow(match);
+  const stop = (e: React.MouseEvent) => { e.stopPropagation(); };
+  const withMe = withMeNow(match, p.id);
+  return (
+    <div className="quick" onClick={stop} onMouseDown={stop}>
+      <button className="btn xs" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first (prefix + / + room)'} disabled={!here}
+        onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁 here</button>
+      <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0].id, on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
+      <button className="btn xs warn" onClick={() => observe({ type: 'manualMark', player: p.id, mark: 'sus' }, `${p.name} marked sus`)}>sus</button>
     </div>
   );
 }
@@ -105,12 +142,8 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
     <div className="menu" onClick={stop} onMouseDown={stop}>
       {mode === 'main' && (
         <>
-          <div className="row">
-            <button className="btn sm" onClick={() => setMode('seen')}>Seen in…</button>
-            <button className="btn sm" onClick={() => { const on = !withMeNow(match, p.id); observe({ type: 'withMe', player: p.id, room: here, on }, on ? `${p.name} with me` : `${p.name} left me`); done(); }}>
-              {withMeNow(match, p.id) ? 'Left me' : 'With me'}
-            </button>
-          </div>
+          <div className="muted small">{p.name} seen in… <label className="check small" style={{ marginLeft: 8 }}><input type="checkbox" checked={alone} onChange={e => setAlone(e.target.checked)} /> alone</label></div>
+          {rooms(r => { observe({ type: 'sighting', player: p.id, room: r, alone }, `${p.name} in ${roomName(match, r)}${alone ? ' (alone)' : ''}`); done(); })}
           <div className="row">
             <button className="btn sm" onClick={() => { observe({ type: 'sawTask', player: p.id, room: here, visualConfirmed: true }, `${p.name} VISUAL task in ${roomName(match, here)}`); done(); }}>Saw visual task</button>
             <button className="btn sm" onClick={() => { observe({ type: 'sawTask', player: p.id, room: here, visualConfirmed: false }, `${p.name} at a task in ${roomName(match, here)}`); done(); }}>At a task</button>

@@ -36,6 +36,10 @@ export type MatchEvent =
   | { kind: 'player'; wall: number; payload: Partial<Player> & { id: PlayerId } }
   | { kind: 'settings'; wall: number; payload: Partial<LobbySettings> }
   | { kind: 'myRole'; wall: number; payload: { role: Role } }
+  /** Re-point "me" at another player (auto-roster could not tell which crewmate is the user). */
+  | { kind: 'me'; wall: number; payload: { id: PlayerId } }
+  /** Add a player discovered mid-match (auto-roster). */
+  | { kind: 'addPlayer'; wall: number; payload: Player }
   /** Removes the most recent not-yet-undone undoable event. */
   | { kind: 'undo'; wall: number };
 
@@ -105,6 +109,12 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
     case 'player': return patchPlayer(m, e.payload.id, e.payload);
     case 'settings': return { ...m, settings: { ...m.settings, ...e.payload }, map: e.payload.map ? MAPS[e.payload.map] : m.map };
     case 'myRole': return { ...m, myRole: e.payload.role };
+    case 'me': {
+      const players: Record<PlayerId, Player> = {};
+      for (const p of Object.values(m.players)) players[p.id] = { ...p, isMe: p.id === e.payload.id, knownRole: p.id === e.payload.id ? m.myRole : p.id === m.me ? 'unknown' : p.knownRole };
+      return { ...m, me: e.payload.id, players };
+    }
+    case 'addPlayer': return m.players[e.payload.id] ? m : { ...m, players: { ...m.players, [e.payload.id]: e.payload } };
   }
 }
 

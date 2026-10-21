@@ -7,6 +7,10 @@ import { Crewmate } from '../components/Crewmate';
 import { DEFAULT_SETTINGS, loadPresets, savePreset, normalizeCode, type LobbyPreset, type PresetPlayer } from '../../state/presets';
 import { persist, type MatchFile } from '../../state/persist';
 import { fixture } from '../../engine/__fixtures__/skeld_match_01';
+import { CapturePanel, type RosterEntry } from '../components/CapturePanel';
+import { AutoStatus } from '../components/AutoStatus';
+import { useAuto } from '../App';
+import { saveSettings } from '../../state/settings';
 
 export function SetupScreen() {
   const newMatch = useMatch(s => s.newMatch);
@@ -19,6 +23,7 @@ export function SetupScreen() {
   const [presets, setPresets] = useState<Record<string, LobbyPreset>>({});
   const [recent, setRecent] = useState<MatchFile[]>([]);
   const [dir, setDir] = useState('');
+  const auto = useAuto();
 
   // Dev only: Ctrl+Alt+D starts the fixture demo lobby (used by the hotkey smoke test).
   useEffect(() => {
@@ -61,6 +66,20 @@ export function SetupScreen() {
     <div className="shell">
       <header className="topbar"><div className="brand">Above<span>Them</span></div><span className="muted small right">lobby setup</span></header>
       <div className="content">
+        <AutoStatus />
+        {auto?.settings && (
+          <section className="panel tight">
+            <div className="row">
+              <label className="field">my in-game name (so the auto-roster knows which crewmate is you)
+                <input className="input" value={auto.settings.myName} placeholder="exactly as shown in game"
+                  onChange={e => auto.setSettings({ ...auto.settings!, myName: e.target.value })}
+                  onBlur={() => auto.settings && saveSettings(auto.settings)} />
+              </label>
+              <label className="check"><input type="checkbox" checked={auto.settings.autoCapture} onChange={e => { const n = { ...auto.settings!, autoCapture: e.target.checked }; auto.setSettings(n); saveSettings(n); }} /> read the game automatically</label>
+            </div>
+            <div className="muted small">With this on, the first meeting fills the roster by itself; round start, meetings and ejections are detected from the screen. Manual setup below is the fallback.</div>
+          </section>
+        )}
         <section className="panel">
           <h3>Lobby</h3>
           <div className="row">
@@ -138,6 +157,18 @@ export function SetupScreen() {
           )}
           {!canStart && <div className="muted small" style={{ marginTop: 4 }}>Need ≥ 3 players and pick which one is you.</div>}
         </section>
+
+        <CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
+          const used = new Set<string>();
+          const next: PresetPlayer[] = [];
+          for (const e of entries) {
+            let color = (e.color === 'unknown' ? 'gray' : e.color) as PlayerColor;
+            if (used.has(color)) { const free = COLOR_IDS.find(c => !used.has(c)); if (!free) continue; color = free; }
+            used.add(color);
+            next.push({ id: color, color, name: e.name });
+          }
+          setPlayers(next);
+        }} />
 
         <section className="panel">
           <h3>Recent matches</h3>

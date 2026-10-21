@@ -2,9 +2,10 @@
  * Hotkey chords: key codes ↔ meaning. Pure TS so the mapping is testable; the
  * Tauri wiring (register + listen) is in `useHotkeys.ts`.
  *
- * Layer 1 (after the prefix):  a colour key, Space (body), Slash (my room), z (undo),
- *                              Backquote (toggle overlay).
- * Layer 2 (bare key ≤ 1.5 s later): a room key, or an action:
+ * Both keys are pressed WITH the prefix held (Ctrl+Alt): plain WASD/E/R/Q are never
+ * intercepted from the game.
+ * Layer 1: prefix + colour key, Space (body), Slash (my room), z (undo), Backquote (overlay).
+ * Layer 2 (≤ 1.5 s later, prefix still held): a room key, or an action:
  *     .  with me      v  saw visual task     !  saw vent     k  saw kill
  *     +  mark sus     -  mark clear
  *

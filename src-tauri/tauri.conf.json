@@ -22,7 +22,9 @@
         "transparent": false,
         "focus": false,
         "minWidth": 420,
-        "minHeight": 600
+        "minHeight": 600,
+        "x": -1900,
+        "y": 100
       }
     ],
     "security": {

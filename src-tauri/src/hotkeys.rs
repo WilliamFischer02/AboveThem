@@ -1,21 +1,17 @@
 //! Global hotkey chords → `hotkey://chord` events. Phase 1.
 //!
-//! Chord model (docs/UI_SPEC.md): `<prefix>+<first>` then, within `chord_timeout_ms`,
-//! a bare `<second>` key. The frontend owns the key→meaning mapping (colors, rooms
-//! per map, actions); this module only knows key codes.
+//! Chord model (docs/UI_SPEC.md, ADR-009 rev 2): `<prefix>+<first>` then, within
+//! `chord_timeout_ms`, `<prefix>+<second>` — the prefix (Ctrl+Alt) stays held
+//! for BOTH keys. Every registered shortcut carries the prefix, so no bare key
+//! (WASD, E, R, Q, Tab...) is ever intercepted from the game. The frontend owns
+//! the key→meaning mapping (colours, rooms per map, actions); this module only
+//! knows key codes and whether a chord is pending.
 //!
-//! Mechanism: the prefix chords are registered permanently with
-//! `tauri-plugin-global-shortcut` (RegisterHotKey under the hood). When a prefix
-//! chord fires, the second-layer keys are registered *temporarily* as bare global
-//! hotkeys, so the second keypress reaches us even while Among Us has focus, and
-//! are unregistered again on completion or timeout. While they are registered the
-//! game does not receive those keys — that is the price of a two-keystroke chord
-//! without a low-level keyboard hook, and it only lasts ≤ 1.5 s after a prefix.
+//! The same physical shortcut (e.g. Ctrl+Alt+R) is "Red" as a first key and
+//! "Reactor" as a second key; the pending state disambiguates.
 //!
-//! UNVERIFIED (needs a live test with Among Us focused in fullscreen-windowed):
-//! RegisterHotKey-based shortcuts are expected to work there because the game
-//! does not use raw input exclusively; if the game swallows them, the fallback
-//! is a WH_KEYBOARD_LL hook (see docs/handoff.md).
+//! UNVERIFIED with Among Us focused in fullscreen-windowed — being tested live.
+//! Fallback if the game swallows RegisterHotKey: WH_KEYBOARD_LL hook thread.
 
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -28,11 +24,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, Short
 pub struct HotkeyConfig {
     /// e.g. "Ctrl+Alt"
     pub prefix: String,
-    /// Key codes (W3C `Code` names: "KeyR", "Digit1", "Slash", "Enter", "Backquote"...).
+    /// First-layer key codes (W3C `Code` names: "KeyR", "Space", "Slash", "KeyZ", "Backquote"...).
     pub first: Vec<String>,
     /// Subset of `first` that completes a chord on its own (undo, toggle overlay...).
     pub immediate: Vec<String>,
-    /// Second-layer keys. Bare codes, or "Shift+<code>" for shifted symbols like "!".
+    /// Second-layer keys: bare codes, or "Shift+<code>" for shifted symbols like "!" and "+".
     pub second: Vec<String>,
     pub chord_timeout_ms: u64,
 }
@@ -59,17 +55,27 @@ pub const EVENT_CHORD: &str = "hotkey://chord";
 pub const EVENT_PENDING: &str = "hotkey://pending";
 
 fn parse_prefix_mods(prefix: &str) -> Result<Modifiers, String> {
-    // Parse "<prefix>+KeyA" and keep only the modifiers.
     Shortcut::from_str(&format!("{prefix}+KeyA")).map(|s| s.mods).map_err(|e| e.to_string())
 }
 
-fn key_string(sc: &Shortcut) -> String {
+/// The second-layer name of a pressed shortcut, with the prefix removed: "KeyE" or "Shift+Digit1".
+fn layer_key(sc: &Shortcut, prefix_mods: Modifiers) -> Option<String> {
+    let extra = sc.mods - prefix_mods;
+    if !sc.mods.contains(prefix_mods) { return None; }
     let code = format!("{:?}", sc.key);
-    if sc.mods.contains(Modifiers::SHIFT) && !sc.mods.contains(Modifiers::CONTROL) && !sc.mods.contains(Modifiers::ALT) {
-        format!("Shift+{code}")
-    } else {
-        code
+    if extra.is_empty() { Some(code) }
+    else if extra == Modifiers::SHIFT { Some(format!("Shift+{code}")) }
+    else { None }
+}
+
+/// All shortcuts to register for a config: prefix + every first and second key.
+fn all_shortcuts(config: &HotkeyConfig) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for k in config.first.iter().chain(config.second.iter()) {
+        let s = if let Some(rest) = k.strip_prefix("Shift+") { format!("{}+Shift+{}", config.prefix, rest) } else { format!("{}+{}", config.prefix, k) };
+        if !v.contains(&s) { v.push(s); }
     }
+    v
 }
 
 /// Called for every global shortcut event (installed via `Builder::with_handler`).
@@ -77,33 +83,32 @@ pub fn on_shortcut<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut, ev: ShortcutEv
     if ev.state != ShortcutState::Pressed { return; }
     let chords: tauri::State<Chords> = app.state();
     let mut st = chords.lock().unwrap();
-    let code = format!("{:?}", sc.key);
-    let keystr = key_string(sc);
+    let Some(key) = layer_key(sc, st.prefix_mods) else { return };
 
-    let is_first = sc.mods == st.prefix_mods && st.config.first.iter().any(|k| *k == code);
-    if is_first {
-        if st.config.immediate.iter().any(|k| *k == code) {
+    // Second layer wins while a chord is pending.
+    if let Some((first, _)) = st.pending.clone() {
+        if st.config.second.iter().any(|k| *k == key) {
             st.pending = None;
-            let _ = app.emit(EVENT_CHORD, ChordEvent { first: code, second: None, cancelled: false });
+            drop(st);
+            let _ = app.emit(EVENT_CHORD, ChordEvent { first, second: Some(key), cancelled: false });
+            return;
+        }
+        // Not a valid second key: fall through and treat it as a new first key.
+    }
+
+    if st.config.first.iter().any(|k| *k == key) {
+        if st.config.immediate.iter().any(|k| *k == key) {
+            st.pending = None;
+            drop(st);
+            let _ = app.emit(EVENT_CHORD, ChordEvent { first: key, second: None, cancelled: false });
             return;
         }
         st.seq += 1;
         let seq = st.seq;
-        let already_pending = st.pending.is_some();
-        st.pending = Some((code.clone(), seq));
-        let second = st.config.second.clone();
+        st.pending = Some((key.clone(), seq));
         let timeout = Duration::from_millis(st.config.chord_timeout_ms.max(200));
         drop(st);
-        let _ = app.emit(EVENT_PENDING, ChordEvent { first: code.clone(), second: None, cancelled: false });
-
-        if !already_pending {
-            let app1 = app.clone();
-            std::thread::spawn(move || {
-                if let Err(e) = app1.global_shortcut().register_multiple(second.iter().map(String::as_str)) {
-                    eprintln!("[hotkeys] register second layer failed: {e}");
-                }
-            });
-        }
+        let _ = app.emit(EVENT_PENDING, ChordEvent { first: key.clone(), second: None, cancelled: false });
         let app2 = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(timeout);
@@ -111,42 +116,24 @@ pub fn on_shortcut<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut, ev: ShortcutEv
             let mut st = chords.lock().unwrap();
             if matches!(&st.pending, Some((_, s)) if *s == seq) {
                 st.pending = None;
-                let second = st.config.second.clone();
                 drop(st);
-                let _ = app2.emit(EVENT_CHORD, ChordEvent { first: code, second: None, cancelled: true });
-                let _ = app2.global_shortcut().unregister_multiple(second.iter().map(String::as_str));
+                let _ = app2.emit(EVENT_CHORD, ChordEvent { first: key, second: None, cancelled: true });
             }
         });
-        return;
-    }
-
-    // Second layer: only meaningful while a chord is pending.
-    if let Some((first, _)) = st.pending.clone() {
-        if st.config.second.iter().any(|k| *k == keystr) {
-            st.pending = None;
-            let second = st.config.second.clone();
-            drop(st);
-            let _ = app.emit(EVENT_CHORD, ChordEvent { first, second: Some(keystr), cancelled: false });
-            let app3 = app.clone();
-            std::thread::spawn(move || {
-                let _ = app3.global_shortcut().unregister_multiple(second.iter().map(String::as_str));
-            });
-        }
     }
 }
 
-/// Replace the whole hotkey configuration. Registers `<prefix>+<first>` for every first key.
+/// Replace the whole hotkey configuration. Registers `<prefix>+<key>` for every first and second key.
 #[tauri::command]
 pub fn set_hotkey_config<R: Runtime>(app: AppHandle<R>, config: HotkeyConfig) -> Result<(), String> {
     let prefix_mods = parse_prefix_mods(&config.prefix)?;
     let gs = app.global_shortcut();
     gs.unregister_all().map_err(|e| e.to_string())?;
-    let firsts: Vec<String> = config.first.iter().map(|k| format!("{}+{}", config.prefix, k)).collect();
-    // Validate everything before registering anything, so a typo doesn't leave half a config live.
-    for s in firsts.iter().chain(config.second.iter()) {
+    let shortcuts = all_shortcuts(&config);
+    for s in &shortcuts {
         Shortcut::from_str(s).map_err(|e| format!("bad shortcut {s:?}: {e}"))?;
     }
-    gs.register_multiple(firsts.iter().map(String::as_str)).map_err(|e| e.to_string())?;
+    gs.register_multiple(shortcuts.iter().map(String::as_str)).map_err(|e| e.to_string())?;
     let chords: tauri::State<Chords> = app.state();
     let mut st = chords.lock().unwrap();
     st.config = config;
@@ -170,25 +157,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bare_and_shifted_codes_parse() {
-        assert!(Shortcut::from_str("KeyE").is_ok());
-        assert!(Shortcut::from_str("Shift+Digit1").is_ok());
-        assert!(Shortcut::from_str("Ctrl+Alt+KeyR").is_ok());
-        assert!(Shortcut::from_str("Backquote").is_ok());
-        assert!(Shortcut::from_str("Slash").is_ok());
+    fn shortcuts_all_carry_the_prefix() {
+        let cfg = HotkeyConfig { prefix: "Ctrl+Alt".into(), first: vec!["KeyR".into(), "Space".into()], immediate: vec![], second: vec!["KeyE".into(), "Shift+Digit1".into(), "KeyR".into()], chord_timeout_ms: 1500 };
+        let all = all_shortcuts(&cfg);
+        assert_eq!(all, vec!["Ctrl+Alt+KeyR", "Ctrl+Alt+Space", "Ctrl+Alt+KeyE", "Ctrl+Alt+Shift+Digit1"]);
+        for s in &all { assert!(Shortcut::from_str(s).is_ok(), "{s}"); }
     }
 
     #[test]
-    fn prefix_mods_are_extracted() {
-        let m = parse_prefix_mods("Ctrl+Alt").unwrap();
-        assert!(m.contains(Modifiers::CONTROL) && m.contains(Modifiers::ALT) && !m.contains(Modifiers::SHIFT));
-    }
-
-    #[test]
-    fn key_string_marks_shift_only() {
-        let s = Shortcut::from_str("Shift+Digit1").unwrap();
-        assert_eq!(key_string(&s), "Shift+Digit1");
-        let s = Shortcut::from_str("KeyE").unwrap();
-        assert_eq!(key_string(&s), "KeyE");
+    fn layer_key_strips_prefix_and_keeps_shift() {
+        let pm = parse_prefix_mods("Ctrl+Alt").unwrap();
+        assert_eq!(layer_key(&Shortcut::from_str("Ctrl+Alt+KeyE").unwrap(), pm), Some("KeyE".into()));
+        assert_eq!(layer_key(&Shortcut::from_str("Ctrl+Alt+Shift+Digit1").unwrap(), pm), Some("Shift+Digit1".into()));
+        assert_eq!(layer_key(&Shortcut::from_str("KeyE").unwrap(), pm), None);
+        assert_eq!(layer_key(&Shortcut::from_str("Ctrl+KeyE").unwrap(), pm), None);
     }
 }

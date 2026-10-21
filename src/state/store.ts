@@ -31,6 +31,8 @@ interface Store {
   match: MatchState | null;
   clock: ClockState;
   toast: Toast | null;
+  /** First key of a chord in progress (set by the hotkey layer). */
+  pending: string | null;
   /** Last persist error, if any (shown in the status bar; the app keeps working). */
   diskError: string | null;
 
@@ -44,6 +46,7 @@ interface Store {
   stamp: () => Stamp;
   showToast: (text: string, undoable?: boolean) => void;
   clearToast: () => void;
+  setPending: (code: string | null) => void;
 }
 
 const SOURCE_CONFIDENCE: Record<Observation['source'], number> = { me: 0.95, ocr: 0.8, mod: 1, manual: 0.9 };
@@ -69,6 +72,7 @@ export const useMatch = create<Store>((set, get) => {
     match: null,
     clock: initialClock,
     toast: null,
+    pending: null,
     diskError: null,
 
     newMatch: (init) => {
@@ -147,6 +151,7 @@ export const useMatch = create<Store>((set, get) => {
 
     showToast: (text, undoable = false) => set({ toast: { id: ++toastSeq, text, undoable, at: Date.now() } }),
     clearToast: () => set({ toast: null }),
+    setPending: (code) => set({ pending: code }),
   };
 });
 
@@ -178,5 +183,7 @@ export function describe(e: MatchEvent): string {
     case 'player': return `player ${e.payload.id} updated`;
     case 'settings': return 'settings updated';
     case 'myRole': return `my role: ${e.payload.role}`;
+    case 'me': return `me = ${e.payload.id}`;
+    case 'addPlayer': return `player ${e.payload.name} joined`;
   }
 }
