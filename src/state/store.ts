@@ -35,6 +35,9 @@ interface Store {
   pending: string | null;
   /** Last persist error, if any (shown in the status bar; the app keeps working). */
   diskError: string | null;
+  /** In-game headshots per player (data URLs). Not part of the event log. */
+  avatars: Record<string, string>;
+  setAvatar: (id: string, dataUrl: string) => void;
 
   newMatch: (init: Omit<InitPayload, 'id' | 'startedAt'>) => string;
   loadMatch: (id: string) => Promise<boolean>;
@@ -74,6 +77,8 @@ export const useMatch = create<Store>((set, get) => {
     toast: null,
     pending: null,
     diskError: null,
+    avatars: {},
+    setAvatar: (id, dataUrl) => set(s => ({ avatars: { ...s.avatars, [id]: dataUrl } })),
 
     newMatch: (init) => {
       const startedAt = Date.now();

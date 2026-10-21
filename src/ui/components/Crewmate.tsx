@@ -1,6 +1,24 @@
 import type { CSSProperties } from 'react';
 import type { PlayerColor } from '../../types/game';
 import { swatch } from '../palette';
+import { useMatch } from '../../state/store';
+
+/** The player's real in-game headshot when one was captured, else the drawn crewmate. */
+export function PlayerIcon({ id, color, size = 40, state = 'alive', title }: { id: string; color: PlayerColor; size?: number; state?: 'alive' | 'dead' | 'ejected' | 'disconnected'; title?: string }) {
+  const avatar = useMatch(s => s.avatars[id]);
+  if (!avatar) return <Crewmate color={color} size={size} state={state} title={title} />;
+  const grey = state !== 'alive';
+  return (
+    <span className="avatar" style={{ width: size, height: size, position: 'relative', display: 'inline-block' }} title={title}>
+      <img src={avatar} alt={title ?? ''} style={{ width: size, height: size, objectFit: 'cover', objectPosition: 'center top', borderRadius: 10, border: '2px solid #0b0b0b', background: swatch(color).shadow, filter: grey ? 'grayscale(0.85) brightness(0.7)' : undefined, display: 'block' }} />
+      {state === 'dead' && (
+        <svg viewBox="0 0 64 64" style={{ position: 'absolute', inset: 0, width: size, height: size }}>
+          <g stroke="#E8232A" strokeWidth="7" strokeLinecap="round"><line x1="12" y1="12" x2="52" y2="52" /><line x1="52" y1="12" x2="12" y2="52" /></g>
+        </svg>
+      )}
+    </span>
+  );
+}
 
 /**
  * Our own drawing of the classic bean-shaped crewmate (no game assets are

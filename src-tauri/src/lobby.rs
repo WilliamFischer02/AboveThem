@@ -85,7 +85,7 @@ pub fn read_lobby(f: &Frame) -> anyhow::Result<RosterRead> {
             if r.2 > best.2 { best = r; }
         }
         let (c, d, n) = best;
-        entries.push(RosterEntry { index: entries.len() as u32, name, name_confidence: 0.7, color: color_name(if n < 20 { PlayerColor::Unknown } else { c }).to_string(), color_delta_e: d, dead: false, reporter: false });
+        entries.push(RosterEntry { index: entries.len() as u32, name, name_confidence: 0.7, color: color_name(if n < 20 { PlayerColor::Unknown } else { c }).to_string(), color_delta_e: d, dead: false, reporter: false, avatar_png: None });
     }
     // Left→right order so slots are stable while the lobby fills.
     entries.sort_by_key(|e| e.index);

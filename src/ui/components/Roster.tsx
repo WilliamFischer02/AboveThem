@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Player, PlayerColor, PlayerId, RoomId, SuspectScore } from '../../types/game';
 import { useMatch } from '../../state/store';
-import { Crewmate } from './Crewmate';
+import { Crewmate, PlayerIcon } from './Crewmate';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
@@ -71,7 +71,7 @@ function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Playe
   return (
     <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''} ${prime && p.status === 'alive' ? 'prime' : ''} ${cleared && !p.isMe && p.status === 'alive' ? 'cleared' : ''}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
       {flashKey && <span className="flash" key={flashKey} />}
-      <Crewmate color={p.color} size={46} state={state} />
+      <PlayerIcon id={p.id} color={p.color} size={46} state={state} />
       <div style={{ minWidth: 0 }}>
         <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
         <div className="meta">

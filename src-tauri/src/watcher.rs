@@ -17,6 +17,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame, Latest};
 use crate::lobby::read_lobby;
+use crate::chat::{read_chat, ChatMsg};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
@@ -35,6 +36,7 @@ pub const EV_ME_DEAD: &str = "game://me_dead";
 pub const EV_BANNER: &str = "game://meeting_banner";
 pub const EV_MAP: &str = "game://map";
 pub const EV_SETTINGS: &str = "game://settings";
+pub const EV_CHAT: &str = "game://chat";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
@@ -89,7 +91,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel"];
 
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
@@ -171,6 +173,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_banner = String::new();
     let mut last_map = String::new();
     let mut last_settings = String::new();
+    let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+    let mut last_chat_read = Instant::now() - Duration::from_secs(60);
     let mut me_dead_meeting: Option<u32> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
@@ -190,6 +194,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if r.x + r.w > frame.width || r.y + r.h > frame.height { continue; }
             let h = dhash(&frame.bgra, frame.width, r);
             if hamming(h, tr.hash) > 4 { tr.hash = h; tr.stable = 0; tr.dirty = true; } else { tr.stable += 1; }
+            if name == "chat_panel" { continue; } // read by the chat step below (needs structure, not text)
             if tr.dirty && tr.stable >= 1 {
                 let t0 = Instant::now();
                 // Role card / banner text is huge (1× keeps us under the OCR size limit); task list is small (3×).
@@ -352,6 +357,29 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                 if names != last_nearby {
                     last_nearby = names.clone();
                     let _ = app.emit(EV_NEARBY, names);
+                }
+            }
+        }
+
+        // 7d. Chat: whenever the panel is open and its pixels changed (≥ 700 ms apart), read bubbles and emit new ones.
+        if chat_open && last_chat_read.elapsed() > Duration::from_millis(700) {
+            let changed = tracks.iter().find(|(k, _)| k == "chat_panel").map(|(_, t)| t.dirty).unwrap_or(false);
+            if changed {
+                last_chat_read = Instant::now();
+                if let Some((_, t)) = tracks.iter_mut().find(|(k, _)| k == "chat_panel") { t.dirty = false; }
+                let known = shared.lock().unwrap().known_names.clone();
+                let t0 = Instant::now();
+                if let Ok(msgs) = read_chat(&frame, &known) {
+                    ocr_calls += 1;
+                    ocr_ms += t0.elapsed().as_millis() as u64;
+                    let fresh: Vec<ChatMsg> = msgs.into_iter().filter(|m| {
+                        let key = format!("{}|{}|{}", m.sender, m.text.to_lowercase(), m.system);
+                        if chat_seen.contains(&key) { return false; }
+                        chat_seen.push_back(key);
+                        if chat_seen.len() > 60 { chat_seen.pop_front(); }
+                        true
+                    }).collect();
+                    if !fresh.is_empty() { let _ = app.emit(EV_CHAT, fresh); }
                 }
             }
         }

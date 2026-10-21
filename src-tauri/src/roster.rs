@@ -10,7 +10,7 @@ use crate::colors::{PlayerColor, PALETTE};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::regions::{Rect, VoteCell, REF_H, REF_W};
 
-#[derive(Clone, Debug, serde::Serialize, PartialEq)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct RosterEntry {
     pub index: u32,
     pub name: String,
@@ -20,6 +20,15 @@ pub struct RosterEntry {
     pub color_delta_e: f32,
     pub dead: bool,
     pub reporter: bool,
+    /// Base64 PNG headshot cropped from the icon (hat + visor + upper body), as rendered in game.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_png: Option<String>,
+}
+
+impl PartialEq for RosterEntry {
+    fn eq(&self, o: &Self) -> bool {
+        self.index == o.index && self.name == o.name && self.color == o.color && self.dead == o.dead && self.reporter == o.reporter
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -117,6 +126,21 @@ fn icon_color(f: &Frame, cell: Rect, dead: bool) -> (PlayerColor, f32) {
     votes.into_iter().max_by_key(|(_, (n, _))| *n).filter(|(_, (n, _))| *n >= 25).map(|(c, (n, d))| (c, d / n as f32)).unwrap_or((PlayerColor::Unknown, 99.0))
 }
 
+/// Headshot crop of the card icon: icon-local (14..110, 0..74) covers hat, visor and shoulders.
+fn headshot_png(f: &Frame, cell: Rect) -> Option<String> {
+    use base64::Engine;
+    let (ix, iy, _, _) = VoteCell::ICON;
+    let sx = f.width as f32 / REF_W as f32;
+    let r = Rect::new(cell.x + ((ix + 4) as f32 * sx) as u32, cell.y.saturating_sub((2.0 * sx) as u32) + (iy as f32 * sx) as u32, (96.0 * sx) as u32, (76.0 * sx) as u32);
+    let (buf, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+    let mut rgba = buf;
+    for px in rgba.chunks_exact_mut(4) { px.swap(0, 2); px[3] = 255; }
+    let img = image::RgbaImage::from_raw(w, h, rgba)?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    Some(base64::engine::general_purpose::STANDARD.encode(out.into_inner()))
+}
+
 fn color_name(c: PlayerColor) -> &'static str {
     match c {
         PlayerColor::Red => "red", PlayerColor::Blue => "blue", PlayerColor::Green => "green", PlayerColor::Pink => "pink",
@@ -159,7 +183,7 @@ pub fn read_vote_grid(f: &Frame, known_names: &[String]) -> anyhow::Result<Roste
         };
         let dead = dead_x_score(f, cell) >= 700;
         let (color, delta) = icon_color(f, cell, dead);
-        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false });
+        entries.push(RosterEntry { index, name, name_confidence, color: color_name(color).to_string(), color_delta_e: delta, dead, reporter: false, avatar_png: headshot_png(f, cell) });
     }
     // The reporter/caller has a megaphone badge at the cell's top-right; approximate with a red-ish badge check.
     for e in entries.iter_mut() {

@@ -4,6 +4,7 @@
 //!   capture   — Windows Graphics Capture frame grabber (Phase 2)
 //!   regions   — resolution-relative ROI definitions + calibration persistence (Phase 2)
 //!   ocr       — Windows.Media.Ocr wrapper (Phase 2)
+//!   chat      — open chat panel → messages (Phase 3)
 //!   colors    — player-color swatch sampling in CIELAB (Phase 2)
 //!   phase     — game phase state machine from UI markers (Phase 2)
 //!   lobby     — floating-name reader for the lobby screen (Phase 2)
@@ -19,6 +20,7 @@
 //! still compiles for `cargo test` on other platforms.
 
 pub mod capture;
+pub mod chat;
 pub mod colors;
 pub mod files;
 pub mod hotkeys;
