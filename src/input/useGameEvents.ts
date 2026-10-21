@@ -111,8 +111,11 @@ export function useGameEvents() {
     let creating = false;
     let role: 'crew' | 'impostor' | null = null;
     let pendingMap: MapId | null = null;
+    let pendingSettings: Record<string, unknown> = {};
     let bannerReason: 'body' | 'button' | null = null;
     const lastAutoSighting = new Map<string, number>();
+    /** Vote-grid colour votes per player: two agreeing reads change an unlocked colour. */
+    const colorVotes = new Map<string, { color: string; n: number }>();
     (async () => {
       const { listen } = await import('@tauri-apps/api/event');
       const { invoke } = await import('@tauri-apps/api/core');
@@ -149,7 +152,7 @@ export function useGameEvents() {
           const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
-          s.newMatch({ settings: { ...baseSettings, map: mapId }, map: mapId, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
+          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: role ?? 'crew', players: ps, lobbyCode: lobbyCode ?? undefined });
           if (!fromLobby) useMatch.getState().setPhase('meetingDiscussion', { reason: 'body' });
           useMatch.getState().showToast(`${fromLobby ? 'Lobby' : 'Roster'} read: ${players.length} players${meGuessed ? ' — tap your crewmate' : ''}`);
           invoke('watcher_set_names', { names: players.map(p => p.name) }).catch(() => {});
@@ -184,6 +187,18 @@ export function useGameEvents() {
             continue;
           }
           if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
+          if (!fromLobby && !p.colorLocked && en.color !== 'unknown' && en.color !== p.color) {
+            const v = colorVotes.get(p.id);
+            const n = v && v.color === en.color ? v.n + 1 : 1;
+            colorVotes.set(p.id, { color: en.color, n });
+            const live = useMatch.getState().match!;
+            const clash = Object.values(live.players).find(x => x.id !== p.id && x.color === en.color);
+            if (n >= 2 && (!clash || !clash.colorLocked)) {
+              if (clash) s.dispatch({ kind: 'player', payload: { id: clash.id, color: p.color } });
+              s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
+              colorVotes.delete(p.id);
+            }
+          }
           if (!fromLobby && en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
           // Lobby colour sampling is noisy: only fill a colour that is still the unknown fallback, never flip a set one.
           if (fromLobby && en.color !== 'unknown' && en.color !== p.color && (p.color === 'gray' || p.color === 'unknown') && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
@@ -226,6 +241,35 @@ export function useGameEvents() {
         if (!MAPS[id] || MAPS[id].rooms.length === 0) { s.showToast(`Map ${id} detected — no map data yet, room features off`); pendingMap = null; return; }
         pendingMap = id;
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
+      }));
+
+      guard(await listen<string[]>('game://settings', e => {
+        const s = useMatch.getState();
+        const patch: Record<string, unknown> = {};
+        for (const line of e.payload) {
+          const m = line.match(/^(.*?)\s+set to\s+(.+)$/i);
+          if (!m) continue;
+          const key = norm(m[1]); const val = m[2].trim();
+          const num = parseFloat(val.replace(/[^0-9.]/g, ''));
+          const on = /^on/i.test(val);
+          if (key.includes('impostor')) { if (num >= 1 && num <= 3) patch.impostorCount = num; }
+          else if (key.includes('killcooldown')) { if (num >= 5 && num <= 60) patch.killCooldownSec = num; }
+          else if (key.includes('visualtask')) patch.visualTasksOn = on;
+          else if (key.includes('confirmeject')) patch.confirmEjectsOn = on;
+          else if (key.includes('anonymousvote')) patch.anonymousVotes = on;
+          else if (key.includes('playerspeed')) { if (num >= 0.5 && num <= 3) patch.playerSpeed = num; }
+          else if (key.includes('emergencymeeting')) { if (num >= 0 && num <= 9) patch.emergencyMeetings = num; }
+          else if (key.includes('taskbar')) patch.taskBarMode = /always/i.test(val) ? 'always' : /meeting/i.test(val) ? 'meetings' : 'never';
+          else if (key.includes('commontask')) { if (num >= 0 && num <= 4) patch.commonTasks = num; }
+          else if (key.includes('longtask')) { if (num >= 0 && num <= 4) patch.longTasks = num; }
+          else if (key.includes('shorttask')) { if (num >= 0 && num <= 6) patch.shortTasks = num; }
+        }
+        if (Object.keys(patch).length === 0) return;
+        pendingSettings = { ...pendingSettings, ...patch };
+        if (s.match) {
+          const changed = Object.entries(patch).filter(([k, v]) => (s.match!.settings as unknown as Record<string, unknown>)[k] !== v);
+          if (changed.length) { s.dispatch({ kind: 'settings', payload: Object.fromEntries(changed) }); s.showToast(`Lobby settings: ${changed.map(([k, v]) => `${k}=${v}`).join(', ')} (auto)`); }
+        }
       }));
 
       guard(await listen<string>('game://meeting_banner', e => { bannerReason = e.payload === 'button' ? 'button' : 'body'; }));

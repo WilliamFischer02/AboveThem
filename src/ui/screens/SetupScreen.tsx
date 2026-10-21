@@ -66,7 +66,16 @@ export function SetupScreen() {
     <div className="shell">
       <header className="topbar"><div className="brand">Above<span>Them</span></div><span className="muted small right">lobby setup</span></header>
       <div className="content">
-        <AutoStatus />
+        <section className="panel hero">
+          <div className="row">
+            <Crewmate color="cyan" size={56} />
+            <div className="col" style={{ gap: 2 }}>
+              <h2 style={{ margin: 0 }}>Waiting for a lobby</h2>
+              <span className="muted small">Join a lobby in Among Us. The roster, map, settings, rounds, meetings and ejections are read from the screen; nothing to click.</span>
+            </div>
+          </div>
+          <AutoStatus />
+        </section>
         {auto?.settings && (
           <section className="panel tight">
             <div className="row">
@@ -80,7 +89,8 @@ export function SetupScreen() {
             <div className="muted small">With this on, the first meeting fills the roster by itself; round start, meetings and ejections are detected from the screen. Manual setup below is the fallback.</div>
           </section>
         )}
-        <section className="panel">
+        <details className="fold panel"><summary>Manual setup (only if automatic reading is off or wrong)</summary>
+        <section className="panel" style={{ marginTop: 6 }}>
           <h3>Lobby</h3>
           <div className="row">
             <label className="field">code<input className="input" style={{ width: 90, textTransform: 'uppercase' }} value={code} onChange={e => setCode(e.target.value)} placeholder="ABCDEF" /></label>
@@ -157,6 +167,7 @@ export function SetupScreen() {
           )}
           {!canStart && <div className="muted small" style={{ marginTop: 4 }}>Need ≥ 3 players and pick which one is you.</div>}
         </section>
+        </details>
 
         <details className="fold panel tight"><summary>Screen reading (auto) — details</summary><CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
           const used = new Set<string>();

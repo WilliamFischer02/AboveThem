@@ -121,8 +121,8 @@ function ColorPicker({ p, onDone }: { p: Player; onDone: () => void }) {
   const pick = (color: PlayerColor) => {
     if (color === p.color) { onDone(); return; }
     const other = Object.values(match.players).find(o => o.color === color && o.id !== p.id);
-    if (other) dispatch({ kind: 'player', payload: { id: other.id, color: p.color } });
-    dispatch({ kind: 'player', payload: { id: p.id, color } });
+    if (other) dispatch({ kind: 'player', payload: { id: other.id, color: p.color, colorLocked: true } });
+    dispatch({ kind: 'player', payload: { id: p.id, color, colorLocked: true } });
     showToast(`${p.name} is ${PALETTE[color as keyof typeof PALETTE].label}${other ? `, ${other.name} is ${PALETTE[p.color as keyof typeof PALETTE]?.label ?? p.color}` : ''}`, true);
     onDone();
   };

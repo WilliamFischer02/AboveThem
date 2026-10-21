@@ -73,6 +73,8 @@ pub struct Regions {
     pub chat_send: Rect,
     /// Full-screen "DEAD BODY REPORTED" / "EMERGENCY MEETING" banner text.
     pub meeting_banner: Rect,
+    /// Lobby announcements, bottom-left: "# Impostors set to 2", "Kill Cooldown set to 30.0s"...
+    pub settings_feed: Rect,
 }
 
 impl Default for Regions {
@@ -97,6 +99,7 @@ impl Default for Regions {
             room_label:      Rect::new(600, 950, 720, 60),
             chat_send:       Rect::new(1280, 800, 220, 100),
             meeting_banner:  Rect::new(300, 250, 1320, 160),
+            settings_feed:   Rect::new(0, 840, 900, 200),
         }
     }
 }
@@ -122,6 +125,7 @@ impl Regions {
             room_label: self.room_label.scaled(sx, sy),
             chat_send: self.chat_send.scaled(sx, sy),
             meeting_banner: self.meeting_banner.scaled(sx, sy),
+            settings_feed: self.settings_feed.scaled(sx, sy),
         }
     }
 
@@ -131,14 +135,14 @@ impl Regions {
             "chat_panel" => self.chat_panel, "chat_input" => self.chat_input, "lobby_settings" => self.lobby_settings,
             "lobby_code" => self.lobby_code, "map_name" => self.map_name, "vote_grid" => self.vote_grid,
             "meeting_header" => self.meeting_header, "eject_text" => self.eject_text, "voting_timer" => self.voting_timer, "sabotage_banner" => self.sabotage_banner,
-            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner,
+            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner, "settings_feed" => self.settings_feed,
             _ => return None,
         })
     }
 
     pub const NAMES: &'static [&'static str] = &[
         "task_list", "task_bar", "role_card", "chat_panel", "chat_input", "lobby_settings", "lobby_code", "map_name",
-        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner",
+        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner", "settings_feed",
     ];
 }
 

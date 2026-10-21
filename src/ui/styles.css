@@ -307,3 +307,6 @@ details.fold[open] > summary { margin-bottom: 8px; }
 
 .tasks-line { gap: 4px; }
 .tasks-line .badge { font-weight: 600; }
+
+.panel.hero { background: #2b303a; border-color: var(--mint); }
+.panel.hero h2 { color: #fff; text-shadow: 0 2px 0 #1a1d23; }

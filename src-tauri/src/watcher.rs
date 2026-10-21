@@ -34,6 +34,7 @@ pub const EV_TASKS: &str = "game://tasks";
 pub const EV_ME_DEAD: &str = "game://me_dead";
 pub const EV_BANNER: &str = "game://meeting_banner";
 pub const EV_MAP: &str = "game://map";
+pub const EV_SETTINGS: &str = "game://settings";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
@@ -88,7 +89,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed"];
 
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
@@ -169,6 +170,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_tasks = String::new();
     let mut last_banner = String::new();
     let mut last_map = String::new();
+    let mut last_settings = String::new();
     let mut me_dead_meeting: Option<u32> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
@@ -281,6 +283,16 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                     let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
                     let _ = app.emit(EV_MAP, id);
                 }
+            }
+        }
+
+        // 6a'. Lobby settings announcements ("X set to Y"), lobby only.
+        if matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting {
+            let t = text("settings_feed");
+            if t != last_settings && stable("settings_feed", 1) {
+                last_settings = t.clone();
+                let lines: Vec<String> = t.lines().map(|l| l.trim().trim_start_matches(|c: char| !c.is_alphanumeric() && c != '#').to_string()).filter(|l| l.to_lowercase().contains("set to")).collect();
+                if !lines.is_empty() { let _ = app.emit(EV_SETTINGS, lines); }
             }
         }
 

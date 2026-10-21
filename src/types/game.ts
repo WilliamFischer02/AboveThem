@@ -34,6 +34,8 @@ export interface Player {
   isPartner?: boolean;
   /** 1-based position in the meeting vote grid (what the player sees); hotkey target prefix+digit. */
   slot?: number;
+  /** Colour was set by the user; automatic reads must not change it. */
+  colorLocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
