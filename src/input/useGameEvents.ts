@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useMatch } from '../state/store';
-import { isTauri } from '../state/persist';
+import { isTauri, persist } from '../state/persist';
 import { loadSettings, type AppSettings } from '../state/settings';
 import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
@@ -84,6 +84,19 @@ export function useGameEvents() {
   const [lobbyCode, setLobbyCode] = useState<string | null>(null);
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
+
+  // Resume the most recent match after a restart/reload (logs persist; memory doesn't).
+  useEffect(() => {
+    if (!isTauri()) return;
+    (async () => {
+      if (useMatch.getState().match) return;
+      const list = await persist.listMatches().catch(() => []);
+      const newest = list[0];
+      if (!newest || Date.now() - newest.modified_ms > 20 * 60_000) return;
+      const ok = await useMatch.getState().loadMatch(newest.id);
+      if (ok) useMatch.getState().showToast(`Resumed match ${newest.id}`);
+    })();
+  }, []);
 
   // Keep the OCR snap-list in sync with the roster (names added, renamed, rescanned).
   useEffect(() => {
@@ -278,7 +291,20 @@ export function useGameEvents() {
         const map: Record<string, Phase> = { lobby: 'lobby', roundStart: 'roundStart', round: 'round', meetingDiscussion: 'meetingDiscussion', meetingVoting: 'meetingVoting', ejection: 'ejection', gameOver: 'gameOver' };
         const phase = map[e.payload.phase];
         if (!phase || s2.match.phase.phase === phase) return;
-        if (phase === 'lobby' && s2.match.phase.phase !== 'gameOver') return; // never bounce a live match back to lobby on a missed frame
+        if (phase === 'lobby') {
+          // Back in the lobby after a game: keep the lobby (names, colours, me, headshots) but start a fresh match.
+          const cur = s2.match;
+          const playedRounds = cur.phase.round >= 0 && cur.observations.length + cur.claims.length + cur.ejections.length > 0;
+          if (cur.phase.phase === 'lobby' || (!playedRounds && cur.phase.phase !== 'gameOver')) return; // nothing to roll over, or a missed frame
+          const avatars = useMatch.getState().avatars;
+          const samples = useMatch.getState().bodySamples;
+          const players = Object.values(cur.players).map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? ('unknown' as const) : ('unknown' as const), isPartner: false, slot: undefined }));
+          s2.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: 'crew', players, lobbyCode: lobbyCode ?? undefined });
+          for (const [id, url] of Object.entries(avatars)) useMatch.getState().setAvatar(id, url);
+          for (const [id, rgb] of Object.entries(samples)) useMatch.getState().setBodySample(id, rgb);
+          useMatch.getState().showToast('New game in this lobby — roster kept, slate wiped (auto)');
+          return;
+        }
         s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
         if (phase === 'meetingDiscussion') bannerReason = null;
         s2.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
