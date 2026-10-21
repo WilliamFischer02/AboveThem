@@ -178,7 +178,8 @@ export function useGameEvents() {
           }
           if (!fromLobby && p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
           if (!fromLobby && en.dead && p.status === 'alive') s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } });
-          if (fromLobby && en.color !== 'unknown' && en.color !== p.color && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
+          // Lobby colour sampling is noisy: only fill a colour that is still the unknown fallback, never flip a set one.
+          if (fromLobby && en.color !== 'unknown' && en.color !== p.color && (p.color === 'gray' || p.color === 'unknown') && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
         }
       }));
 
