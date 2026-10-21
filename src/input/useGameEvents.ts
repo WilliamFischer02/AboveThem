@@ -152,9 +152,12 @@ export function useGameEvents() {
             p = existing.filter(x => !taken.has(x.id)).sort((a, b) => similarity(norm(en.name), norm(b.name)) - similarity(norm(en.name), norm(a.name)))[0];
           }
           if (!p) {
+            const live = useMatch.getState().match!;
             const { players } = playersFromRoster([en], '');
             const np = players[0];
-            if (!m.players[np.id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, isMe: false } });
+            // Ids must be unique: fall back to a slot id when that colour is already taken.
+            const id = live.players[np.id] || Object.values(live.players).some(x => x.color === np.color) ? `slot${en.index + 1}` : np.id;
+            if (!live.players[id]) s.dispatch({ kind: 'addPlayer', payload: { ...np, id, isMe: false } });
             continue;
           }
           if (p.slot === undefined) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1 } });
