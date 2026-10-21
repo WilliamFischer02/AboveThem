@@ -33,7 +33,7 @@ export function Overlay() {
       <div className="ov-box ov-clock">
         <span className="ov-time">R{snap.round + 1} {fmt(t)}</span>
         <span className="ov-phase">{phaseLabel}</span>
-        <span className="ov-count">{snap.alive} alive · {snap.impLeft} imp</span>
+        <span className="ov-count">{snap.myRoom ? `${snap.myRoom} · ` : ''}{snap.alive} alive · {snap.impLeft} imp</span>
       </div>
 
       {(snap.pending || snap.toast) && (

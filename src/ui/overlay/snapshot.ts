@@ -6,7 +6,7 @@ import { effective, type MatchEvent } from '../../state/events';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { impostorsRemaining, scoreAll } from '../../engine/suspicion';
 import { fmt } from '../../engine/evidence';
-import { slotOrder } from '../../input/useHotkeys';
+import { slotOrder, myRoomNow } from '../../input/useHotkeys';
 
 export interface OverlaySnapshot {
   phase: Phase;
@@ -23,6 +23,8 @@ export interface OverlaySnapshot {
   slots: { key: string; name: string; color: PlayerColor; dead: boolean; prime: boolean; cleared: boolean }[];
   rooms: { key: string; name: string }[];
   recent: string[];
+  /** My current room (from the room popup or the / chord). */
+  myRoom: string | null;
 }
 
 export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[], pending: string | null, toast: string | null, prefix: string): OverlaySnapshot {
@@ -53,5 +55,6 @@ export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[
     })(),
     rooms: m.map.rooms.map(r => ({ key: r.key, name: r.name })),
     recent,
+    myRoom: (() => { const r = myRoomNow(m); return r ? (m.map.rooms.find(x => x.id === r)?.name ?? r) : null; })(),
   };
 }
