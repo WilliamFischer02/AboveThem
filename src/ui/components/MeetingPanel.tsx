@@ -21,7 +21,7 @@ function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceI
   );
 }
 
-export function MeetingPanel({ script, scores }: { script: MeetingScript; scores: SuspectScore[] }) {
+export function MeetingPanel({ script, scores, ghost = false }: { script: MeetingScript; scores: SuspectScore[]; ghost?: boolean }) {
   const match = useMatch(s => s.match)!;
   const evidence = useMemo(() => new Map(scores.flatMap(s => s.evidence).map(e => [e.id, e])), [scores]);
   const name = (id: string) => (id === 'all' ? 'everyone' : match.players[id]?.name ?? id);
@@ -30,7 +30,8 @@ export function MeetingPanel({ script, scores }: { script: MeetingScript; scores
     <section className="panel">
       <h3>Meeting {script.meeting + 1}</h3>
       <div className="headline" style={{ marginBottom: 8 }}>{script.headline}</div>
-      <div className="col">
+      {ghost && <div className="muted small">You can't talk or vote. The ranking keeps updating from what you log; use it to pick your signal.</div>}
+      {!ghost && <div className="col">
         <h3>Say</h3>
         {script.say.map((s, i) => <div key={i} className="script-line"><span className="text">{s.text}</span><Why ids={s.why} evidence={evidence} /></div>)}
         <h3>Ask</h3>
@@ -55,9 +56,9 @@ export function MeetingPanel({ script, scores }: { script: MeetingScript; scores
             {script.watch.map((w, i) => <div key={i} className="script-line"><span className="text small">{w}</span></div>)}
           </>
         )}
-      </div>
-      <ClaimEntry />
-      <VoteOutcome />
+      </div>}
+      {!ghost && <ClaimEntry />}
+      {!ghost && <VoteOutcome />}
     </section>
   );
 }

@@ -158,7 +158,7 @@ export function SetupScreen() {
           {!canStart && <div className="muted small" style={{ marginTop: 4 }}>Need ≥ 3 players and pick which one is you.</div>}
         </section>
 
-        <CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
+        <details className="fold panel tight"><summary>Screen reading (auto) — details</summary><CapturePanel knownNames={players.map(p => p.name)} onRoster={(entries: RosterEntry[]) => {
           const used = new Set<string>();
           const next: PresetPlayer[] = [];
           for (const e of entries) {
@@ -168,7 +168,7 @@ export function SetupScreen() {
             next.push({ id: color, color, name: e.name });
           }
           setPlayers(next);
-        }} />
+        }} /></details>
 
         <section className="panel">
           <h3>Recent matches</h3>

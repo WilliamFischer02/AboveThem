@@ -4,7 +4,7 @@ import type { ClockState } from '../../state/clock';
 import { describe } from '../../state/store';
 import { effective, type MatchEvent } from '../../state/events';
 import { PALETTE, COLOR_IDS } from '../palette';
-import { impostorsRemaining } from '../../engine/suspicion';
+import { impostorsRemaining, scoreAll } from '../../engine/suspicion';
 import { fmt } from '../../engine/evidence';
 import { slotOrder } from '../../input/useHotkeys';
 
@@ -20,7 +20,7 @@ export interface OverlaySnapshot {
   prefix: string;
   colors: { color: PlayerColor; key: string; code: string; name: string; inLobby: boolean }[];
   /** Roster in vote-grid order: digit key -> name. */
-  slots: { key: string; name: string; color: PlayerColor; dead: boolean }[];
+  slots: { key: string; name: string; color: PlayerColor; dead: boolean; prime: boolean; cleared: boolean }[];
   rooms: { key: string; name: string }[];
   recent: string[];
 }
@@ -45,7 +45,12 @@ export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[
     toast,
     prefix,
     colors: COLOR_IDS.map(c => ({ color: c, key: PALETTE[c].key, code: `Key${PALETTE[c].key.toUpperCase()}`, name: byColor.get(c)?.name ?? PALETTE[c].label, inLobby: byColor.has(c) })),
-    slots: slotOrder(m).slice(0, 10).map((id, i) => ({ key: String((i + 1) % 10), name: m.players[id].name, color: m.players[id].color, dead: m.players[id].status !== 'alive' })),
+    slots: (() => {
+      const scores = scoreAll(m);
+      const prime = scores.find(x => (x.verdict === 'unknown' || x.verdict === 'softClear') && x.evidence.some(e => e.weight > 0))?.player;
+      const cleared = new Set(scores.filter(x => x.verdict === 'certainCrew' || x.verdict === 'hardClear').map(x => x.player));
+      return slotOrder(m).slice(0, 10).map((id, i) => ({ key: String((i + 1) % 10), name: m.players[id].name, color: m.players[id].color, dead: m.players[id].status !== 'alive', prime: id === prime, cleared: cleared.has(id) }));
+    })(),
     rooms: m.map.rooms.map(r => ({ key: r.key, name: r.name })),
     recent,
   };

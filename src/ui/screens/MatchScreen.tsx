@@ -13,6 +13,7 @@ import { PALETTE, COLOR_IDS } from '../palette';
 import { useOverlay } from '../overlay/useOverlay';
 import { CapturePanel } from '../components/CapturePanel';
 import { AutoStatus } from '../components/AutoStatus';
+import { GhostPanel } from '../components/GhostPanel';
 
 function useNow(ms = 500) {
   const [, setTick] = useState(0);
@@ -36,6 +37,7 @@ export function MatchScreen() {
   const script = useMemo(() => (inMeeting ? buildMeetingScript(match, scores, meeting) : null), [match, scores, meeting, inMeeting]);
   const st = stamp();
   const phase = match.phase.phase;
+  const ghost = match.players[match.me]?.status !== 'alive';
   const alive = Object.values(match.players).filter(p => p.status === 'alive').length;
   const impLeft = match.settings.impostorCount - match.ejections.filter(e => e.wasImpostor).length;
 
@@ -44,9 +46,9 @@ export function MatchScreen() {
       <header className="topbar">
         <div className="brand">Above<span>Them</span></div>
         <span className="muted small">{match.map.name} · {alive} alive · {impLeft} imp</span>
-        <span className="right" style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
-          {phase === 'lobby' ? 'LOBBY' : phase === 'gameOver' ? 'GAME OVER' : `R${st.round + 1} ${fmt(st.t)}`}
-          {inMeeting && <span className="muted"> · meeting</span>}
+        <span className={`phase-pill right ${phase === 'lobby' ? 'lobby' : phase === 'gameOver' ? 'over' : inMeeting ? 'meeting' : phase === 'ejection' ? 'ejection' : 'round'}`} key={phase}>
+          {phase === 'lobby' ? '⌂ LOBBY' : phase === 'gameOver' ? 'GAME OVER' : inMeeting ? '🔔 MEETING' : phase === 'ejection' ? '🗳 VOTED' : '▶ ROUND'}
+          {phase !== 'lobby' && phase !== 'gameOver' && <span className="clock">R{st.round + 1} {fmt(st.t)}</span>}
         </span>
       </header>
       <div className="content">
@@ -69,11 +71,12 @@ export function MatchScreen() {
           {diskError && <span className="status-err">disk: {diskError}</span>}
           {matchId && <span className="muted right">log: matches/{matchId}.ndjson</span>}
         </div>
-        {script && <MeetingPanel script={script} scores={scores} />}
+        {ghost && <GhostPanel />}
+        {script && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
         <Roster scores={scores} />
         <Timeline />
-        <CapturePanel knownNames={Object.values(match.players).map(p => p.name)} />
-        <CheatSheet />
+        <details className="fold panel tight"><summary>Screen reading (auto)</summary><CapturePanel knownNames={Object.values(match.players).map(p => p.name)} /></details>
+        {!ghost && <CheatSheet />}
       </div>
       <Toast pending={hk.pending} />
     </div>

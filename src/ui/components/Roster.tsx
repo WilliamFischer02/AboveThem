@@ -31,7 +31,11 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
     );
   }
   const byId = Object.fromEntries(scores.map(s => [s.player, s]));
-  const players = Object.values(match.players).sort((a, b) => (a.isMe ? -1 : b.isMe ? 1 : 0) || a.name.localeCompare(b.name));
+  const rank = (p: Player) => (p.isMe ? -1e9 : p.status !== 'alive' ? 1e9 : -(byId[p.id]?.logOdds ?? 0));
+  const players = Object.values(match.players).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const prime = scores.find(s => s.verdict === 'unknown' || s.verdict === 'softClear');
+  const primeId = prime && prime.evidence.some(e => e.weight > 0) ? prime.player : null;
+  const lastObs = match.observations[match.observations.length - 1];
   return (
     <section className="panel">
       <div className="row" style={{ marginBottom: 6 }}>
@@ -40,14 +44,15 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
       </div>
       <div className="roster">
         {players.map(p => (
-          <Chip key={p.id} p={p} score={byId[p.id]} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onClose={() => setOpen(null)} />
+          <Chip key={p.id} p={p} score={byId[p.id]} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onClose={() => setOpen(null)}
+            prime={p.id === primeId} flashKey={lastObs && 'player' in lastObs && lastObs.player === p.id ? lastObs.id : lastObs && lastObs.type === 'sawKill' && lastObs.killer === p.id ? lastObs.id : null} />
         ))}
       </div>
     </section>
   );
 }
 
-function Chip({ p, score, open, onToggle, onClose }: { p: Player; score?: SuspectScore; open: boolean; onToggle: () => void; onClose: () => void }) {
+function Chip({ p, score, open, onToggle, onClose, prime, flashKey }: { p: Player; score?: SuspectScore; open: boolean; onToggle: () => void; onClose: () => void; prime?: boolean; flashKey?: string | null }) {
   const match = useMatch(s => s.match)!;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -59,10 +64,13 @@ function Chip({ p, score, open, onToggle, onClose }: { p: Player; score?: Suspec
 
   const withMe = !p.isMe && withMeNow(match, p.id);
   const verdict = p.isMe ? null : score?.verdict ?? (p.status === 'alive' ? 'unknown' : null);
-  const pct = score ? Math.round(score.probability * 100) : null;
+  const hasEvidence = !!score && score.evidence.some(e => e.category !== 'hard' || e.weight < -50 || e.weight > 50);
+  const pct = score && hasEvidence ? Math.round(score.probability * 100) : null;
+  const cleared = verdict === 'certainCrew' || verdict === 'hardClear' || p.knownRole === 'crew';
   const state = p.status === 'alive' ? 'alive' : p.status === 'dead' ? 'dead' : p.status === 'ejected' ? 'ejected' : 'disconnected';
   return (
-    <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
+    <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''} ${prime && p.status === 'alive' ? 'prime' : ''} ${cleared && !p.isMe && p.status === 'alive' ? 'cleared' : ''}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
+      {flashKey && <span className="flash" key={flashKey} />}
       <Crewmate color={p.color} size={46} state={state} />
       <div style={{ minWidth: 0 }}>
         <div className="name">{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
@@ -75,7 +83,7 @@ function Chip({ p, score, open, onToggle, onClose }: { p: Player; score?: Suspec
           {verdict === 'hardClear' && <span className="badge crew">CLEAR</span>}
           {verdict === 'softClear' && <span className="badge soft">SOFT</span>}
           {withMe && <span className="badge with">WITH ME</span>}
-          {pct !== null && verdict !== 'certainCrew' && verdict !== 'certainImpostor' && <span>{pct}%</span>}
+          {pct !== null && verdict !== 'certainCrew' && verdict !== 'certainImpostor' && <span className="pct">{pct}%</span>}
           {!p.isMe && <span className="key" title="hotkey: prefix + this key, then room">{p.slot !== undefined ? p.slot % 10 : PALETTE[p.color as keyof typeof PALETTE]?.key}</span>}
         </div>
       </div>
