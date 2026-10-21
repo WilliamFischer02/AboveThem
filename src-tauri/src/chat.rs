@@ -66,7 +66,6 @@ pub fn read_chat(f: &Frame, known: &[String]) -> anyhow::Result<Vec<ChatMsg>> {
         .filter(|l| l.h >= min_h && l.x >= left_text && l.x < right_icon && l.text.trim().chars().count() >= 1)
         .collect();
     lines.sort_by_key(|l| l.y);
-    let mid = (r.x as f32 + r.w as f32 * 0.5) as u32;
     let line_gap = (48.0 * sx) as u32; // max vertical gap between lines of one bubble
 
     let mut out: Vec<ChatMsg> = Vec::new();
@@ -81,8 +80,9 @@ pub fn read_chat(f: &Frame, known: &[String]) -> anyhow::Result<Vec<ChatMsg>> {
             last_y = l.y;
             continue;
         }
-        // A bubble is "mine" when its NAME line is right-aligned (text lines of long messages wrap leftwards).
-        let right_aligned = l.x + l.w > mid + (260.0 * sx) as u32;
+        // Other players' bubbles sit against the icon column: every line starts at x≈515 (1080p).
+        // My bubbles are right-aligned, so even wrapped lines start further right (≥ ~570).
+        let right_aligned = l.x > r.x + (195.0 * sx) as u32;
         let starts_new = cur.is_none() || l.y.saturating_sub(last_y) > line_gap;
         if starts_new {
             if let Some(m) = cur.take() { if !m.text.is_empty() { out.push(m); } }

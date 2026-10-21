@@ -326,7 +326,8 @@ export function useGameEvents() {
           const m = useMatch.getState().match!;
           // Re-reads of the same bubble can lose the name line: a long identical text seen recently is a duplicate.
           const recent = m.chat.slice(-25);
-          if (msg.text.length >= 12 && recent.some(c => norm(c.original) === norm(msg.text))) continue;
+          const nt = norm(msg.text);
+          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || nt.startsWith(o) && o.length >= 12; })) continue;
           const others = Object.values(m.players).filter(p => !p.isMe);
           // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
           if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;
