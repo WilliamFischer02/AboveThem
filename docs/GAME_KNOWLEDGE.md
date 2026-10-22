@@ -13,6 +13,7 @@
 - Comms sabotage blinds **Admin, Cams, Vitals, Doorlog** (not Fungle binoculars). Any "I saw it on admin/cams" claim made for a comms window is false.
 - Visual tasks: **Skeld** = Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute (Storage stage). **Polus** = Submit Scan, Clear Asteroids. **MIRA** = Submit Scan only. **Airship, Fungle** = none.
 - §2 is a catalogue of **61 lie checks**; the machine-readable version is `src/data/tactics/lieChecks.json`.
+- Per-map facts the checks need (sabotage fix rooms, door rooms, monitors + camera coverage, dummy panels, Airship spawns, visual/common task pools, rules) are in **`src/data/gameFacts.json`** (tested against the Skeld/Polus map JSON).
 
 ### Source key (inline links use these)
 
@@ -201,10 +202,11 @@ General (F: [W:Vent](https://among-us.fandom.com/wiki/Vent), [W:Vent object](htt
 - People inside a vent are invisible but **still show on Admin**.
 - A crewmate starting Clean Vent ejects anyone inside that vent and blocks it.
 - Ghost impostors cannot vent.
+- **Polus has no Clean Vent task** (its vents are open holes) (F1: W:Polus).
 
 | Map | Networks (each line = one connected system) | Tag |
 |---|---|---|
-| Skeld | {Admin, Cafeteria, Hallway (east corridor in front of Shields — see skeld.json)} · {Electrical, MedBay, Security} · {Navigation upper, Weapons} · {Navigation lower, Shields} · {Reactor upper, Upper Engine} · {Reactor lower, Lower Engine}. No vents in Storage, Communications, O2. | F (W:Vent object + skeld.json) |
+| Skeld | {Admin, Cafeteria, Hallway (the long corridor joining Weapons, O2, Navigation and Shields — W:Skeld)} · {Electrical, MedBay, Security} · {Navigation upper, Weapons} · {Navigation lower, Shields} · {Reactor upper, Upper Engine} · {Reactor lower, Lower Engine}. No vents in Storage, Communications, O2. | F (W:Vent object + skeld.json) |
 | MIRA HQ | **One system linking all 11 vents** (Admin, Balcony, Decontamination, Greenhouse, Hallway, Laboratory, Launchpad, Locker Room, MedBay, Office, Reactor). Direct links: Greenhouse–Office–Admin (triangle); Admin–Hallway; Hallway–Balcony; Balcony–MedBay; MedBay–Locker Room; Locker Room–Launchpad; Locker Room–Decontamination (vent page); Launchpad–Reactor; Reactor–Laboratory–Decontamination (triangle); Laboratory–Office. No vents in Cafeteria, Communications, Storage. | F (W:Vent object + W:MIRA; **U** for Locker Room–Decontamination, listed only on the vent page) |
 | Polus | {Admin, Outside (by Admin), Outside (lava), Laboratory} · {Electrical, O2, Outside (below Electrical)} · {Office, Storage, Outside (by Communications)} · {Outside (by Laboratory), Outside (above Electrical)}. No vents in Boiler Room, Communications, Dropship, MedBay, Security, Specimen, Weapons, Decontamination. | F (W:Vent object + polus.json) |
 | Airship | {Cockpit, Vault, Viewing Deck} (Vault and Viewing Deck only link to Cockpit) · {Engine Room, Kitchen, Main Hall (lower)} · {Gap Room left, Gap Room right, Main Hall (upper)} · {Cargo Bay, Records, Showers}. **Main Hall has two vents in two different systems.** No vents in Armory, Brig, Comms, Electrical, Hall of Portraits, Lounge, Medical, Meeting Room, Outside, Security, Ventilation. | F (W:Vent object + W:Airship) |
@@ -359,6 +361,20 @@ Columns: **Inputs** (what the app must have logged), **Conf.** (hard = proof, hi
 | `over_explains` | Long, unprompted alibi | low | W:CrewGuide, impostor.json |
 | `dead_accuser` | The player who accused P dies next round | low (can be a frame) | W:CrewGuide |
 
+### 2g. Combining checks: the kill-window model (F mechanics, derived rules)
+
+For a body reported at `tReport` in round `r` (round = time since the last meeting ended):
+
+| Bound | Value | Why |
+|---|---|---|
+| Earliest kill | `roundStart + killCooldown` (round 0: `+10 s`) | cooldown resets at meeting end; it only pauses (vent/cams), so this is a true lower bound |
+| Earliest kill (tighter) | last time the victim was seen alive (my sighting, a vitals OK read, a cleared player's claim) | — |
+| Latest kill | `tReport`; or first vitals DED read; or the Noisemaker alert time (exact) | — |
+| Viper | if the body was still visible at `tReport`, kill ≥ `tReport − dissolveTime` | body dissolves after `dissolveTime` |
+| Second body | if two bodies' windows can't be `killCooldown` apart, they are two killers | one impostor cannot double kill |
+
+A player is **cleared for that kill** when every moment of the window is covered by placements (sightings, cleared companions, monitor reads) whose gaps are shorter than the walk from their location to the body room and back (map `adjacent.sec / playerSpeed`, minus vent shortcuts if their room shares a network with the body room). With ≥ 2 impostors alive this is a **soft clear** (that kill only); with 1 impostor left it is a **hard clear** (W:CrewGuide "Alibis").
+
 ---
 
 ## 3. Pro / high-level play heuristics (H unless tagged)
@@ -375,6 +391,17 @@ Columns: **Inputs** (what the app must have logged), **Conf.** (hard = proof, hi
 - **Who to clear first**: visual-task doers, people you were with all round, the player who got an impostor ejected by their own accusation (W:CrewGuide "Trustful activity").
 - **Late game**: stay in groups, call the meeting as soon as possible at 3–4 alive, never "skip" when one more kill ends the game.
 - **Never lie as crew** — it gets crew ejected (W:CrewGuide).
+
+### 3.1b Asking good questions in a 15–120 s meeting (H, distilled from W:CrewGuide + crew.json principles)
+
+1. **Give your own room + companion first** (one line). It anchors the timeline and pre-empts the "you were alone" attack.
+2. **Ask the reporter first**: where, which way they came, who they passed. Then the last player seen with the victim. Then whoever was near the body room.
+3. **Ask questions someone else can check** ("who was in nav with you?") rather than unfalsifiable ones ("what were you doing?").
+4. **One question per line, full colour names** (Lime vs Green, Maroon vs Brown are confusable).
+5. **Make people commit early**; a contradiction only exists once two claims are on record. Log claims (the app does this) and bring them back next meeting (`story_changed`).
+6. **Only ask about visuals if visual tasks are on**, and only about tasks that are visual on this map.
+7. **Use the monitors you read**: "admin had 2 in elec at 1:10", "vitals: green DED at 1:30". Numbers end arguments.
+8. **Skip is a valid answer**: no sighting, no contradiction ⇒ skip and pair up — unless the count says skipping loses (see §3.1).
 
 ### 3.2 Vocabulary (definitions)
 
