@@ -175,6 +175,97 @@ describe('chat NLU: single lines', () => {
   });
 });
 
+// Real lines from public-lobby NDJSON logs (2026-10-21/22), anonymised: player names → colours / made-up words.
+// Each one was misread before the real-chat pass (or is a correct reading worth pinning).
+const REAL: [string, string, string[]][] = [
+  ['I think its orange', 'black', ['accuse:orange']],
+  ['no we didnt its green', 'blue', ['defense:blue', 'accuse:green']],
+  ['bro i am at cams cant be me', 'yellow', ['defense:yellow', 'location:yellow@security']],
+  ['i was wepons', 'maroon', ['location:maroon@weapons']],
+  ['and greys body dropped and i js saw rose so i dont think rose', 'banana', ['defense:rose']],
+  ['voting nan', 'tan', ['voteCall:banana']],
+  ['its not blue i was just with him at spawn', 'green', ['defense:blue', 'withMe:blue', 'location:green@cafeteria']],
+  ['40 sec cooldown is too high', 'purple', []],
+  ['if you kill me first you are gay', 'green', []],
+  ['I CANT DO MY TASK COS OF U', 'coral', []],
+  ['dude there is no purple', 'black', []],
+  ['Red needs to die', 'pink', []],
+  ['kill blue', 'black', []],
+  ['u can vote me', 'red', []],
+  ['its fine', 'red', []],
+  ['wait wht', 'green', []],
+  ['be nice black', 'red', []],
+  ['bye yellow', 'blue', []],
+  ['zorbak u also getting banned', 'banana', []],
+  ['Zorbo was An Imposter.', 'maroon', []],
+  ['Shortflux killed blue', 'red', []],
+  ['Cute flower bob', 'red', []],
+  ['1m waiting', 'red', []],
+  ['he has talked about red', 'banana', []],
+  ["I don't like black this round.", 'yellow', ['accuse:black']],
+  ['aight vis is off but black is hc', 'white', ['clear:black']],
+  ['I did stroids but fotgot I truned off vis', 'white', ['task:white#clearAsteroids']],
+  ['orange can clear me then', 'white', ['defense:white', 'withMe:orange']],
+  ["i was sus of cyan honestly so i was just wrong, i'll vote how u guys do here", 'maroon', ['accuse:cyan']],
+  ['I was with pink and yellow when noise happened', 'blue', ['withMe:pink+yellow']],
+  ['skip. no suspect', 'red', ['skipCall']],
+  ['any suspicions', 'rose', ['question']],
+  ['no idea who but white was in admin earlier that all i know', 'maroon', ['sighting:white@admin']],
+  ['i think black just killed in front of us under electriC', 'maroon', ['sawKill:black@electrical']],
+  ['i didnt threaten u Iol i lied that the gam', 'maroon', []],
+  ['im not lying', 'red', ['defense:red']],
+  ['orange just kille', 'maroon', ['sawKill:orange']],
+  ['started in elec went to admi', 'maroon', ['location:maroon@electrical']],
+  ['went to admi', 'maroon', ['location:maroon@admin']],
+  ['nana is clear this round i believ', 'maroon', ['clear:banana']],
+  ['red just vented in front of m', 'maroon', ['sawVent:red']],
+  ['red vented in admin unless that was shapeshifter', 'maroon', ['sawVent:red@admin']],
+  ['GREEN WAS IMPOSTER!?!?!?!?!?', 'yellow', ['accuse:green']],
+  ['It is dark red', 'yellow', ['accuse:maroon']],
+  ['Its prolly u coral and orange', 'black', ['accuse:coral+orange']],
+  ['Black. why is it not you?', 'yellow', ['question:black']],
+  ['I went to fix lights, anyone else in sec', 'white', ['location:white@electrical', 'question']],
+  ['Before lights', 'white', []],
+  ['buddy u walked straight from body into 02', 'banana', []],
+  ['if not me then cyan', 'red', []],
+  ['im trustin red bro was right last time', 'white', ['clear:red']],
+  ['I saw mhjk kill zorbo at Admin', 'white', []],
+  ['i sus tan considering i only just saw nana walk by admin', 'maroon', ['accuse:tan', 'sighting:banana@admin']],
+  ['Gamble me if you want but not me', 'tan', ['defense:tan']],
+  ['pink came out of electrical if thats relevant', 'blue', ['sighting:pink@electrical']],
+];
+
+describe('chat NLU: real lobby lines (anonymised)', () => {
+  for (const [text, speaker, want] of REAL) it(`"${text}" (${speaker})`, () => expect(p(text, speaker)).toEqual(want));
+
+  it('hearsay: "yellow said it was maroon" is yellow\'s claim, reported by the speaker, at half confidence', () => {
+    const [a] = parseLine('yellow said it was maroon last round', 'white', m);
+    expect(sig(a)).toBe('accuse:maroon');
+    expect(a.hearsayFrom).toBe('yellow');
+    expect(a.confidence).toBeLessThan(0.5);
+    expect(a.why.join(' ')).toContain('hearsay');
+    expect(parseLine('i said it was maroon', 'white', m)[0].hearsayFrom).toBeUndefined();
+  });
+
+  it('OCR re-reads of a bubble are not counted twice; short repeats from different players are', () => {
+    const out = meet(line('white', 'lime likely safe for this'), line('black', 'lime likely safe for this'), line('green', 'vote red'), line('blue', 'yeah vote red'),
+      line('yellow', 'red sus'), line('yellow', 'zorbax red sus'));
+    expect(sigs(out)).toEqual(['white>clear:lime', 'green>voteCall:red', 'blue>voteCall:red', 'yellow>accuse:red']);
+  });
+
+  it('"where body?" answered with a room is the body location', () => {
+    expect(sigs(meet(line('red', 'where body?'), line('black', 'Storage')))).toEqual(['red>question', 'black>bodyLocation@storage']);
+  });
+
+  it('tag cache follows renames and colour changes', () => {
+    const l1 = line('white', 'lime sus');
+    const a = { ...m, chat: [l1] };
+    expect(sigs(parseMeetingChat(a, 1))).toEqual(['white>accuse:lime']);
+    const recoloured = { ...a, players: { ...a.players, lime: { ...a.players.lime, color: 'gray' as const } } };
+    expect(sigs(parseMeetingChat(recoloured, 1))).toEqual([]); // nobody wears lime any more
+  });
+});
+
 describe('chat NLU: player names and OCR noise (roster = snap list)', () => {
   const named: MatchState = {
     ...m,
@@ -215,8 +306,9 @@ describe('chat NLU: player names and OCR noise (roster = snap list)', () => {
   });
   it('short common words never snap to names or colours', () => {
     expect(p('read it', 'white', named)).toEqual([]);
-    expect(p('pot', 'white', named)).toEqual(['accuse:green']); // 3-letter unique prefix of a name: weak bare mention
-    expect(parseLine('pot', 'white', named)[0].confidence).toBeLessThan(0.5);
+    // a line that is only a player name is the OCR picking up a bubble's name label (seen in real logs), not a message
+    expect(p('pot', 'white', named)).toEqual([]);
+    expect(p('bigbingus', 'white', named)).toEqual([]);
     expect(p('hello fellow', 'white', named)).toEqual([]);
     expect(p('we range far', 'white', named)).toEqual([]);
   });

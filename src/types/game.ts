@@ -590,6 +590,8 @@ export interface ChatAssertion {
   why: string[];
   /** Set when a later line by the same speaker in the same meeting reversed this stance (id of that assertion). */
   supersededBy?: string;
+  /** Hearsay ("blue said red vented"): the player who made the claim; `speaker` only reported it. Confidence is halved. */
+  hearsayFrom?: PlayerId;
 }
 
 export interface StanceFlip {

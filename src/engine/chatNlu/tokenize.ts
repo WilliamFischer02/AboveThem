@@ -8,7 +8,7 @@
  */
 import type { MatchState, PlayerColor, PlayerId, RoomId } from '../../types/game';
 import {
-  LEX, MAX_PHRASE_WORDS, colorOf, fuzzyColor, fuzzyStatic, mapIndex, nameMatch, ocrFix, playerIndex, squash1, squash2,
+  AMBIGUOUS_ALIAS, LEX, MAX_PHRASE_WORDS, colorOf, fuzzyColor, fuzzyStatic, mapIndex, nameMatch, ocrFix, playerIndex, squash1, squash2,
   staticLookup, fuzzyBest, type QuestionType, type StaticEntry, type WordClass,
 } from './lexicon';
 
@@ -37,7 +37,9 @@ export function rawTokens(text: string): RawTok[] {
   // "w/" (with) is written with a slash: the slash is dropped above, "w" stays.
   // Expansions ("conmigo" → with me, "wya" → where you) keep the original span on every part.
   const exp = LEX.expand ?? {};
-  return out.flatMap(t => (!t.punct && exp[t.w] ? exp[t.w].map(w => ({ ...t, w })) : [t]));
+  const expanded = out.flatMap(t => (!t.punct && exp[t.w] ? exp[t.w].map(w => ({ ...t, w })) : [t]));
+  for (let i = 1; i < expanded.length; i++) if (/^\d+$/.test(expanded[i - 1].w) && /^(sec|secs|s|min|mins)$/.test(expanded[i].w)) expanded[i] = { ...expanded[i], w: 'seconds' };
+  return expanded;
 }
 
 export type UnitKind =
@@ -70,15 +72,19 @@ export interface Unit {
   /** Line ids this unit's reading depends on (pronoun antecedents). */
   refs?: string[];
   caps?: boolean;
-  /** The colour word named a player not in the roster. */
+  /** The colour word named a player not in the roster (or too many players: the app's grey placeholder). */
   unresolved?: string;
+  /** P found by player name (not colour). */
+  byName?: boolean;
+  /** P from a colour alias that is also an ordinary word ("wht"). */
+  ambiguous?: boolean;
 }
 
 /** Classes that make a word "taken" for the purpose of player-name matching. */
 const FUNCTION_CLASSES = new Set<WordClass>(['be', 'move', 'do', 'see', 'with', 'and', 'or', 'neg', 'prepIn', 'prepNear', 'prepFrom', 'prepTo', 'self', 'selfBe', 'you', 'pronSingular', 'pronPlural', 'filler', 'noise', 'q', 'its', 'so', 'bound']);
 
 const PRIMARY_ORDER: WordClass[] = [
-  'q', 'selfBe', 'self', 'you', 'pronPlural', 'pronSingular', 'neg', 'its', 'so', 'or', 'and', 'with', 'together',
+  'cond', 'said', 'q', 'selfBe', 'self', 'you', 'pronPlural', 'pronSingular', 'neg', 'its', 'so', 'or', 'and', 'with', 'together',
   'body', 'dead', 'selfReport', 'vent', 'kill', 'followed', 'fake', 'lying', 'stack', 'vote', 'skip', 'out', 'sus', 'clear',
   'scan', 'visual', 'see', 'do', 'taskWord', 'report', 'be', 'move', 'prepNear', 'prepFrom', 'prepTo', 'prepIn', 'bound',
   'agree', 'hedge', 'intens', 'filler', 'noise',
@@ -86,6 +92,9 @@ const PRIMARY_ORDER: WordClass[] = [
 
 function playersForColor(c: PlayerColor, m: MatchState, speaker: PlayerId): { ids: PlayerId[]; self: boolean } {
   const ids = playerIndex(m).byColor.get(c) ?? [];
+  // More than two cards in one colour = the app's grey "colour unknown" placeholder or roster bloat:
+  // the word does not identify anyone.
+  if (ids.length > 2) return { ids: [], self: false };
   return { ids: ids.filter(id => id !== speaker), self: ids.includes(speaker) };
 }
 
@@ -100,12 +109,12 @@ function lookupPhrase(ph: string, m: MatchState, speaker: PlayerId, single: bool
   const cls = new Set<WordClass>(stat.map(e => e.cls));
   if (color) {
     const r = playersForColor(color, m, speaker);
-    return { k: 'P', cls, ids: r.ids, self: r.self, color, conf, via: conf < 1 ? 'fuzzy' : 'direct', unresolved: !r.ids.length && !r.self ? ph : undefined };
+    return { k: 'P', cls, ids: r.ids, self: r.self, color, conf, via: conf < 1 ? 'fuzzy' : 'direct', unresolved: !r.ids.length && !r.self ? ph : undefined, ambiguous: AMBIGUOUS_ALIAS.has(ph) || undefined };
   }
   // Player names: exact name beats function words only when the word is not a common function word.
   const nameExact = playerIndex(m).byName.get(ph);
   if (nameExact && ![...cls].some(c => FUNCTION_CLASSES.has(c))) {
-    return nameExact === speaker ? { k: 'P', cls, ids: [], self: true, conf } : { k: 'P', cls, ids: [nameExact], self: false, conf, via: 'direct' };
+    return nameExact === speaker ? { k: 'P', cls, ids: [], self: true, conf, byName: true } : { k: 'P', cls, ids: [nameExact], self: false, conf, via: 'direct', byName: true };
   }
   if (!stat.length && !room && !task) return undefined;
   const primary = PRIMARY_ORDER.find(c => cls.has(c));
@@ -155,7 +164,7 @@ export function tagLine(text: string, m: MatchState, speaker: PlayerId): Unit[] 
       }
       if (!hit) {
         const nm = nameMatch(ocrFix(w) ?? w, m);
-        if (nm) hit = { len: 1, unit: nm.id === speaker ? { k: 'P', cls: new Set(), ids: [], self: true, conf: nm.conf } : { k: 'P', cls: new Set(), ids: [nm.id], self: false, conf: nm.conf, via: nm.conf < 0.95 ? 'fuzzy' : 'direct' } };
+        if (nm) hit = { len: 1, unit: nm.id === speaker ? { k: 'P', cls: new Set(), ids: [], self: true, conf: nm.conf, byName: true } : { k: 'P', cls: new Set(), ids: [nm.id], self: false, conf: nm.conf, via: nm.conf < 0.95 ? 'fuzzy' : 'direct', byName: true } };
       }
       if (!hit) {
         const idx = mapIndex(m.map);
@@ -168,6 +177,11 @@ export function tagLine(text: string, m: MatchState, speaker: PlayerId): Unit[] 
           const u = lookupPhrase(fuzzyKey(fs), m, speaker, true, 0.75);
           if (u) hit = { len: 1, unit: u };
         }
+      }
+      if (!hit && i === toks.length - 1 && w.length >= 3 && /^\p{L}+$/u.test(w)) {
+        // the last word is often cut off at the bubble edge ("went to admi"): unique room prefix
+        const rooms = new Set([...mapIndex(m.map).rooms.entries()].filter(([a]) => a.length > w.length && !a.includes(' ') && a.startsWith(w)).map(([, id]) => id));
+        if (rooms.size === 1) hit = { len: 1, unit: { k: 'ROOM', cls: new Set(), room: [...rooms][0], conf: 0.7 } };
       }
     }
     const span = toks.slice(i, i + (hit?.len ?? 1));
@@ -206,7 +220,7 @@ export function tagLine(text: string, m: MatchState, speaker: PlayerId): Unit[] 
 function splitCompound(w: string, m: MatchState, speaker: PlayerId): { at: number; left: Unit; right: Unit } | undefined {
   if (w.length < 5 || w.length > 16 || !/^\p{L}+$/u.test(w)) return undefined;
   const useful = (u?: Hit['unit']) => !!u && !['filler', 'noise', 'W', 'agree', 'hedge', 'intens'].includes(u.k) && !(u.k === 'P' && !u.ids?.length && !u.self);
-  for (let at = w.length - 2; at >= 2; at--) {
+  for (let at = w.length - 3; at >= 3; at--) {
     const l = lookupPhrase(w.slice(0, at), m, speaker, true, 1);
     const r = lookupPhrase(w.slice(at), m, speaker, true, 1);
     if (useful(l) && useful(r)) return { at, left: { ...l!, s: 0, e: 0, w: '' }, right: { ...r!, s: 0, e: 0, w: '' } };

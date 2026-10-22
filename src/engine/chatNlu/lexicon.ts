@@ -10,7 +10,11 @@ export type WordClass =
   | 'sus' | 'vent' | 'kill' | 'selfReport' | 'followed' | 'fake' | 'lying' | 'stack' | 'clear' | 'scan' | 'visual'
   | 'see' | 'do' | 'taskWord' | 'vote' | 'out' | 'skip' | 'with' | 'together' | 'be' | 'move' | 'body' | 'dead' | 'its'
   | 'so' | 'or' | 'and' | 'neg' | 'agree' | 'bound' | 'prepIn' | 'prepNear' | 'prepFrom' | 'prepTo' | 'self' | 'selfBe'
-  | 'you' | 'pronSingular' | 'pronPlural' | 'report' | 'filler' | 'hedge' | 'intens' | 'q' | 'noise';
+  | 'you' | 'pronSingular' | 'pronPlural' | 'report' | 'filler' | 'hedge' | 'intens' | 'q' | 'noise'
+  /** "if", "unless": what follows is hypothetical. */
+  | 'cond'
+  /** "said", "told me": what follows is someone else's claim (hearsay). */
+  | 'said';
 
 export type QuestionType = 'where' | 'who' | 'why' | 'what' | 'proof' | 'how';
 
@@ -32,7 +36,14 @@ interface Lexicon {
   expand?: Record<string, string[]>;
   /** Colour pairs players mix up on screen (research seed). */
   confusableColors?: { pairs: [string, string][] };
+  /** Greetings / reactions: a colour next to them is an address ("bye yellow"), not an accusation. */
+  social?: string[];
+  /** Colour aliases that are also ordinary words ("wht" = what): never a bare accusation on their own. */
+  ambiguousAliases?: string[];
 }
+export const SOCIAL = new Set((LEX_RAW().social ?? []).map(s => s.toLowerCase()));
+export const AMBIGUOUS_ALIAS = new Set((LEX_RAW().ambiguousAliases ?? []).map(s => s.toLowerCase()));
+function LEX_RAW(): Lexicon { return raw as unknown as Lexicon; }
 export const LEX = raw as unknown as Lexicon;
 
 /** Lower-case, strip apostrophes, collapse spaces: the form every lexicon phrase is stored in. */
@@ -103,7 +114,9 @@ export function fuzzyBest<T>(probe: string, cands: Iterable<[string, T]>): { key
 }
 
 export function fuzzyStatic(probe: string): StaticEntry[] | undefined {
-  return fuzzyBest(probe, FUZZY_STATIC.map(x => [x.w, x.e] as [string, StaticEntry[]]))?.val;
+  // verbs get at most ONE edit: "getting" is 2 from "venting", "talked" 1 from "stalked" (blocked)
+  const hit = fuzzyBest(probe, FUZZY_STATIC.map(x => [x.w, x.e] as [string, StaticEntry[]]));
+  return hit && hit.dist <= 1 ? hit.val : undefined;
 }
 
 /** "susss" → "suss" (try first), then "sus": letters repeated 3+ times. */
