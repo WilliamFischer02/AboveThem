@@ -645,3 +645,7 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 .pair-chip .lbl { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #ffb3b3; margin-right: 2px; }
 .pair-chip .pc { font-weight: 800; color: #ffb3b3; }
 .why-list .cat { font-size: 12px; }
+/* Setup: "Roles on" chips */
+.roles-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
+.role-chip { min-height: 28px; padding: 1px 8px; border-radius: 999px; border: 2px solid #1a1d23; background: #3a3f48; color: #bfc6d2; font: 600 12px inherit; font-family: inherit; cursor: pointer; }
+.role-chip.on { background: var(--mint); color: #053a31; }
