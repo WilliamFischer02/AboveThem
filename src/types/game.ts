@@ -44,6 +44,8 @@ export interface Player {
   slotMeeting?: number;
   /** User said "not dead" during this meeting: automatic death reads are ignored until the next one. */
   aliveLockMeeting?: number;
+  /** Cell index in the first complete vote grid of this game (grid-order consistency, rosterMatch). */
+  gridOrder?: number;
 }
 
 // ---------------------------------------------------------------------------

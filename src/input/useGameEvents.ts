@@ -187,7 +187,7 @@ export function useGameEvents() {
       // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
       const players = Object.values(cur.players)
         .filter(p => p.isMe || (keepRoster && !p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
-        .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined }));
+        .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined, gridOrder: undefined }));
       st.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: freshRole(), players, lobbyCode: code ?? undefined });
       const live = useMatch.getState();
       const keep = new Set(players.map(p => p.id));
@@ -397,10 +397,18 @@ export function useGameEvents() {
 
         // ---- Vote grid: match cards to players by name / icon / colour / same-meeting slot. ----
         const hashes = useMatch.getState().iconHashes;
-        const rp: RosterPlayer[] = existing.map(p => ({ id: p.id, name: p.name, color: p.color, status: p.status, slot: p.slot, slotMeeting: p.slotMeeting, iconHash: hashes[p.id], isMe: p.isMe }));
+        const rp: RosterPlayer[] = existing.map(p => ({ id: p.id, name: p.name, color: p.color, status: p.status, slot: p.slot, slotMeeting: p.slotMeeting, iconHash: hashes[p.id], isMe: p.isMe, gridOrder: p.gridOrder }));
         const ge: GridEntry[] = entries.map(en => ({ index: en.index, name: en.name, color: en.color, dead: en.dead, iconHash: en.icon_hash }));
         const assignments = matchGrid(rp, ge, meetingNow);
         useMatch.getState().setRosterConfidence(rosterConfidence(assignments, ge));
+        // Grid order (handoff #9): taken once per game, from the first complete grid where every alive card found
+        // its player — all orders then come from one meeting, so their ranks are comparable later.
+        if (gridComplete && !existing.some(p => p.gridOrder !== undefined)) {
+          const alive = assignments.filter(a => !(entries.find(x => x.index === a.index)?.dead));
+          if (alive.length >= 3 && alive.every(a => a.playerId && !a.reasons.includes('elimination'))) {
+            for (const a of alive) s.dispatch({ kind: 'player', payload: { id: a.playerId!, gridOrder: a.index } });
+          }
+        }
         const established = existing.filter(p => p.slot !== undefined).length >= Math.min(entries.length, 4);
         for (const a of assignments) {
           const en = entries[a.index] ?? entries.find(x => x.index === a.index)!;
@@ -444,7 +452,8 @@ export function useGameEvents() {
             const live = useMatch.getState().match!;
             for (const d of Object.values(live.players)) {
               if (d.id === p.id || d.slot !== undefined || d.isMe) continue;
-              if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
+              // mergePlayers, not removePlayer: the duplicate's chat lines / claims / sightings follow the survivor.
+              if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'mergePlayers', payload: { from: d.id, into: p.id, why: `grid duplicate of ${p.name}` } });
             }
           }
           if (en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
