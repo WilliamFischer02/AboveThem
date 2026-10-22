@@ -223,5 +223,7 @@ export function describe(e: MatchEvent): string {
     case 'rosterSize': return `${e.payload.size} players (${e.payload.source})`;
     case 'myTasks': return `my tasks: ${e.payload.map(t => t.name).join(', ')}`;
     case 'chatPatch': return `translation`;
+    case 'diag': return `diagnostic: ${e.payload.what}`;
   }
+  return String((e as { kind?: unknown }).kind);
 }

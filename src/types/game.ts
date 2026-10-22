@@ -44,6 +44,8 @@ export interface Player {
   slotMeeting?: number;
   /** User said "not dead" during this meeting: automatic death reads are ignored until the next one. */
   aliveLockMeeting?: number;
+  /** Cell index in the first complete vote grid of this game (grid-order consistency, rosterMatch). */
+  gridOrder?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +202,14 @@ export interface ChatLine {
   lang?: string;         // ISO 639-1
   langConfidence?: number;
   source: ObservationSource;
+  /** OCR saw the bubble but could not read it (other script / missing OCR pack). */
+  unreadable?: boolean;
+  /** "cyrillic" when the text looks like Cyrillic read by a Latin-only OCR engine. */
+  scriptHint?: string;
+  /** OCR language whose reading won (when not the default engine). */
+  ocrLang?: string;
+  /** `translated` was made from a look-alike guess, not from a real reading. */
+  xlatGuess?: boolean;
 }
 
 export type ClaimType = 'location' | 'companion' | 'task' | 'sighting' | 'accusation' | 'defense' | 'clear';
@@ -254,6 +264,8 @@ export interface PhaseChange {
   reason?: 'body' | 'button';
   /** For gameOver: read from the end screen (VICTORY / DEFEAT word or its colour). */
   outcome?: 'victory' | 'defeat';
+  /** Screen reads confirm a phase a few frames late (hysteresis): how long before `wall` it really began. */
+  lagMs?: number;
 }
 
 // ---------------------------------------------------------------------------

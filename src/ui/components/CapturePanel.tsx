@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isTauri } from '../../state/persist';
 import { Crewmate } from './Crewmate';
+import { OCR_INSTALL_STEPS } from '../../input/eventHelpers';
 import type { PlayerColor } from '../../types/game';
 
 interface CaptureStatus { running: boolean; title: string | null; width: number; height: number; seq: number; age_ms: number }
@@ -77,6 +78,11 @@ export function CapturePanel({ onRoster, knownNames }: { onRoster?: (entries: Ro
           {status?.running ? `${status.title} · ${status.width}×${status.height} · frame #${status.seq} · ${status.age_ms} ms old` : 'not capturing'}
         </span>
         <button className="btn xs ghost right" onClick={() => setShowPreview(p => !p)}>{showPreview ? 'hide preview' : 'preview'}</button>
+      </div>
+      <div className="muted small" style={{ marginTop: 4 }}>
+        Chat OCR reads: <b>{langs.length ? langs.join(', ') : '…'}</b>
+        {langs.length > 0 && !langs.some(l => /^ru/i.test(l)) && <> — Russian / Cyrillic chat shows as "can't read".</>}
+        <div>To read another language: {OCR_INSTALL_STEPS}</div>
       </div>
       {error && <div className="status-err" style={{ marginTop: 4 }}>{error}</div>}
       {showPreview && preview && <img src={preview} alt="latest frame" style={{ width: '100%', marginTop: 6, border: '2px solid var(--ink)', borderRadius: 8 }} />}

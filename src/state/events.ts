@@ -50,14 +50,16 @@ export type MatchEvent =
   /** My task list, read from the top-left of the screen. */
   | { kind: 'myTasks'; wall: number; payload: MyTask[] }
   /** Translation / language detected for a chat line (arrives after the line itself). */
-  | { kind: 'chatPatch'; wall: number; payload: { id: string; translated?: string; lang?: string; langConfidence?: number } }
+  | { kind: 'chatPatch'; wall: number; payload: { id: string; translated?: string; lang?: string; langConfidence?: number; xlatGuess?: boolean } }
   /** Removes the most recent not-yet-undone undoable event. */
-  | { kind: 'undo'; wall: number };
+  | { kind: 'undo'; wall: number }
+  /** Diagnostics only (why a chat bubble was dropped / unreadable, …): written to the NDJSON, no state change. */
+  | { kind: 'diag'; wall: number; payload: { what: string; [k: string]: unknown } };
 
 export type EventKind = MatchEvent['kind'];
 
 /** `init` can't be undone; everything else can. */
-export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo' && e.kind !== 'chatPatch' && e.kind !== 'mergePlayers' && e.kind !== 'rosterSize';
+export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo' && e.kind !== 'chatPatch' && e.kind !== 'mergePlayers' && e.kind !== 'rosterSize' && e.kind !== 'diag';
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -186,6 +188,9 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       return { ...m, me: m.me === from ? into : m.me, players, observations: m.observations.map(rp), claims: m.claims.map(rp), votes: m.votes.map(rp), ejections: m.ejections.map(rp), chat: m.chat.map(rp), ledger: m.ledger.map(rp) };
     }
     case 'rosterSize': return { ...m, rosterSize: e.payload.size, rosterSizeSource: e.payload.source };
+    case 'diag': return m;
+    // A log line from a newer build (unknown kind) must not wipe the state on replay.
+    default: return m;
   }
 }
 
@@ -235,7 +240,10 @@ export function parseLines(text: string): MatchEvent[] {
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    try { out.push(JSON.parse(line) as MatchEvent); } catch { /* skip corrupt line; fail soft */ }
+    try {
+      const e = JSON.parse(line) as MatchEvent;
+      if (e && typeof e === 'object' && typeof (e as { kind?: unknown }).kind === 'string') out.push(e); // `null`, numbers, half lines: skip
+    } catch { /* skip corrupt line; fail soft */ }
   }
   return out;
 }

@@ -97,7 +97,7 @@ impl Default for Regions {
             chat_input:      Rect::new(350, 795, 1140, 100),
             lobby_settings:  Rect::new(1460, 200, 440, 560),
             lobby_code:      Rect::new(1500, 205, 380, 110), // includes the "ROOM CODE" title so a 6-cap name can't fake it
-            map_name:        Rect::new(1500, 345, 380, 90),
+            map_name:        Rect::new(1515, 368, 375, 90),  // the map logo under "ROOM SETTINGS" (read binarised, watcher::read_map_logo)
             // Measured on meeting_vote_grid.png / eject_text.png (2026-10-21).
             vote_grid:       Rect::new(200, 205, 1540, 680),
             meeting_header:  Rect::new(600, 100, 760, 90),

@@ -109,12 +109,17 @@ export function useHotkeys(): { pending: string | null; registered: 'global' | '
         const { invoke } = await import('@tauri-apps/api/core');
         const { listen } = await import('@tauri-apps/api/event');
         try {
-          await invoke('set_hotkey_config', { config });
+          const failed = await invoke<string[] | null>('set_hotkey_config', { config });
           if (cancelled) return;
-          unlistenChord = await listen<ChordEvent>('hotkey://chord', e => handle(e.payload));
-          unlistenPending = await listen<ChordEvent>('hotkey://pending', e => setPending(e.payload.first));
+          // The cleanup can run while a listen() is pending: drop late registrations at once (no double chords).
+          const un1 = await listen<ChordEvent>('hotkey://chord', e => handle(e.payload));
+          if (cancelled) { un1(); return; }
+          unlistenChord = un1;
+          const un2 = await listen<ChordEvent>('hotkey://pending', e => setPending(e.payload.first));
+          if (cancelled) { un2(); return; }
+          unlistenPending = un2;
           setRegistered('global');
-          setError(null);
+          setError(failed && failed.length ? `taken by another app: ${failed.join(', ')}` : null);
         } catch (err) {
           setError(String(err));
         }

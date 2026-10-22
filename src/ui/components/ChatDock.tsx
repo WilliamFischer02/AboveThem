@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../../state/store';
 import { PlayerIcon } from './Crewmate';
+import { ChatHint } from './ChatHint';
 import { Transcript } from './Transcript';
 
 export function ChatDock({ mini = false }: { mini?: boolean }) {
@@ -55,6 +56,7 @@ export function ChatDock({ mini = false }: { mini?: boolean }) {
                   <div className={`who ${red ? 'red-name' : ''}`}>{name(c.sender)}</div>
                   <div className="msg">{c.original}</div>
                   {c.translated && <div className="xlat"><span className="lang">{c.lang ?? '?'} → en</span>{c.translated}</div>}
+                  <ChatHint line={c} />
                   {open && claims.length > 0 && <div className="tags">{claims.map(k => k.type + (k.about ? ' ' + name(k.about) : '') + (k.room ? ' ' + (match.map.rooms.find(r => r.id === k.room)?.name ?? k.room) : '')).join(' · ')}</div>}
                 </div>
               </div>
