@@ -638,3 +638,6 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 .mc-i { font-size: 12px; }
 .mc-button { opacity: 0.75; }
 .gone-chip.big .n { color: #fff; font-weight: 700; text-shadow: -1.5px 0 0 #1a1d23, 1.5px 0 0 #1a1d23, 0 -1.5px 0 #1a1d23, 0 1.5px 0 #1a1d23; }
+.icon-btn { position: relative; }
+.health-dot { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; background: #ff3b3b; border: 2px solid #1a1d23; animation: pulse-mint 1.2s ease-in-out infinite; }
+.health-line { color: #ff8a8a; font-weight: 600; }

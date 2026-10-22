@@ -155,12 +155,20 @@ function MoreMenu({ ov, focus, setFocus, inMeeting }: { ov: ReturnType<typeof us
   const alive = Object.values(match.players).filter(p => p.status === 'alive').length;
   const impLeft = match.settings.impostorCount - match.ejections.filter(e => e.wasImpostor).length;
   const run = (f: () => void) => () => { f(); setOpen(false); };
+  // Screen-reading health (bugs-rust AutoHealth): red dot on ⋯ so it is visible without opening a fold.
+  const hp = auto?.health;
+  const hhmm = (t: number | null | undefined) => (t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+  const problems = [
+    hp?.captureLostAt ? `Capture lost since ${hhmm(hp.captureLostAt)}${hp.captureError ? ' — ' + hp.captureError : ''}` : null,
+    hp?.watcherDownAt ? `Screen watcher down since ${hhmm(hp.watcherDownAt)}${hp.watcherProblem ? ' — ' + hp.watcherProblem : ''}` : null,
+  ].filter((x): x is string => !!x);
   return (
     <>
-      <button ref={ref} className={`btn xs ghost icon-btn ${open ? 'on' : ''}`} title="More: phases, overlay, focus mode, roster tools" onClick={() => setOpen(o => !o)}>⋯</button>
+      <button ref={ref} className={`btn xs ghost icon-btn ${open ? 'on' : ''}`} title={problems.length ? problems.join('\n') : 'More: phases, overlay, focus mode, roster tools'} onClick={() => setOpen(o => !o)}>⋯{problems.length > 0 && <span className="health-dot" />}</button>
       {open && (
         <Popover anchorRef={ref} onClose={() => setOpen(false)} width={300}>
           <div className="menu-title">{match.map.name} · {alive} alive · {impLeft} imp left</div>
+          {problems.map(t => <div key={t} className="status-line health-line">● {t}</div>)}
           <div className="menu-sec">Phase (if screen reading missed it)</div>
           <div className="menu-acts">
             {(phase === 'lobby' || phase === 'ejection' || phase === 'roundStart' || phase === 'gameOver') && <button className="btn sm primary" onClick={run(() => setPhase('round'))}>▶ Round start</button>}
