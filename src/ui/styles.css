@@ -571,3 +571,13 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 
 /* Focus mode: headline + roster (+ meeting) only */
 .shell.focus .tasks-line { display: none; }
+/* fixes from the 380 px screenshots */
+.meter { min-width: auto; }
+.menu.pop .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.menu.pop .grid .btn { font-size: 12px; padding: 3px 5px; gap: 4px; word-break: break-word; }
+@media (min-width: 820px) {
+  .content.layout { row-gap: 0; }
+  .content.layout > div:not(:empty) { margin-bottom: 8px; }
+  /* Docked chat sits under the right column only; the roster column stays clear. */
+  .chat-dock:not(.open) { left: auto; width: calc(55% - 14px); }
+}

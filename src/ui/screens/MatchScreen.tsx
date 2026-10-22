@@ -102,6 +102,7 @@ export function MatchScreen() {
         </div>
         <div className="area-main">
           {!focus && <Tips />}
+          {/* features */}
           <Roster scores={scores} />
         </div>
         {!focus && (

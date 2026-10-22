@@ -63,6 +63,7 @@ describe('headline', () => {
     const h = headline(match(), [sc('red', 0.62), sc('blue', 0.42)]);
     expect(h.kind).toBe('leaning');
     expect(h.title).toBe('Leaning: Red');
+    expect(h.subtitle).toMatch(/next: Blue \(42%\)/);
   });
 
   it('critical vote when crew alive − impostors ≤ 2; basis keeps the classification', () => {

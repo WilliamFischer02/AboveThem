@@ -114,7 +114,7 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
         const l = topLabel(p1);
         base = { ...simple('oneSuspect', 'One Major Suspect', `Prime suspect: ${withPct(p1)}${l ? ' — ' + l : ''}`, 'danger'), players, short, why: whyOf(list) };
       } else {
-        base = { ...simple('leaning', `Leaning: ${name(p1.player)}`, `Prime suspect: ${withPct(p1)} — ask before you vote`, 'warn'), players, short, why: whyOf(list) };
+        base = { ...simple('leaning', `Leaning: ${name(p1.player)}`, p2 && p2.probability >= SECOND_LOW ? `Prime suspect: ${withPct(p1)} · next: ${withPct(p2)}` : `Prime suspect: ${withPct(p1)} — ask before you vote`, 'warn'), players, short, why: whyOf(list) };
       }
     }
   }
