@@ -41,7 +41,7 @@ pub const EV_GAME_OVER: &str = "game://game_over";
 pub const EV_CAPACITY: &str = "game://capacity";
 
 #[derive(Clone, Debug, serde::Serialize)]
-pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
+pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32, /** ms between the first frame showing this phase and its confirmation (hysteresis). */ pub lag_ms: u64 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RosterEvent { pub source: &'static str, pub entries: Vec<RosterEntry> }
@@ -243,6 +243,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_seq = 0u64;
     let mut candidate: Option<Phase> = None;
     let mut candidate_count = 0u32;
+    let mut candidate_since = Instant::now();
     let mut last_roster: Vec<RosterEntry> = Vec::new();
     let mut last_roster_read = Instant::now() - Duration::from_secs(60);
     let mut last_lobby: Vec<RosterEntry> = Vec::new();
@@ -383,7 +384,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         } else { eject_gone_since = None; }
         let next = next.or_else(|| fallback_phase(detector.current, eject_gone_since.map(|t| t.elapsed()), unknown_since.map(|t| t.elapsed())));
         if let Some(next) = next {
-            if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
+            if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; candidate_since = Instant::now(); }
             // Leaving a meeting, the task bar shows for a moment before the ejection text: a round
             // straight after a meeting needs ~2.5 s of evidence so the vote → eject → round sequence
             // is not counted as two rounds.
@@ -397,7 +398,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if candidate_count >= needed {
                 if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
                     let name = phase_name(p);
-                    let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting });
+                    let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting, lag_ms: candidate_since.elapsed().as_millis() as u64 });
                     if p == Phase::GameOver {
                         let outcome = over_word.or_else(|| match accent.dominant() { Some("blue") => Some("victory"), _ => None });
                         let _ = app.emit(EV_GAME_OVER, GameOverEvent { outcome, accent: accent.dominant() });

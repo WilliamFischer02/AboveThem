@@ -252,6 +252,8 @@ export interface PhaseChange {
   reason?: 'body' | 'button';
   /** For gameOver: read from the end screen (VICTORY / DEFEAT word or its colour). */
   outcome?: 'victory' | 'defeat';
+  /** Screen reads confirm a phase a few frames late (hysteresis): how long before `wall` it really began. */
+  lagMs?: number;
 }
 
 // ---------------------------------------------------------------------------

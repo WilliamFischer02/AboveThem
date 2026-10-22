@@ -14,19 +14,27 @@ export interface ClockState {
 
 export const initialClock: ClockState = { round: -1, roundStartWall: null, frozenAtWall: null };
 
+/** When the phase really began: `wall` minus the detector's confirmation lag (capped, never negative). */
+function startOf(p: PhaseChange): number {
+  const lag = typeof p.lagMs === 'number' && isFinite(p.lagMs) ? Math.min(Math.max(0, p.lagMs), 10_000) : 0;
+  return p.wall - lag;
+}
+
 export function clockOnPhase(c: ClockState, p: PhaseChange): ClockState {
   switch (p.phase) {
     case 'roundStart':
     case 'round':
       // A new round begins only when coming from a non-round phase.
       if (c.frozenAtWall !== null || c.roundStartWall === null) {
-        return { round: c.round + 1, roundStartWall: p.wall, frozenAtWall: null };
+        // Back-date by the confirmation lag (≈ 2.5 s after a meeting), but never before the previous freeze.
+        const start = c.frozenAtWall !== null ? Math.max(startOf(p), c.frozenAtWall) : startOf(p);
+        return { round: c.round + 1, roundStartWall: start, frozenAtWall: null };
       }
       return c;
     case 'meetingDiscussion':
     case 'meetingVoting':
     case 'ejection':
-      return { ...c, frozenAtWall: c.frozenAtWall ?? p.wall };
+      return { ...c, frozenAtWall: c.frozenAtWall ?? (c.roundStartWall !== null ? Math.max(startOf(p), c.roundStartWall) : p.wall) };
     case 'lobby':
     case 'gameOver':
       return { ...c, roundStartWall: null, frozenAtWall: p.wall };

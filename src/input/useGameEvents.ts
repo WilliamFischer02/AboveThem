@@ -29,7 +29,7 @@ import { translationRequest, senderByIconColor, type ChatPayload } from './event
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
 export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number]; icon_hash?: string; dim?: number }
-interface PhaseEvent { phase: string; round: number; meeting: number }
+interface PhaseEvent { phase: string; round: number; meeting: number; lag_ms?: number }
 interface EjectEvent { raw: string; name: string | null; was_impostor: boolean | null; skipped: boolean }
 interface GameOverEvent { outcome: 'victory' | 'defeat' | null; accent: 'teal' | 'blue' | 'red' | null }
 export interface WatcherStatus { running: boolean; phase: string | null; round: number; meeting: number; markers: Record<string, boolean>; last_ocr_ms: number; ocr_calls: number; frame_seq: number; lobby_code: string | null }
@@ -527,7 +527,8 @@ export function useGameEvents() {
           useMatch.getState().setPhase('roundStart');
           return;
         }
-        s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
+        const lag = e.payload.lag_ms ? { lagMs: e.payload.lag_ms } : {};
+        s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body', ...lag } : lag);
         if (phase === 'meetingDiscussion') bannerReason = null;
         s2.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
       }));
