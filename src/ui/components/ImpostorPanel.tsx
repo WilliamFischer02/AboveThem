@@ -8,6 +8,7 @@ import type { SuspectScore } from '../../types/game';
 import { useMatch } from '../../state/store';
 import { impostorAdvice } from '../../engine/impostor';
 import { PlayerIcon } from './Crewmate';
+import { CopyButton } from './MeetingPanel';
 
 const TYPE_LABEL: Record<string, string> = {
   where_were_you: 'Where were you?', near_the_body: 'You were near the body', you_were_alone: 'You were alone',
@@ -24,55 +25,75 @@ export function ImpostorPanel({ scores, inMeeting }: { scores: SuspectScore[]; i
 
   return (
     <section className="panel impostor-panel">
-      <div className="row" style={{ marginBottom: 6 }}>
-        <h3 style={{ color: '#ff5c5c' }}>IMPOSTOR</h3>
-        {partner && <span className="row" style={{ gap: 6 }}><PlayerIcon id={partner.id} color={partner.color} size={28} /><span className="badge imp">partner: {partner.name}</span></span>}
-        <span className="muted small right">{inMeeting ? 'meeting: say less, push one name' : 'round: build your story as you move'}</span>
+      <div className="imp-head">
+        <span className="imp-title">🔪 IMPOSTOR</span>
+        {partner && <span className="imp-partner" title="Your partner"><PlayerIcon id={partner.id} color={partner.color} size={22} /><b>{partner.name}</b></span>}
+        <span className="imp-mode right" title={inMeeting ? 'Say less, push one name' : 'Build your story as you move'}>{inMeeting ? '🗣 push one name' : '🧭 build your story'}</span>
       </div>
 
       {adv.partnerWarning && (
-        <div className="script-line" style={{ borderColor: '#ffd166', marginBottom: 6 }}>
-          <span className="text"><b>Room is turning on {partner?.name}.</b> Don't hard-defend — mild doubt, then an alternative:</span>
-          {adv.partnerWarning.map((l, i) => <span key={i} className="small">· {l}</span>)}
+        <div className="imp-warn">
+          <b>Room is turning on {partner?.name}.</b> Don't hard-defend — mild doubt, then an alternative:
+          {adv.partnerWarning.map((l, i) => <div key={i} className="small">· {l}</div>)}
         </div>
       )}
 
       {inMeeting && adv.push && (
-        <div className="vote-card big go" style={{ marginBottom: 8 }}>
-          <PlayerIcon id={adv.push.target} color={match.players[adv.push.target]?.color ?? 'unknown'} size={48} />
-          <div className="col" style={{ gap: 2 }}>
-            <div style={{ fontWeight: 800, fontSize: 20 }}>PUSH {name(adv.push.target)}</div>
+        <div className="vote-card go imp-push">
+          <PlayerIcon id={adv.push.target} color={match.players[adv.push.target]?.color ?? 'unknown'} size={36} />
+          <div className="col grow" style={{ gap: 2, minWidth: 0 }}>
+            <div className="imp-push-t">PUSH {name(adv.push.target)}</div>
             <div className="small">“{adv.push.line}”</div>
             <div className="small muted">{adv.push.why}</div>
           </div>
+          <CopyButton text={adv.push.line} />
         </div>
       )}
 
-      <h3>Your story (from what you logged)</h3>
-      <div className="col" style={{ marginBottom: 8 }}>
-        {adv.alibis.map((a, i) => (
-          <div key={i} className="script-line">
-            <span className="text">{a.text}</span>
-            <span className="small muted">weak point: {a.weakPoint}</span>
-          </div>
-        ))}
-      </div>
+      {adv.alibis.length > 0 && <div className="menu-sec">Your story</div>}
+      {adv.alibis.slice(0, 1).map((a, i) => <ImpLine key={i} text={a.text} note={`weak point: ${a.weakPoint}`} />)}
+      {adv.alibis.length > 1 && (
+        <details className="fold"><summary>{adv.alibis.length - 1} more alibi{adv.alibis.length > 2 ? 's' : ''}</summary>
+          {adv.alibis.slice(1).map((a, i) => <ImpLine key={i} text={a.text} note={`weak point: ${a.weakPoint}`} />)}
+        </details>
+      )}
 
-      <h3>{adv.defenses[0]?.accuser ? `Answering ${adv.defenses[0].accuser}` : 'If accused'}</h3>
-      <div className="col" style={{ marginBottom: 8 }}>
-        {adv.defenses.map((d, i) => (
-          <div key={i} className="script-line">
-            <span className="small muted">{TYPE_LABEL[d.type] ?? d.type}{d.accuser ? ` — by ${d.accuser}` : ''}</span>
-            {d.lines.slice(0, 2).map((l, j) => <span key={j} className="text">“{l}”</span>)}
-            <span className="small" style={{ color: '#ffb3b3' }}>avoid: {d.avoid.join(' / ')}</span>
-            <span className="small muted">then: {d.followup}</span>
-          </div>
-        ))}
-      </div>
+      {adv.defenses.length > 0 && <div className="menu-sec">{adv.defenses[0]?.accuser ? `Answering ${adv.defenses[0].accuser}` : 'If accused'}</div>}
+      {adv.defenses.slice(0, 1).map((d, i) => <Defense key={i} d={d} />)}
+      {adv.defenses.length > 1 && (
+        <details className="fold"><summary>{adv.defenses.length - 1} more answer{adv.defenses.length > 2 ? 's' : ''}</summary>
+          {adv.defenses.slice(1).map((d, i) => <Defense key={i} d={d} />)}
+        </details>
+      )}
 
       <details className="fold"><summary>Rules you'll forget under pressure</summary>
         <ul className="small" style={{ margin: '4px 0 0 16px' }}>{adv.rules.map((r, i) => <li key={i}>{r}</li>)}</ul>
       </details>
     </section>
+  );
+}
+
+/** One sentence you could paste into chat + copy button + a small note under it. */
+function ImpLine({ text, note }: { text: string; note?: string }) {
+  return (
+    <div className="script-line">
+      <div className="col">
+        <span className="text">{text}</span>
+        {note && <span className="small muted">{note}</span>}
+      </div>
+      <CopyButton text={text} />
+    </div>
+  );
+}
+
+type Def = ReturnType<typeof impostorAdvice>['defenses'][number];
+function Defense({ d }: { d: Def }) {
+  return (
+    <div className="imp-def">
+      <div className="small muted">{TYPE_LABEL[d.type] ?? d.type}{d.accuser ? ` — by ${d.accuser}` : ''}</div>
+      {d.lines.slice(0, 2).map((l, j) => <ImpLine key={j} text={l} />)}
+      <div className="small" style={{ color: '#ffb3b3' }}>avoid: {d.avoid.join(' / ')}</div>
+      <div className="small muted">then: {d.followup}</div>
+    </div>
   );
 }

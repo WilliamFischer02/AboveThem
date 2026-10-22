@@ -17,6 +17,29 @@ import weights from '../data/tactics/weights.json';
 import { fmt } from './evidence';
 import { impostorsRemaining } from './suspicion';
 import { headline as situationHeadline, headlineText } from './headline';
+import { selectMapQuestions, type MapQuestionsFile, type QuestionSituation } from './mapQuestions';
+import questionsJson from '../data/maps/questions.json';
+
+const MAP_QUESTIONS = questionsJson as unknown as MapQuestionsFile;
+const SABOTAGES = new Set(['lights', 'comms', 'reactor', 'o2', 'doors', 'seismic', 'crashCourse', 'mushroomMixup']);
+
+/** What this meeting is about, for the per-map question bank (maps agent: engine/mapQuestions.ts). */
+export function questionSituation(m: MatchState, meeting: number, suspect?: PlayerId): QuestionSituation {
+  const round = Math.max(0, m.phase.round);
+  const body = [...m.observations].reverse().find(o => o.type === 'bodyFound' && o.stamp.round === round);
+  const sab = [...m.observations].reverse().find(o => o.type === 'sabotage' && o.stamp.round === round);
+  const claims = suspect ? m.claims.filter(c => c.meeting === meeting && c.by === suspect) : [];
+  const loc = [...claims].reverse().find(c => c.room);
+  const task = [...claims].reverse().find(c => c.type === 'task' && c.taskId);
+  return {
+    bodyRoom: body && body.type === 'bodyFound' ? body.room : undefined,
+    victim: body && body.type === 'bodyFound' ? name(m, body.victim) : undefined,
+    sabotage: sab && sab.type === 'sabotage' && SABOTAGES.has(sab.kind) ? (sab.kind as QuestionSituation['sabotage']) : undefined,
+    claimRoom: loc?.room,
+    claimTask: task?.taskId,
+    player: suspect ? name(m, suspect) : undefined,
+  };
+}
 
 type Situation = { say?: string[]; ask?: string[]; watch?: string[] };
 const S = crew.situations as Record<string, Situation>;
@@ -73,11 +96,8 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
   const alive = Object.values(m.players).filter(p => p.status === 'alive').length;
   const impRemaining = impostorsRemaining(m);
   const crewAlive = alive - impRemaining;
-  // Critical: after one more kill the impostors could win (crew ≤ imp + 1), or it's already parity.
   // crewAlive > impRemaining: a roster that is not filled yet (only "me") must not read as the endgame.
-  const live = impRemaining > 0 && crewAlive > impRemaining;
-  const critical = live && crewAlive <= impRemaining + 2;
-  const endgame = live && crewAlive <= impRemaining + 1;
+  const endgame = impRemaining > 0 && crewAlive > impRemaining && crewAlive <= impRemaining + 1;
 
   // 1. Hard clears first — the most valuable thing you can say.
   const clears = scores.filter(s => s.verdict === 'certainCrew' || s.verdict === 'hardClear');
@@ -138,20 +158,12 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
     addWatch(S.two_left_endgame.watch, vars);
   }
 
-  // 6. Vote recommendation.
+  // 6. Vote recommendation — taken from the situational headline (engine/headline.ts) so the
+  //    header and the vote card can never disagree. One source of truth.
+  const hl = situationHeadline(m, scores);
   const ranked = scores.filter(s => s.verdict !== 'certainCrew' && s.verdict !== 'hardClear');
   const top = ranked[0];
-  const second = ranked[1];
-  let vote: MeetingScript['vote'];
-  if (top && top.verdict === 'certainImpostor') {
-    vote = { target: top.player, confidence: 1, reason: top.evidence.find(e => e.category === 'hard')?.label ?? 'Confirmed impostor.' };
-  } else if (top && top.probability >= weights.vote.threshold && (!second || top.probability - second.probability >= weights.vote.marginToSecond)) {
-    vote = { target: top.player, confidence: top.probability, alternative: 'skip', reason: top.evidence.filter(e => e.weight > 0).map(e => e.label).slice(0, 2).join('; ') };
-  } else if (critical && top && top.probability > 0.3) {
-    vote = { target: top.player, confidence: top.probability, alternative: 'skip', reason: 'Critical vote — skipping hands them the game. Best available suspect.' };
-  } else {
-    vote = { target: 'skip', confidence: top ? 1 - top.probability : 1, alternative: top?.player, reason: 'No suspect clears the threshold. Skip and stack next round.' };
-  }
+  const vote: MeetingScript['vote'] = { ...hl.vote };
 
   const anySignal = ask.some(q => q.why.length > 0) || (top !== undefined && top.evidence.some(e => Math.abs(e.weight) >= MIN_SIGNAL));
   const insufficient = !anySignal && vote.target === 'skip';
@@ -162,12 +174,21 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
   }
 
   // One source of truth for the situational header (engine/headline.ts).
-  const headline = headlineText(situationHeadline(m, scores));
+  const headline = headlineText(hl);
+
+  // 7. Per-map questions (body room / the top suspect's claimed room or task): up to 2 Ask lines; lie notes → Watch.
+  const situation = questionSituation(m, meeting, top?.player);
+  const mapLines = (() => { try { return selectMapQuestions(MAP_QUESTIONS, m.map, situation, 6); } catch { return []; } })();
+  const mapAsk: MeetingQuestion[] = mapLines.filter(l => l.kind === 'question').slice(0, 2).map(l => ({
+    to: situation.player && l.text.includes(situation.player) && top ? top.player : 'all', text: l.text, why: [], expectedGain: l.score, note: l.why ?? 'Map-specific question',
+  }));
+  for (const l of mapLines.filter(x => x.kind === 'lie').slice(0, 1)) if (!usedWatch.has(l.text)) { usedWatch.add(l.text); watch.unshift(l.text); }
+  const engineAsk = ask.sort((a, b) => b.expectedGain - a.expectedGain).slice(0, mapAsk.length ? 4 - mapAsk.length : 3);
 
   return {
     meeting,
     headline,
-    ask: ask.sort((a, b) => b.expectedGain - a.expectedGain).slice(0, 3),
+    ask: [...engineAsk, ...mapAsk],
     say: say.slice(0, 3),
     vote,
     watch: watch.slice(0, 3),

@@ -599,3 +599,53 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 .chat-hint { margin-top: 2px; font-size: 11px; color: #a05a00; font-weight: 600; }
 .ov-watch { font-size: 15px; font-weight: 700; border-left: 6px solid #6b7382; }
 .ov-tone-warn { border-left-color: #f5b54b; } .ov-tone-danger { border-left-color: #d8232a; } .ov-tone-calm { border-left-color: #2d6a8c; } .ov-tone-info { border-left-color: #3fe0c0; }
+
+/* ===================== ui-streamline: ghost + impostor density pass ===================== */
+.ghost-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ghost-title { font-size: 17px; font-weight: 800; color: #fff; }
+.ghost-killer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.ghost-killer .nm { font-size: 18px; font-weight: 800; color: #fff; }
+.gone-strip.pick { gap: 6px; }
+.imp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.imp-title { font-weight: 800; letter-spacing: 1px; color: #ff5c5c; font-size: 15px; }
+.imp-partner { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #ffb3b3; }
+.imp-mode { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 2px solid #1a1d23; background: #5e0f17; color: #fff; }
+.imp-warn { padding: 6px 8px; border-radius: 10px; border: 2px solid #ffd166; background: #3a2a10; font-size: 13px; margin-bottom: 6px; }
+.imp-push { margin-bottom: 6px; padding: 8px; }
+.imp-push-t { font-weight: 800; font-size: 18px; }
+.imp-def { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.impostor-panel .menu-sec { margin: 6px 0 3px; }
+.impostor-panel details.fold { margin-top: 4px; }
+
+/* Vote folded into the meeting header (saves the separate vote card, ~120 px at 380 px) */
+.hl-vote { display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; border-radius: 10px; border: 2px solid #1a1d23; }
+.hl-vote.go { background: #6b1a1f; box-shadow: 0 0 0 2px #d8232a inset; }
+.hl-vote.skip { background: #2b303a; }
+.hl-vote-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hl-vote-main { display: inline-flex; align-items: center; gap: 6px; font-size: 19px; font-weight: 800; color: #fff; text-shadow: 0 2px 0 #1a1d23; }
+.hl-vote-main .pc, .hl-alt .pc { font-size: 13px; color: #e6eaf0; font-weight: 700; }
+.hl-alt { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #e6eaf0; padding: 1px 8px 1px 4px; border-radius: 999px; border: 2px solid #1a1d23; background: rgba(0,0,0,0.25); }
+.hl-vote-why { font-size: 12px; color: #e6eaf0; }
+/* Suspect list: horizontal pills instead of tiles */
+.hl-suspect { flex-direction: row; min-width: 0; max-width: 100%; padding: 2px 8px 2px 4px; gap: 5px; border-radius: 999px; }
+.hl-suspect .rank { position: static; }
+.hl-big { gap: 6px; }
+
+/* "What you can check" chips (engine/mapChecks.ts) */
+.area-head { display: flex; flex-direction: column; gap: 4px; }
+.map-checks { display: flex; flex-wrap: wrap; gap: 4px; }
+.mc { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 600; color: #e6eaf0; padding: 1px 7px 1px 4px; border-radius: 999px; border: 2px solid #1a1d23; background: #3a3f48; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.mc-i { font-size: 12px; }
+.mc-button { opacity: 0.75; }
+.gone-chip.big .n { color: #fff; font-weight: 700; text-shadow: -1.5px 0 0 #1a1d23, 1.5px 0 0 #1a1d23, 0 -1.5px 0 #1a1d23, 0 1.5px 0 #1a1d23; }
+.icon-btn { position: relative; }
+.health-dot { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; background: #ff3b3b; border: 2px solid #1a1d23; animation: pulse-mint 1.2s ease-in-out infinite; }
+.health-line { color: #ff8a8a; font-weight: 600; }
+.pair-chip { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: -2px 0 8px; padding: 2px 8px 2px 4px; border-radius: 999px; border: 2px solid #1a1d23; background: #4a1518; color: #fff; font: 600 12px inherit; font-family: inherit; cursor: pointer; }
+.pair-chip .lbl { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #ffb3b3; margin-right: 2px; }
+.pair-chip .pc { font-weight: 800; color: #ffb3b3; }
+.why-list .cat { font-size: 12px; }
+/* Setup: "Roles on" chips */
+.roles-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; }
+.role-chip { min-height: 28px; padding: 1px 8px; border-radius: 999px; border: 2px solid #1a1d23; background: #3a3f48; color: #bfc6d2; font: 600 12px inherit; font-family: inherit; cursor: pointer; }
+.role-chip.on { background: var(--mint); color: #053a31; }

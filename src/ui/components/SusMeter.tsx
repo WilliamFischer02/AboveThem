@@ -33,6 +33,9 @@ export function topEvidence(score: SuspectScore | undefined, n = 6): EvidenceIte
   return [...score.evidence].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, n);
 }
 
+/** One glyph per evidence category ('social' = what other players said about them, from chat). */
+export const CATEGORY_ICON: Record<string, string> = { hard: '❗', manual: '✋', movement: '👣', task: '🔧', meeting: '🗳', sabotage: '⚡', structural: '🧩', social: '💬' };
+
 const fmtW = (w: number) => (w >= 99 ? '∞' : w <= -99 ? '−∞' : (w > 0 ? '+' : '') + w.toFixed(1));
 
 export function SusMeter({ score, hasEvidence }: { score?: SuspectScore; hasEvidence: boolean }) {
@@ -69,7 +72,7 @@ export function SusMeter({ score, hasEvidence }: { score?: SuspectScore; hasEvid
             {items.map(e => (
               <li key={e.id} className={e.weight > 0 ? 'pos' : 'neg'}>
                 <span className="w">{fmtW(e.weight)}</span>
-                <span className="l">{e.label}{e.shaky ? <span className="muted"> (unverified map)</span> : null}</span>
+                <span className="l"><span className="cat" title={e.category}>{CATEGORY_ICON[e.category] ?? '·'}</span> {e.label}{e.shaky ? <span className="muted"> (unverified map)</span> : null}</span>
               </li>
             ))}
           </ul>

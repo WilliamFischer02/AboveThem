@@ -5,7 +5,7 @@
  * Clicking a headshot shows the evidence ids behind the headline (`why`) as labels.
  */
 import { useRef, useState, type ReactNode } from 'react';
-import type { SuspectScore } from '../../types/game';
+import type { MeetingScript, SuspectScore } from '../../types/game';
 import type { Headline } from '../../engine/headline';
 import { useMatch } from '../../state/store';
 import { PlayerIcon } from './Crewmate';
@@ -17,7 +17,7 @@ const ICON: Record<Headline['kind'], string> = {
   twoSuspects: '⚖', threeSuspects: '⚖', notEnoughInfo: '⏭', skipVote: '⏭',
 };
 
-export function HeadlineBar({ h, scores, big = false, right, label }: { h: Headline; scores: SuspectScore[]; big?: boolean; right?: ReactNode; label?: string }) {
+export function HeadlineBar({ h, scores, big = false, right, label, vote }: { h: Headline; scores: SuspectScore[]; big?: boolean; right?: ReactNode; label?: string; vote?: MeetingScript['vote'] }) {
   const match = useMatch(s => s.match)!;
   const byId = new Map(scores.map(s => [s.player, s]));
   const evidence = new Map(scores.flatMap(s => s.evidence).map(e => [e.id, e]));
@@ -49,12 +49,12 @@ export function HeadlineBar({ h, scores, big = false, right, label }: { h: Headl
         <div className="hl-text">
           {label && <div className="hl-label">{label}</div>}
           <div className="hl-title">{h.title}</div>
-          {h.subtitle && <div className="hl-sub">{h.subtitle}</div>}
+          {h.subtitle && (!vote || h.kind === 'criticalVote' || h.kind === 'imDead') && <div className="hl-sub">{h.subtitle}</div>}
         </div>
         {right}
       </div>
-      {h.players.length > 0 && (
-        <div className="hl-suspects">
+      {vote && <VoteRow vote={vote} scores={byId} />}
+      {h.players.length > 0 && (        <div className="hl-suspects">
           {h.players.map((id, i) => {
             const p = match.players[id];
             const s = byId.get(id);
@@ -64,7 +64,7 @@ export function HeadlineBar({ h, scores, big = false, right, label }: { h: Headl
             return (
               <button key={id} ref={i === 0 ? whyRef : undefined} type="button" className={`hl-suspect ${dim ? 'dim' : ''}`} title="Why?" onClick={() => setWhyOpen(o => !o)}>
                 <span className="rank">{i + 1}</span>
-                <PlayerIcon id={id} color={p.color} size={36} />
+                <PlayerIcon id={id} color={p.color} size={24} />
                 <span className="nm">{p.name}</span>
                 <span className="pc" style={{ color: s?.verdict === 'certainImpostor' ? '#ff6b6b' : rampColor(s?.probability ?? 0) }}>{pct}{t ? ' ' + t.arrow : ''}</span>
               </button>
@@ -85,6 +85,31 @@ export function HeadlineBar({ h, scores, big = false, right, label }: { h: Headl
           </ul>
         </Popover>
       )}
+    </div>
+  );
+}
+
+
+/** The vote recommendation folded into the meeting header: target + % + the alternative, one reason line. */
+function VoteRow({ vote, scores }: { vote: MeetingScript['vote']; scores: Map<string, SuspectScore> }) {
+  const match = useMatch(s => s.match)!;
+  const name = (id: string) => match.players[id]?.name ?? id;
+  const skip = vote.target === 'skip';
+  const alt = vote.alternative && vote.alternative !== vote.target ? vote.alternative : undefined;
+  return (
+    <div className={`hl-vote ${skip ? 'skip' : 'go'}`}>
+      <div className="hl-vote-line">
+        <span className="hl-vote-main">
+          {skip ? '⏭ SKIP' : <><PlayerIcon id={vote.target} color={match.players[vote.target]?.color ?? 'unknown'} size={22} /> VOTE {name(vote.target)}</>}
+          <span className="pc">{Math.round(vote.confidence * 100)}%</span>
+        </span>
+        {alt && (
+          <span className="hl-alt" title="The alternative if the room goes another way">
+            or {alt === 'skip' ? 'skip' : <><PlayerIcon id={alt} color={match.players[alt]?.color ?? 'unknown'} size={18} /> {name(alt)} <span className="pc">{Math.round((scores.get(alt)?.probability ?? 0) * 100)}%</span></>}
+          </span>
+        )}
+      </div>
+      {vote.reason && <div className="hl-vote-why">{vote.reason}</div>}
     </div>
   );
 }

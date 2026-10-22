@@ -4,6 +4,7 @@ import { headline, headlineText } from './headline';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { scoreAll } from './suspicion';
 import { buildMeetingScript } from './meetingScript';
+import { meetingMath } from './features/meetingMath';
 
 const ids = ['me', 'red', 'blue', 'green', 'pink', 'orange', 'yellow', 'black'];
 
@@ -66,22 +67,30 @@ describe('headline', () => {
     expect(h.subtitle).toMatch(/next: Blue \(42%\)/);
   });
 
-  it('critical vote when crew alive − impostors ≤ 2; basis keeps the classification', () => {
-    // alive: me, red, blue, green (4), 1 impostor left → crew 3 − imp 1 = 2
-    const m = match({}, ['me', 'red', 'blue', 'green'], 1);
-    const h = headline(m, [sc('red', 0.7), sc('blue', 0.2), sc('green', 0.1)]);
+  it('critical vote only when a wrong eject loses immediately (crew − imp ≤ 1); basis keeps the classification', () => {
+    // alive: me, red, blue (3), 1 impostor left → crew 2 − imp 1 = 1
+    const m = match({}, ['me', 'red', 'blue'], 1);
+    const h = headline(m, [sc('red', 0.7), sc('blue', 0.2)]);
     expect(h.kind).toBe('criticalVote');
     expect(h.basis).toBe('oneSuspect');
     expect(h.critical).toBe(true);
+    expect(h.danger).toBe('critical');
     expect(h.tone).toBe('danger');
     expect(h.players).toEqual(['red']);
-    expect(h.subtitle).toMatch(/Wrong vote \+ one kill loses/);
+    expect(h.subtitle).toMatch(/A wrong vote loses the game/);
   });
 
-  it('not critical with a comfortable margin; last-vote wording at margin 1', () => {
-    expect(headline(match(), [sc('red', 0.7)]).critical).toBe(false);
-    const m = match({}, ['me', 'red', 'blue'], 1); // crew 2 − imp 1 = 1
-    expect(headline(m, [sc('red', 0.3), sc('blue', 0.2)]).subtitle).toMatch(/A wrong vote loses the game/);
+  it('edge: crew − imp == 2 is "careful" (warn), not critical — and does not force a vote', () => {
+    // alive: me, red, blue, green (4), 1 impostor left → crew 3 − imp 1 = 2
+    const m = match({}, ['me', 'red', 'blue', 'green'], 1);
+    const h = headline(m, [sc('red', 0.5), sc('blue', 0.3), sc('green', 0.1)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.critical).toBe(false);
+    expect(h.danger).toBe('careful');
+    expect(h.tone).toBe('warn');
+    expect(h.subtitle).toMatch(/^One wrong vote from critical/);
+    expect(h.vote.target).toBe('skip');
+    expect(headline(match(), [sc('red', 0.7)]).danger).toBe('safe');
   });
 
   it('confirmed impostor wins over everything (even critical), cleared players are excluded', () => {
@@ -112,5 +121,61 @@ describe('headline', () => {
     const scores = scoreAll(fixture);
     const script = buildMeetingScript(fixture, scores, 0);
     expect(script.headline).toBe(headlineText(headline(fixture, scores)));
+  });
+  it('vote follows the headline: 79% / 62% → Leaning, vote Red, Green as the follow-up', () => {
+    const h = headline(match(), [sc('red', 0.79), sc('green', 0.62), sc('blue', 0.2)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.subtitle).toMatch(/Red \(79%\) — vote · next: Green \(62%\)/);
+    expect(h.vote.target).toBe('red');
+    expect(h.vote.alternative).toBe('green');
+    expect(h.vote.reason).toMatch(/Green next if Red was crew/);
+  });
+
+  it('vote: weak lean (0.5 / 0.3) skips with the lead as the alternative', () => {
+    const h = headline(match(), [sc('red', 0.5), sc('blue', 0.3)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.vote.target).toBe('skip');
+    expect(h.vote.alternative).toBe('red');
+  });
+
+  it('vote: two close suspects split → skip; two strong ones → vote the top, #2 next', () => {
+    const split = headline(match(), [sc('red', 0.55), sc('blue', 0.5)]);
+    expect(split.kind).toBe('twoSuspects');
+    expect(split.vote.target).toBe('skip');
+    const strong = headline(match(), [sc('red', 0.75), sc('blue', 0.66)]);
+    expect(strong.kind).toBe('twoSuspects');
+    expect(strong.vote).toMatchObject({ target: 'red', alternative: 'blue' });
+    expect(strong.subtitle).toMatch(/vote Red, then Blue/);
+  });
+
+  it('vote: one major suspect → vote; not enough info → skip; confirmed → vote at 100%', () => {
+    expect(headline(match(), [sc('red', 0.72), sc('blue', 0.1)]).vote).toMatchObject({ target: 'red', alternative: 'skip' });
+    expect(headline(match(), [sc('red', 0.3)]).vote.target).toBe('skip');
+    expect(headline(match(), [sc('red', 0.3), sc('blue', 1, 'certainImpostor')]).vote).toMatchObject({ target: 'blue', confidence: 1 });
+  });
+
+  it('vote edge: a critical vote does not skip when the top suspect is above 0.3', () => {
+    const m = match({}, ['me', 'red', 'blue'], 1); // crew 2 − imp 1 = 1
+    const h = headline(m, [sc('red', 0.35), sc('blue', 0.2)]);
+    expect(h.basis).toBe('notEnoughInfo');
+    expect(h.vote.target).toBe('red');
+    expect(headline(m, [sc('red', 0.25), sc('blue', 0.2)]).vote.target).toBe('skip');
+  });
+
+  it('meetingScript.vote is exactly the headline vote', () => {
+    const scores = scoreAll(fixture);
+    expect(buildMeetingScript(fixture, scores, 0).vote).toEqual(headline(fixture, scores).vote);
+  });
+  it('danger is exactly meetingMath (features) — one source of truth for vote arithmetic', () => {
+    const cases: [string[], number][] = [[ids, 2], [['me', 'red', 'blue', 'green', 'pink', 'orange'], 2], [['me', 'red', 'blue', 'green'], 1], [['me', 'red', 'blue'], 1]];
+    for (const [alive, imps] of cases) {
+      const m = match({}, alive, imps);
+      expect(headline(m, [sc('red', 0.5)]).danger).toBe(meetingMath(m).danger);
+      expect(headline(m, [sc('red', 0.5)]).critical).toBe(meetingMath(m).wrongVoteLoses);
+    }
+    // 2 impostors, 6 alive: crew 4 − imp 2 = 2 → careful (warn), vote not forced
+    const h = headline(match({}, ['me', 'red', 'blue', 'green', 'pink', 'orange'], 2), [sc('red', 0.35), sc('blue', 0.2)]);
+    expect(h.danger).toBe('careful');
+    expect(h.vote.target).toBe('skip');
   });
 });

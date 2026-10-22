@@ -25,7 +25,7 @@ export function walkSeconds(map: MapData, from: RoomId, to: RoomId, speed = 1): 
     done.add(cur);
     if (cur === to) break;
     const room = map.rooms.find(r => r.id === cur);
-    if (!room) continue;
+    if (!room) continue; // a room id from another map (map re-detected mid-match): no edges, don't crash (ui-streamline)
     for (const adj of room.adjacent) {
       const nd = best + adj.sec / speed;
       if (nd < (dist.get(adj.room) ?? Infinity)) dist.set(adj.room, nd);
