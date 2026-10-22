@@ -119,6 +119,32 @@ export interface MonitorClaim { player: PlayerId; room?: RoomId; fromRoom?: Room
 
 export interface MonitorCheck { contradiction: boolean; reason: string; text: string; shaky: boolean }
 
+/**
+ * Structural shapes of the features agent's monitor observations (typed here so this compiles without their branch):
+ * `AdminReadObs {type:'adminRead', counts, bodies?}`, `VitalsReadObs {type:'vitalsRead', dead, alive, dc?}`,
+ * `DoorLogReadObs {type:'doorLogRead', entries, from, to}`. Round time comes from `stamp.t`.
+ */
+export type MonitorObsLike =
+  | { type: 'adminRead'; stamp?: { t: number }; counts: Partial<Record<RoomId, number>>; bodies?: RoomId[] }
+  | { type: 'vitalsRead'; stamp?: { t: number }; dead: PlayerId[]; alive: PlayerId[]; dc?: PlayerId[] }
+  | { type: 'doorLogRead'; stamp?: { t: number }; entries: { player: PlayerId; t: number; sensor?: string }[]; from: number; to: number };
+
+/** Convert a logged monitor observation into the `read` shape `monitorContradiction` takes (null for anything else). */
+export function monitorReadFromObs(o: { type: string } & Record<string, unknown>): MonitorRead | null {
+  const ob = o as MonitorObsLike;
+  const t = typeof ob.stamp?.t === 'number' ? ob.stamp.t : 0;
+  if (ob.type === 'adminRead') return { kind: 'admin', t, counts: { ...(ob.counts ?? {}) } };
+  if (ob.type === 'vitalsRead') {
+    const status: Partial<Record<PlayerId, 'alive' | 'dead' | 'dc'>> = {};
+    for (const p of ob.alive ?? []) status[p] = 'alive';
+    for (const p of ob.dead ?? []) status[p] = 'dead';
+    for (const p of ob.dc ?? []) status[p] = 'dc';
+    return { kind: 'vitals', t, status };
+  }
+  if (ob.type === 'doorLogRead') return { kind: 'doorLog', from: ob.from, to: ob.to, entries: [...(ob.entries ?? [])] };
+  return null;
+}
+
 /** Seconds either side of a read in which a location claim counts as "the same moment". */
 export const MONITOR_WINDOW_SEC = 4;
 
