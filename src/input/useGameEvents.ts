@@ -12,7 +12,7 @@
  *  game://eject     → ejection event (who, impostor or not)
  *  game://chat      → chat lines → claims; non-English lines are translated
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../state/store';
 import { isTauri, persist } from '../state/persist';
 import { loadSettings, type AppSettings } from '../state/settings';
@@ -85,6 +85,7 @@ export function useGameEvents() {
   const [captureOk, setCaptureOk] = useState<boolean | null>(null);
   const [meGuessed, setMeGuessed] = useState(false);
   const [lobbyCode, setLobbyCode] = useState<string | null>(null);
+  const resetRosterRef = useRef<() => void>(() => {});
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
 
@@ -158,23 +159,26 @@ export function useGameEvents() {
     /** The role card read for *this* game (a card older than 30 s belongs to the previous one). */
     const freshRole = (): Role => (role && Date.now() - roleAt < 30_000 ? role : 'crew');
 
-    /** Game ended (or a new one started without us seeing the end): keep the lobby, wipe the slate. */
-    const rollOver = (why: string) => {
+    /** Game ended (or a new one started without us seeing the end): keep the lobby, wipe the slate.
+     *  `keepRoster = false` (new room code, Reset roster) keeps only me. */
+    const rollOver = (why: string, keepRoster = true, code: string | null = lobbyCode) => {
       const st = useMatch.getState();
       const cur = st.match;
       if (!cur) return;
       const { avatars, bodySamples, iconHashes } = st;
       // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
       const players = Object.values(cur.players)
-        .filter(p => p.isMe || (!p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
+        .filter(p => p.isMe || (keepRoster && !p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
         .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined }));
-      st.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: freshRole(), players, lobbyCode: lobbyCode ?? undefined });
+      st.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: freshRole(), players, lobbyCode: code ?? undefined });
       const live = useMatch.getState();
-      for (const [id, url] of Object.entries(avatars)) live.setAvatar(id, url);
-      for (const [id, rgb] of Object.entries(bodySamples)) live.setBodySample(id, rgb);
-      for (const [id, h] of Object.entries(iconHashes)) live.setIconHash(id, h);
-      live.showToast(`${why} — roster kept, slate wiped (auto)`);
+      const keep = new Set(players.map(p => p.id));
+      for (const [id, url] of Object.entries(avatars)) if (keep.has(id)) live.setAvatar(id, url);
+      for (const [id, rgb] of Object.entries(bodySamples)) if (keep.has(id)) live.setBodySample(id, rgb);
+      for (const [id, h] of Object.entries(iconHashes)) if (keep.has(id)) live.setIconHash(id, h);
+      live.showToast(keepRoster ? `${why} — roster kept, slate wiped (auto)` : `${why} — fresh roster`);
     };
+    resetRosterRef.current = () => rollOver('Roster reset', false);
 
     const translateLine = async (id: string, text: string) => {
       if (looksEnglish(text)) return;
@@ -204,6 +208,9 @@ export function useGameEvents() {
 
       guard(await listen<string>('game://lobby', async e => {
         setLobbyCode(e.payload);
+        const cur = useMatch.getState().match;
+        // A different room code means different people: start over with just me.
+        if (cur && cur.lobbyCode && cur.lobbyCode !== e.payload) { rollOver(`New lobby ${e.payload}`, false, e.payload); return; }
         useMatch.getState().showToast(`Lobby ${e.payload} detected`);
       }));
 
@@ -654,5 +661,8 @@ export function useGameEvents() {
     } catch (e) { return String(e); }
   };
 
-  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames };
+  /** Start over with only me in the roster (wrong people carried over from another lobby). */
+  const resetRoster = () => resetRosterRef.current();
+
+  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster };
 }

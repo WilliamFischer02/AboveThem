@@ -44,6 +44,7 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
     <section className="panel">
       <div className="row" style={{ marginBottom: 6 }}>
         <h3>Roster<ConfidenceDot /></h3>
+        <button className="btn xs ghost right" title="Wrong people carried over: keep only me, refill from the lobby / next meeting" onClick={() => auto?.resetRoster()}>⟲ reset</button>
       </div>
       <div className="roster">
         {players.map(p => (

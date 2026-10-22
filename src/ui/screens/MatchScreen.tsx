@@ -89,6 +89,7 @@ export function MatchScreen() {
             {inMeeting && <button className="btn sm" onClick={() => setPhase('ejection')}>Voting done</button>}
             {phase !== 'gameOver' && phase !== 'lobby' && <button className="btn ghost sm" onClick={() => setPhase('gameOver')}>Game over</button>}
             <button className="btn sm" title="Re-read the vote grid and fix names (works while the meeting screen is up)" onClick={async () => { const msg = await auto?.rescanNames(); if (msg) useMatch.getState().showToast(msg); }}>↻ Rescan names</button>
+            <button className="btn sm warn" title="Wrong people carried over: keep only me, refill from the lobby / next meeting" onClick={() => auto?.resetRoster()}>⟲ Reset roster</button>
             <button className={`btn sm ${ov.visible ? 'primary' : ''}`} onClick={ov.toggle} title="Transparent legend + clock on top of the game">{ov.visible ? 'Overlay on' : 'Overlay'}</button>
             <button className="btn ghost sm" onClick={closeMatch}>Close match</button>
           </div>

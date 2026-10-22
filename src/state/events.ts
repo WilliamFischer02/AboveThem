@@ -68,6 +68,7 @@ export function initState(p: InitPayload): MatchState {
     map: MAPS[p.map],
     me: p.me,
     myRole: p.myRole,
+    lobbyCode: p.lobbyCode,
     players,
     phase: { phase: 'lobby', wall: p.startedAt, round: -1 },
     observations: [],

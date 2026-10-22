@@ -384,6 +384,8 @@ export interface MatchState {
   map: MapData;
   me: PlayerId;
   myRole: Role;
+  /** Room code this match was created in (a different code means different people: fresh roster). */
+  lobbyCode?: string;
   /** Set by hand in the UI: automatic reads must not change myRole for the rest of this match. */
   myRoleLocked?: boolean;
   players: Record<PlayerId, Player>;
