@@ -1,9 +1,831 @@
 {
   "id": "fungle",
-  "name": "TODO",
-  "_verified": { "rooms": false, "vents": false, "tasks": false, "durations": false },
-  "_note": "Stub. Fill from the live game in Phase 5 using skeld.json as the template. The engine refuses to use a map whose rooms are empty.",
-  "rooms": [],
-  "vents": [],
-  "tasks": []
+  "name": "The Fungle",
+  "_verified": {
+    "rooms": true,
+    "vents": false,
+    "tasks": true,
+    "durations": false
+  },
+  "_note": "Locations, ladders, zipline, doors, abilities and the task table were checked on 2026-10-22 against among-us.fandom.com (The_Fungle, Meeting_Room, Vent_(object), Tasks list table, Visual_tasks, Vitals, Admin_(ability)) and Pocket Tactics / allthings.how (three vent chains). NO VISUAL TASKS and NO ADMIN TABLE on The Fungle. VENTS ARE UNVERIFIED in detail: the wiki map page, the wiki vent table and Pocket Tactics disagree on names. System 1 is the beach/Splash Zone/Laboratory ring (wiki: two Beach vents + Splash Zone + Laboratory; Pocket Tactics: Splash Zone - Cafeteria - Storage - Laboratory), so beach, cafeteria and storage are all included to avoid false \"no vent here\" flags. System 2 is Kitchen - Jungle (two jungle vents, one near Greenhouse). System 3 is Reactor - Lookout - a vent on the cliff by Communications (wiki map page says The Cliffs, vent table and Pocket Tactics say Communications); both are listed. ADJACENCY is my reading of the wiki map image: Beach is the open sand around the campfire and joins Dropship, Cafeteria, Splash Zone, Storage, Meeting Room, Kitchen and the Jungle; the Jungle is the big mushroom area; two ladders lead from the Jungle up to The Cliffs, another ladder from the cliffs to Communications; the zipline joins Storage and Communications (fast down, slower up - averaged). Travel seconds are eyeballed at speed 1.0x and unverified; the Fungle is large, so they are larger than on the other maps. Keys: b Beach, d Dropship, c Cafeteria, z is reserved so Splash Zone = x, t Storage, n Meeting Room, y The Dorm, i Kitchen, p Dock (pier), j Jungle, l Laboratory, g Greenhouse, r Reactor, h The Cliffs (heights), o Mining Pit (ore), w Lookout (watch), u Upper Engine, q Communications.",
+  "info": {
+    "admin": [],
+    "security": {
+      "room": "lookout",
+      "kind": "binoculars",
+      "covers": [
+        "beach",
+        "jungle"
+      ],
+      "_note": "Binoculars in Lookout survey Beach and Jungle; The Cliffs are not visible. NOT disabled by Comms Sabotaged."
+    },
+    "vitals": "laboratory",
+    "doorLog": null,
+    "emergencyButton": "meetingRoom",
+    "sabotages": [
+      "comms",
+      "reactor",
+      "mushroomMixup",
+      "doors"
+    ],
+    "sabotageRooms": {
+      "comms": [
+        "communications",
+        "lookout"
+      ],
+      "reactor": [
+        "reactor"
+      ],
+      "mushroomMixup": [
+        "jungle"
+      ],
+      "doors": [
+        "kitchen",
+        "laboratory",
+        "lookout",
+        "miningPit",
+        "reactor",
+        "storage",
+        "communications"
+      ]
+    },
+    "doors": true,
+    "features": [
+      "ladders",
+      "zipline",
+      "mushroomMixup"
+    ],
+    "shortcuts": [
+      {
+        "from": "storage",
+        "to": "communications",
+        "kind": "zipline",
+        "sec": 6
+      },
+      {
+        "from": "jungle",
+        "to": "cliffs",
+        "kind": "ladder",
+        "sec": 8
+      },
+      {
+        "from": "cliffs",
+        "to": "communications",
+        "kind": "ladder",
+        "sec": 6
+      },
+      {
+        "from": "upperEngine",
+        "to": "communications",
+        "kind": "ladder",
+        "sec": 5
+      }
+    ],
+    "spawn": {
+      "start": [
+        "beach"
+      ],
+      "afterMeeting": [
+        "beach"
+      ],
+      "_note": "Round start around the central campfire (wiki). After-meeting spawn UNVERIFIED."
+    },
+    "_note": "Mushroom Mixup (~10 s, cannot be fixed) gives every living player a random colour + cosmetics and hides names from crew: sightings/colours logged during it are unreliable. Ladders: wiki map page = two Jungle-Cliffs ladders + one up to Communications; research relay = two Jungle-Cliffs + two Communications-Upper Engine - both modelled (UNVERIFIED). Greenhouse door is listed only on the Door Sabotage page (not included). No admin table on The Fungle. No Fix Lights sabotage on The Fungle."
+  },
+  "rooms": [
+    {
+      "id": "beach",
+      "name": "Beach",
+      "key": "b",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "dropship",
+          "sec": 6
+        },
+        {
+          "room": "cafeteria",
+          "sec": 5
+        },
+        {
+          "room": "splashZone",
+          "sec": 5
+        },
+        {
+          "room": "storage",
+          "sec": 6
+        },
+        {
+          "room": "meetingRoom",
+          "sec": 5
+        },
+        {
+          "room": "kitchen",
+          "sec": 8
+        },
+        {
+          "room": "jungle",
+          "sec": 8
+        }
+      ],
+      "_note": "Open sand around the central campfire (round start)."
+    },
+    {
+      "id": "dropship",
+      "name": "Dropship",
+      "key": "d",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 6
+        }
+      ]
+    },
+    {
+      "id": "cafeteria",
+      "name": "Cafeteria",
+      "key": "c",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 5
+        },
+        {
+          "room": "splashZone",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "splashZone",
+      "name": "Splash Zone",
+      "key": "x",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 5
+        },
+        {
+          "room": "cafeteria",
+          "sec": 4
+        },
+        {
+          "room": "kitchen",
+          "sec": 6
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "name": "Storage",
+      "key": "t",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 6
+        },
+        {
+          "room": "communications",
+          "sec": 6
+        }
+      ],
+      "_note": "Zipline to Communications."
+    },
+    {
+      "id": "meetingRoom",
+      "name": "Meeting Room",
+      "key": "n",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 5
+        },
+        {
+          "room": "dorm",
+          "sec": 3
+        },
+        {
+          "room": "jungle",
+          "sec": 5
+        }
+      ],
+      "_note": "Exits to Beach, The Dorm and the Jungle (near Laboratory)."
+    },
+    {
+      "id": "dorm",
+      "name": "The Dorm",
+      "key": "y",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "meetingRoom",
+          "sec": 3
+        }
+      ],
+      "aliases": [
+        "Dorm"
+      ]
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "key": "i",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 8
+        },
+        {
+          "room": "splashZone",
+          "sec": 6
+        },
+        {
+          "room": "dock",
+          "sec": 3
+        },
+        {
+          "room": "jungle",
+          "sec": 7
+        }
+      ]
+    },
+    {
+      "id": "dock",
+      "name": "Dock",
+      "key": "p",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "kitchen",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "jungle",
+      "name": "Jungle",
+      "key": "j",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "beach",
+          "sec": 8
+        },
+        {
+          "room": "kitchen",
+          "sec": 7
+        },
+        {
+          "room": "meetingRoom",
+          "sec": 5
+        },
+        {
+          "room": "laboratory",
+          "sec": 5
+        },
+        {
+          "room": "greenhouse",
+          "sec": 5
+        },
+        {
+          "room": "reactor",
+          "sec": 8
+        },
+        {
+          "room": "cliffs",
+          "sec": 8
+        }
+      ]
+    },
+    {
+      "id": "laboratory",
+      "name": "Laboratory",
+      "key": "l",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "jungle",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "key": "g",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "jungle",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "reactor",
+      "name": "Reactor",
+      "key": "r",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "jungle",
+          "sec": 8
+        }
+      ]
+    },
+    {
+      "id": "cliffs",
+      "name": "The Cliffs",
+      "key": "h",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "jungle",
+          "sec": 8
+        },
+        {
+          "room": "miningPit",
+          "sec": 5
+        },
+        {
+          "room": "lookout",
+          "sec": 5
+        },
+        {
+          "room": "upperEngine",
+          "sec": 5
+        },
+        {
+          "room": "communications",
+          "sec": 6
+        }
+      ],
+      "aliases": [
+        "Cliffs"
+      ]
+    },
+    {
+      "id": "miningPit",
+      "name": "Mining Pit",
+      "key": "o",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "cliffs",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "lookout",
+      "name": "Lookout",
+      "key": "w",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "cliffs",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "upperEngine",
+      "name": "Upper Engine",
+      "key": "u",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cliffs",
+          "sec": 5
+        },
+        {
+          "room": "communications",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "communications",
+      "name": "Communications",
+      "key": "q",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cliffs",
+          "sec": 6
+        },
+        {
+          "room": "upperEngine",
+          "sec": 5
+        },
+        {
+          "room": "storage",
+          "sec": 6
+        }
+      ]
+    }
+  ],
+  "vents": [
+    {
+      "id": "beach-splash-lab",
+      "rooms": [
+        "beach",
+        "splashZone",
+        "laboratory",
+        "cafeteria",
+        "storage"
+      ],
+      "links": [
+        [
+          "beach",
+          "splashZone"
+        ],
+        [
+          "beach",
+          "laboratory"
+        ],
+        [
+          "splashZone",
+          "laboratory"
+        ],
+        [
+          "cafeteria",
+          "splashZone"
+        ],
+        [
+          "storage",
+          "laboratory"
+        ],
+        [
+          "cafeteria",
+          "storage"
+        ]
+      ],
+      "_note": "UNVERIFIED names: wiki = Beach (north) - Splash Zone - Laboratory - Beach (south/east) ring; Pocket Tactics = Splash Zone - Cafeteria - Storage - Laboratory. Both readings included."
+    },
+    {
+      "id": "kitchen-jungle",
+      "rooms": [
+        "kitchen",
+        "jungle"
+      ],
+      "links": [
+        [
+          "kitchen",
+          "jungle"
+        ]
+      ],
+      "_note": "Kitchen links the west Jungle vent; the west vent links the second Jungle vent (wiki table says left/right, map page says south/east; one sits outside Greenhouse)."
+    },
+    {
+      "id": "reactor-lookout-cliff",
+      "rooms": [
+        "reactor",
+        "lookout",
+        "cliffs",
+        "communications"
+      ],
+      "links": [
+        [
+          "reactor",
+          "lookout"
+        ],
+        [
+          "reactor",
+          "cliffs"
+        ],
+        [
+          "lookout",
+          "cliffs"
+        ],
+        [
+          "reactor",
+          "communications"
+        ],
+        [
+          "lookout",
+          "communications"
+        ]
+      ],
+      "_note": "Third vent: on The Cliffs by Communications (wiki map page) or \"Communications\" (wiki vent table, Pocket Tactics). Wiki trivia says Communications has no vent on any map - so this is the cliff-top vent just outside it."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "collectSamples",
+      "name": "Collect Samples",
+      "rooms": [
+        "jungle",
+        "laboratory"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "enterIdCode",
+      "name": "Enter Id Code",
+      "rooms": [
+        "lookout"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "replaceParts",
+      "name": "Replace Parts",
+      "rooms": [
+        "reactor",
+        "upperEngine",
+        "communications",
+        "dropship"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5,
+      "_note": "Pick up in Reactor or Upper Engine, fit in Communications or Dropship."
+    },
+    {
+      "id": "roastMarshmallow",
+      "name": "Roast Marshmallow",
+      "rooms": [
+        "beach"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 8,
+      "_note": "Stick from a random sand pile, then the central campfire."
+    },
+    {
+      "id": "assembleArtifact",
+      "name": "Assemble Artifact",
+      "rooms": [
+        "laboratory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "buildSandcastle",
+      "name": "Build Sandcastle",
+      "rooms": [
+        "splashZone"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "collectShells",
+      "name": "Collect Shells",
+      "rooms": [
+        "beach",
+        "splashZone"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "crankGenerator",
+      "name": "Crank Generator",
+      "rooms": [
+        "communications",
+        "kitchen"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "emptyGarbage",
+      "name": "Empty Garbage",
+      "rooms": [
+        "cafeteria",
+        "splashZone"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "NOT visual on The Fungle."
+    },
+    {
+      "id": "findSignal",
+      "name": "Find Signal",
+      "rooms": [
+        "communications"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "fixAntenna",
+      "name": "Fix Antenna",
+      "rooms": [
+        "communications"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "fixWiring",
+      "name": "Fix Wiring",
+      "rooms": [
+        "communications",
+        "dropship"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "Short (not common) on The Fungle."
+    },
+    {
+      "id": "liftWeights",
+      "name": "Lift Weights",
+      "rooms": [
+        "splashZone"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "monitorMushroom",
+      "name": "Monitor Mushroom",
+      "rooms": [
+        "jungle"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "playVideoGame",
+      "name": "Play Video Game",
+      "rooms": [
+        "dorm"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "recordTemperature",
+      "name": "Record Temperature",
+      "rooms": [
+        "greenhouse",
+        "laboratory",
+        "reactor"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4
+    },
+    {
+      "id": "throwFrisbee",
+      "name": "Throw Frisbee",
+      "rooms": [
+        "splashZone"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "collectVegetables",
+      "name": "Collect Vegetables",
+      "rooms": [
+        "greenhouse",
+        "kitchen"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 6,
+      "_note": "Greenhouse, then Prep Vegetables in Kitchen."
+    },
+    {
+      "id": "cookFish",
+      "name": "Cook Fish",
+      "rooms": [
+        "dock",
+        "kitchen"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 20,
+      "_note": "Catch Fish at the Dock, then cook in Kitchen (2 x 10 s per side)."
+    },
+    {
+      "id": "extractFuel",
+      "name": "Extract Fuel",
+      "rooms": [
+        "upperEngine",
+        "storage"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "helpCritter",
+      "name": "Help Critter",
+      "rooms": [
+        "jungle",
+        "laboratory"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 30,
+      "_note": "Egg in the Jungle, then wait ~30 s in Laboratory for it to hatch."
+    },
+    {
+      "id": "hoistSupplies",
+      "name": "Hoist Supplies",
+      "rooms": [
+        "jungle",
+        "cliffs"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "mineOres",
+      "name": "Mine Ores",
+      "rooms": [
+        "miningPit"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 10
+    },
+    {
+      "id": "polishGem",
+      "name": "Polish Gem",
+      "rooms": [
+        "miningPit"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 10
+    },
+    {
+      "id": "replaceWaterJug",
+      "name": "Replace Water Jug",
+      "rooms": [
+        "storage",
+        "cafeteria"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "waterPlants",
+      "name": "Water Plants",
+      "rooms": [
+        "storage",
+        "greenhouse"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 4
+    }
+  ]
 }
