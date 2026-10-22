@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../state/store';
 import { isTauri, persist } from '../state/persist';
-import { loadSettings, type AppSettings } from '../state/settings';
+import { loadSettings, DEFAULT_APP_SETTINGS, type AppSettings } from '../state/settings';
 import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
@@ -25,10 +25,12 @@ import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type Consolidate
 import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
+import { translationRequest, senderByIconColor, captureVerdict, watcherStalled, type ChatPayload, type CaptureSnap } from './eventHelpers';
+import { inferMapFromLabels, mapIdFromText } from '../engine/map';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
 export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number]; icon_hash?: string; dim?: number }
-interface PhaseEvent { phase: string; round: number; meeting: number }
+interface PhaseEvent { phase: string; round: number; meeting: number; lag_ms?: number }
 interface EjectEvent { raw: string; name: string | null; was_impostor: boolean | null; skipped: boolean }
 interface GameOverEvent { outcome: 'victory' | 'defeat' | null; accent: 'teal' | 'blue' | 'red' | null }
 export interface WatcherStatus { running: boolean; phase: string | null; round: number; meeting: number; markers: Record<string, boolean>; last_ocr_ms: number; ocr_calls: number; frame_seq: number; lobby_code: string | null }
@@ -39,6 +41,29 @@ const NOT_NAMES = /^(roles?|role amounts?|crewmate roles?|impostor roles?|scient
 const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.test(n) && n.trim().length >= 2 && n.trim().length <= NAME_MAX && !/[()]/.test(n);
 /** Lobby names must be seen in two consecutive reads before they become players. */
 const lobbySeen = new Map<string, number>();
+
+// --- Map detection memory (maps agent). Module-level on purpose: the event effect below re-runs whenever the
+// lobby code changes, and the watcher emits `game://map` only once per change — usually in the same tick as
+// `game://lobby` — so an effect-local variable lost it and every game started on the default map (Skeld).
+/** Last map read from the screen, and how sure we are ('lobby' panel / settings line beats label inference). */
+let detectedMap: { id: MapId; source: 'lobby' | 'infer' } | null = null;
+/** Room popups / task-list lines seen in the current match: enough unique names reveal the map (fail-soft path). */
+let mapLabels: { matchId: string | null; labels: string[] } = { matchId: null, labels: [] };
+/** Feed one on-screen label; switches the match map when the labels clearly point at another map (unless the lobby panel said otherwise). */
+function inferMapFrom(label: string) {
+  const s = useMatch.getState();
+  const m = s.match;
+  if (!m || !label.trim()) return;
+  if (mapLabels.matchId !== m.id) mapLabels = { matchId: m.id, labels: [] };
+  mapLabels.labels.push(label);
+  if (mapLabels.labels.length > 40) mapLabels.labels.shift();
+  if (detectedMap?.source === 'lobby' && detectedMap.id === m.settings.map) return;
+  const guess = inferMapFromLabels(mapLabels.labels, Object.values(MAPS));
+  if (!guess || guess.map === m.settings.map) return;
+  detectedMap = { id: guess.map, source: 'infer' };
+  s.dispatch({ kind: 'settings', payload: { map: guess.map } });
+  s.showToast(`Map: ${MAPS[guess.map].name} (auto, from ${guess.hits.slice(0, 3).join(', ')})`);
+}
 
 function fuzzyFind<T extends { name: string }>(name: string, list: T[]): T | undefined {
   let best: { item: T; score: number } | null = null;
@@ -72,20 +97,39 @@ export function playedRounds(m: { phase: { phase: string; round: number }; obser
   return m.phase.round >= 0 && (m.observations.length + m.claims.length + m.ejections.length > 0 || Object.values(m.players).some(p => p.status !== 'alive'));
 }
 
-// Quick "is this English already" check so most chat never leaves the machine.
-const EN = new Set(('i im me my you u ur your he she it we they the a an and or but so if not no yes ok okay lol lmao omg bro guys guy who what where when why how was were is are am be been do did does done have has had go went going come came get got see saw seen say said tell told know think thought sus vent vented venting kill killed killer body report reported self button skip vote voted voting imp impostor crew crewmate task tasks fake faking clear clean safe trust with alone there here this that these those on in at to of for from by about near around behind left right up down out over just only also too very really maybe idk dunk hard soft wait stop pls please thanks thx ty gg gl hi hello hey bye yo nah yeah yep nope red blue green pink orange yellow black white purple brown cyan lime maroon rose banana gray grey tan coral cafeteria cafe weapons o2 navigation nav admin storage electrical elec medbay med security sec cams comms shields reactor engine engines upper lower lights sabotage sab doors lab office specimen dropship boiler laboratory communications decontamination cockpit vault records kitchen gap room showers vent vents rounds round meeting emergency last first then now before after dead died die vents saw sees look looked follow followed following chase chased stack stacked group two one three 1 2 3 4 5').split(' '));
-export function looksEnglish(text: string): boolean {
-  const words = text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter(Boolean);
-  if (words.length === 0) return true;
-  if (/[^\x00-\x7f]/.test(text)) return false;      // accents, cyrillic, cjk, arabic → translate
-  const hits = words.filter(w => EN.has(w) || /^\d+$/.test(w)).length;
-  return hits / words.length >= 0.6 || (words.length <= 2 && hits >= 1);
+// looksEnglish lives in ./eventHelpers (script-aware, tested); re-exported for old importers.
+export { looksEnglish } from './eventHelpers';
+
+/** Diagnostics raised while no match is open (capture failing before the game) wait here and are written
+ *  into the next match's NDJSON, so a log always explains how capture got there. */
+const diagQueue: Array<{ what: string; at: number; [k: string]: unknown }> = [];
+function logDiag(payload: { what: string; [k: string]: unknown }) {
+  const s = useMatch.getState();
+  if (s.match) { s.dispatch({ kind: 'diag', payload }); return; }
+  diagQueue.push({ ...payload, at: Date.now() });
+  if (diagQueue.length > 20) diagQueue.shift();
+}
+useMatch.subscribe((st, prev) => {
+  if (st.matchId && st.matchId !== prev.matchId && diagQueue.length) {
+    for (const d of diagQueue.splice(0)) st.dispatch({ kind: 'diag', payload: { ...d, queued: true } });
+  }
+});
+
+/** What the auto layer knows about its own health (AutoStatus shows it). Times are wall ms. */
+export interface AutoHealth {
+  /** Capture was working and then stopped / failed (null while fine or never started). */
+  captureLostAt: number | null;
+  captureError: string | null;
+  /** The watcher thread died / stalled (null while fine). */
+  watcherDownAt: number | null;
+  watcherProblem: string | null;
 }
 
 export function useGameEvents() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [watcher, setWatcher] = useState<WatcherStatus | null>(null);
   const [captureOk, setCaptureOk] = useState<boolean | null>(null);
+  const [health, setHealth] = useState<AutoHealth>({ captureLostAt: null, captureError: null, watcherDownAt: null, watcherProblem: null });
   const [meGuessed, setMeGuessed] = useState(false);
   const [lobbyCode, setLobbyCode] = useState<string | null>(null);
   const resetRosterRef = useRef<() => void>(() => {});
@@ -105,8 +149,12 @@ export function useGameEvents() {
     persist.readJson<NameBook>('names.json').then(b => { if (b && b.version === 1) bookRef.current = prune(b, Date.now()); }).catch(() => {});
   }, []);
   useEffect(() => { lobbyRef.current = lobbyCode; }, [lobbyCode]);
+  /** Latest settings for the event wiring (typing your name must not re-register every listener). */
+  const settingsRef = useRef<AppSettings | null>(null);
+  settingsRef.current = settings;
+  const settingsLoaded = settings !== null;
 
-  useEffect(() => { loadSettings().then(setSettings); }, []);
+  useEffect(() => { loadSettings().catch(() => ({ ...DEFAULT_APP_SETTINGS })).then(setSettings); }, []);
 
   // Resume the most recent match after a restart/reload (logs persist; memory doesn't).
   useEffect(() => {
@@ -119,7 +167,7 @@ export function useGameEvents() {
         if (!newest || Date.now() - newest.modified_ms > 20 * 60_000) return;
         const ok = await useMatch.getState().loadMatch(newest.id);
         if (ok) useMatch.getState().showToast(`Resumed match ${newest.id}`);
-      } finally { resumeDone.current = true; }
+      } catch { /* unreadable log: start fresh (fail soft) */ } finally { resumeDone.current = true; }
     })();
   }, []);
 
@@ -144,21 +192,61 @@ export function useGameEvents() {
   useEffect(() => {
     if (!isTauri() || !settings?.autoCapture) return;
     let stop = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Capture health across ticks: was it ever working, since when is it lost, last error logged.
+    let everOk = false;
+    let lostAt: number | null = null;
+    let lastErr: string | null = null;
+    let lastRestart = 0;
+    let watcherDown: number | null = null;
     const tick = async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const st = await invoke<{ running: boolean }>('capture_status');
-        if (!st.running) {
-          try { await invoke('capture_start', { title: 'Among Us', minIntervalMs: 200 }); setCaptureOk(true); }
-          catch { setCaptureOk(false); }
-        } else setCaptureOk(true);
-        const w = await invoke<WatcherStatus>('watcher_status');
-        if (!w.running) await invoke('watcher_start');
+        const now = Date.now();
+        const st = await invoke<CaptureSnap>('capture_status');
+        const verdict = captureVerdict(st, now);
+        let ok = verdict === 'ok';
+        // Running but no frames (window re-created by a resolution / borderless toggle, Graphics Capture stalled):
+        // restart it, at most every 30 s.
+        if (verdict === 'stale' && now - lastRestart > 30_000) {
+          lastRestart = now;
+          logDiag({ what: 'captureRestart', why: st.seq === 0 ? 'no frame since start' : 'no new frame', ageMs: st.age_ms, seq: st.seq });
+          await invoke('capture_stop').catch(() => {});
+        }
+        if (verdict !== 'ok') {
+          try {
+            const s2 = await invoke<CaptureSnap>('capture_start', { title: 'Among Us', minIntervalMs: 200 });
+            ok = true;
+            logDiag({ what: 'captureStart', title: s2.title ?? null, after: lostAt ? 'lost' : everOk ? 'restart' : 'first' });
+          } catch (err) {
+            ok = false;
+            const msg = String(err).slice(0, 200);
+            // Every new reason once (a missing window repeats every 8 s; don't flood the log).
+            if (msg !== lastErr) logDiag({ what: 'captureFailed', error: msg, wasRunning: everOk });
+            lastErr = msg;
+          }
+        }
+        if (ok) { everOk = true; lostAt = null; lastErr = null; }
+        else if (everOk && lostAt === null) lostAt = now;
+        setCaptureOk(ok);
+        const w = await invoke<WatcherStatus & { started_ms?: number; last_frame_ms?: number; stopped_ms?: number; last_panic?: string | null }>('watcher_status');
+        let problem: string | null = null;
+        if (!w.running) {
+          if (w.last_panic || w.stopped_ms) logDiag({ what: 'watcherRestart', panic: w.last_panic ?? null, stoppedMs: w.stopped_ms ?? null });
+          if (w.last_panic) problem = `crashed: ${w.last_panic.slice(0, 80)}`;
+          await invoke('watcher_start');
+        } else if (watcherStalled(w, ok && st.age_ms < 5_000, now)) {
+          problem = 'not reading frames';
+          if (watcherDown === null) logDiag({ what: 'watcherStalled', lastFrameMs: w.last_frame_ms ?? null });
+        }
+        watcherDown = problem ? (watcherDown ?? now) : null;
+        const h: AutoHealth = { captureLostAt: lostAt, captureError: ok ? null : lastErr, watcherDownAt: watcherDown, watcherProblem: problem };
+        setHealth(prev => (prev.captureLostAt === h.captureLostAt && prev.captureError === h.captureError && prev.watcherDownAt === h.watcherDownAt && prev.watcherProblem === h.watcherProblem ? prev : h));
       } catch { /* not in tauri */ }
-      if (!stop) setTimeout(tick, 8000);
+      if (!stop) timer = setTimeout(tick, 8000);
     };
     tick();
-    return () => { stop = true; };
+    return () => { stop = true; if (timer) clearTimeout(timer); };
   }, [settings?.autoCapture]);
 
   // Event wiring.
@@ -169,7 +257,7 @@ export function useGameEvents() {
     let creating = false;
     let role: Role | null = null;
     let roleAt = 0;
-    let pendingMap: MapId | null = null;
+    let pendingMap: MapId | null = detectedMap?.id ?? null;
     let pendingSettings: Record<string, unknown> = {};
     let bannerReason: 'body' | 'button' | null = null;
     const lastAutoSighting = new Map<string, number>();
@@ -185,7 +273,7 @@ export function useGameEvents() {
 
     /** Game ended (or a new one started without us seeing the end): keep the lobby, wipe the slate.
      *  `keepRoster = false` (new room code, Reset roster) keeps only me. */
-    const rollOver = (why: string, keepRoster = true, code: string | null = lobbyCode) => {
+    const rollOver = (why: string, keepRoster = true, code: string | null = lobbyRef.current) => {
       const st = useMatch.getState();
       const cur = st.match;
       if (!cur) return;
@@ -193,7 +281,7 @@ export function useGameEvents() {
       // Drop placeholders ("#N") and chat-created cards that never got a vote-grid slot; everyone else carries over alive.
       const players = Object.values(cur.players)
         .filter(p => p.isMe || (keepRoster && !p.name.startsWith('#') && !(p.id.startsWith('chat') && p.slot === undefined)))
-        .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined }));
+        .map(p => ({ ...p, status: 'alive' as const, knownRole: p.isMe ? freshRole() : 'unknown' as const, isPartner: false, slot: undefined, slotMeeting: undefined, gridOrder: undefined }));
       st.newMatch({ settings: cur.settings, map: cur.settings.map, me: cur.me, myRole: freshRole(), players, lobbyCode: code ?? undefined });
       const live = useMatch.getState();
       const keep = new Set(players.map(p => p.id));
@@ -257,22 +345,27 @@ export function useGameEvents() {
       if (merged.length || dropped.length) useMatch.getState().showToast(`${why}: ${[merged.length ? `merged ${merged.join(', ')}` : '', dropped.length ? `dropped ${dropped.join(', ')}` : ''].filter(Boolean).join('; ')}`);
     };
 
-    const translateLine = async (id: string, text: string) => {
-      if (looksEnglish(text)) return;
+    const translateLine = async (id: string, msg: ChatPayload) => {
+      const req = translationRequest(msg);
+      if (!req) return;
+      const { text, from, guess } = req;
       const s = useMatch.getState();
-      const key = text.trim().toLowerCase();
+      const key = `${from ?? ''}|${text.trim().toLowerCase()}`;
       const cached = translated.get(key);
-      if (cached) { s.dispatch({ kind: 'chatPatch', payload: { id, translated: cached.text, lang: cached.lang ?? undefined } }); return; }
+      if (cached) { s.dispatch({ kind: 'chatPatch', payload: { id, translated: cached.text || undefined, lang: cached.lang ?? undefined, ...(guess && cached.text ? { xlatGuess: true } : {}) } }); return; }
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const r = await invoke<{ text: string; detected: string | null; provider: string }>('translate_text', { req: { text, to: 'en' } });
+        const r = await invoke<{ text: string; detected: string | null; provider: string }>('translate_text', { req: { text, to: 'en', ...(from ? { from } : {}) } });
         const lang = r.detected ?? null;
         const changed = r.text.trim().length > 0 && norm(r.text) !== norm(text) && lang !== 'en';
         const result = { text: changed ? r.text : '', lang };
         translated.set(key, result);
         if (translated.size > 300) translated.delete(translated.keys().next().value as string);
-        useMatch.getState().dispatch({ kind: 'chatPatch', payload: { id, translated: changed ? r.text : undefined, lang: lang ?? undefined } });
-      } catch { /* offline or provider down: the original stays */ }
+        useMatch.getState().dispatch({ kind: 'chatPatch', payload: { id, translated: changed ? r.text : undefined, lang: lang ?? undefined, ...(guess && changed ? { xlatGuess: true } : {}) } });
+      } catch (err) {
+        // Offline or provider down: the original stays. Logged so a silent failure is visible in the NDJSON.
+        useMatch.getState().dispatch({ kind: 'diag', payload: { what: 'translateFailed', line: id, error: String(err).slice(0, 200) } });
+      }
     };
 
     (async () => {
@@ -285,6 +378,7 @@ export function useGameEvents() {
 
       guard(await listen<string>('game://lobby', async e => {
         setLobbyCode(e.payload);
+        lobbyRef.current = e.payload;
         const cur = useMatch.getState().match;
         // A different room code means different people: start over with just me.
         if (cur && cur.lobbyCode && cur.lobbyCode !== e.payload) { rollOver(`New lobby ${e.payload}`, false, e.payload); return; }
@@ -335,14 +429,16 @@ export function useGameEvents() {
           creating = true;
           const presets = await loadPresets();
           if (useMatch.getState().match) { creating = false; return; }
-          const preset = lobbyCode ? presets[lobbyCode] : undefined;
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, 0);
+          const code = lobbyRef.current;
+          const preset = code ? presets[code] : undefined;
+          const { players, me, meGuessed } = playersFromRoster(entries, settingsRef.current?.myName ?? '', 0);
           setMeGuessed(meGuessed);
           if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
           const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined, slotMeeting: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
-          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
-          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyCode ?? undefined });
+          // Fail soft: a detected map is used even without room data (room rules stand down); never silently Skeld.
+          const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : baseSettings.map;
+          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyRef.current ?? undefined });
           if (!fromLobby) {
             for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
             useMatch.getState().setPhase('meetingDiscussion', { reason: bannerReason ?? 'body' });
@@ -358,7 +454,7 @@ export function useGameEvents() {
         if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
         if (m.players['me'] && !fromLobby) {
           // Provisional match: add everyone from the grid, then point "me" at my name (or ask).
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, meetingNow);
+          const { players, me, meGuessed } = playersFromRoster(entries, settingsRef.current?.myName ?? '', meetingNow);
           for (const p of players) if (!useMatch.getState().match!.players[p.id]) s.dispatch({ kind: 'addPlayer', payload: { ...p, isMe: false } });
           for (const en of entries) { const p = players.find(x => x.slot === en.index + 1); if (p && en.avatar_png) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
           if (!meGuessed) { s.dispatch({ kind: 'me', payload: { id: me } }); s.dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); }
@@ -398,10 +494,18 @@ export function useGameEvents() {
 
         // ---- Vote grid: match cards to players by name / icon / colour / same-meeting slot. ----
         const hashes = useMatch.getState().iconHashes;
-        const rp: RosterPlayer[] = existing.map(p => ({ id: p.id, name: p.name, color: p.color, status: p.status, slot: p.slot, slotMeeting: p.slotMeeting, iconHash: hashes[p.id], isMe: p.isMe }));
+        const rp: RosterPlayer[] = existing.map(p => ({ id: p.id, name: p.name, color: p.color, status: p.status, slot: p.slot, slotMeeting: p.slotMeeting, iconHash: hashes[p.id], isMe: p.isMe, gridOrder: p.gridOrder }));
         const ge: GridEntry[] = entries.map(en => ({ index: en.index, name: en.name, color: en.color, dead: en.dead, iconHash: en.icon_hash }));
         const assignments = matchGrid(rp, ge, meetingNow);
         useMatch.getState().setRosterConfidence(rosterConfidence(assignments, ge));
+        // Grid order (handoff #9): taken once per game, from the first complete grid where every alive card found
+        // its player — all orders then come from one meeting, so their ranks are comparable later.
+        if (gridComplete && !existing.some(p => p.gridOrder !== undefined)) {
+          const alive = assignments.filter(a => !(entries.find(x => x.index === a.index)?.dead));
+          if (alive.length >= 3 && alive.every(a => a.playerId && !a.reasons.includes('elimination'))) {
+            for (const a of alive) s.dispatch({ kind: 'player', payload: { id: a.playerId!, gridOrder: a.index } });
+          }
+        }
         const established = existing.filter(p => p.slot !== undefined).length >= Math.min(entries.length, 4);
         for (const a of assignments) {
           const en = entries[a.index] ?? entries.find(x => x.index === a.index)!;
@@ -434,7 +538,7 @@ export function useGameEvents() {
             nameVotes.set(p.id, v);
             const best = bestReading(v, p.name, p.nameLocked);
             if (best !== p.name) { s.dispatch({ kind: 'player', payload: { id: p.id, name: best } }); learn(b => learnAlias(b, p.name, best, Date.now(), 'grid')); }
-            else if (v[en.name] >= 2 && en.name === p.name) learn(b => learnName(b, p.name, 'grid', Date.now(), lobbyCode ?? undefined));
+            else if (v[en.name] >= 2 && en.name === p.name) learn(b => learnName(b, p.name, 'grid', Date.now(), lobbyRef.current ?? undefined));
           }
           // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
           if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
@@ -445,7 +549,8 @@ export function useGameEvents() {
             const live = useMatch.getState().match!;
             for (const d of Object.values(live.players)) {
               if (d.id === p.id || d.slot !== undefined || d.isMe) continue;
-              if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'removePlayer', payload: { id: d.id } });
+              // mergePlayers, not removePlayer: the duplicate's chat lines / claims / sightings follow the survivor.
+              if (!d.colorLocked && (similarity(norm(d.name), norm(p.name)) >= 0.6 || similarity(norm(d.name), norm(en.name)) >= 0.6)) s.dispatch({ kind: 'mergePlayers', payload: { from: d.id, into: p.id, why: `grid duplicate of ${p.name}` } });
             }
           }
           if (en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb);
@@ -489,9 +594,9 @@ export function useGameEvents() {
           if (!['round', 'roundStart', 'meetingDiscussion', 'ejection'].includes(e.payload.phase)) return;
           if (creating || !resumeDone.current) return;
           creating = true;
-          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
-          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyCode ?? undefined,
-            players: [{ id: 'me', name: settings.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
+          const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : DEFAULT_SETTINGS.map;
+          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyRef.current ?? undefined,
+            players: [{ id: 'me', name: settingsRef.current?.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
           creating = false;
           useMatch.getState().showToast('Game in progress detected — roster fills at the next meeting');
         }
@@ -513,7 +618,8 @@ export function useGameEvents() {
           useMatch.getState().setPhase('roundStart');
           return;
         }
-        s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body' } : undefined);
+        const lag = e.payload.lag_ms ? { lagMs: e.payload.lag_ms } : {};
+        s2.setPhase(phase, phase === 'meetingDiscussion' ? { reason: bannerReason ?? 'body', ...lag } : lag);
         if (phase === 'meetingDiscussion') bannerReason = null;
         s2.showToast(`${phase === 'round' ? 'Round started' : phase === 'meetingDiscussion' ? 'Meeting' : phase === 'ejection' ? 'Vote done' : phase} (auto)`);
       }));
@@ -550,17 +656,22 @@ export function useGameEvents() {
       guard(await listen<MapId>('game://map', e => {
         const id = e.payload;
         const s = useMatch.getState();
-        if (!MAPS[id] || MAPS[id].rooms.length === 0) { s.showToast(`Map ${id} detected — no map data yet, room features off`); pendingMap = null; return; }
+        if (!MAPS[id]) return;
+        if (MAPS[id].rooms.length === 0) s.showToast(`Map ${id} detected — no map data yet, room features off`);
         pendingMap = id;
+        detectedMap = { id, source: 'lobby' };
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
       }));
 
-      guard(await listen<{ sender: string; text: string; mine: boolean; system: boolean; y: number; color: string }[]>('game://chat', e => {
+      guard(await listen<ChatPayload[]>('game://chat', e => {
         const s = useMatch.getState();
         if (!s.match) return;
         const meeting = s.match.phase.meeting ?? 0;
+        /** Every bubble the screen showed that does not become a chat line gets a reason in the NDJSON. */
+        const drop = (why: string, msg: ChatPayload) => s.dispatch({ kind: 'diag', payload: { what: 'chatDropped', why, sender: msg.sender, text: msg.text.slice(0, 120) } });
         for (const msg of e.payload) {
-          if (!msg.system && msg.text.trim().length === 0) continue;
+          if (!msg.system && msg.text.trim().length === 0 && !msg.unreadable) { drop('empty', msg); continue; }
+          if (msg.unreadable) s.dispatch({ kind: 'diag', payload: { what: 'chatUnreadable', sender: msg.sender, text: msg.text.slice(0, 120), scriptHint: msg.script_hint ?? null, ocrLang: msg.ocr_lang ?? null, plausibility: msg.plausibility ?? null } });
           // Garbled system lines ("sillynorny nas votea. z remyalmng.") still carry 'vot' + 'rem' fragments.
           const system = msg.system || (/vot/i.test(msg.text) && /rem/i.test(msg.text) && !/(vote|voting) [a-z]/i.test(msg.text)) || /left the game|joined the game/i.test(msg.text);
           if (system) {
@@ -572,12 +683,14 @@ export function useGameEvents() {
           // Re-reads of the same bubble can lose the name line: a long identical text seen recently is a duplicate.
           const recent = m.chat.slice(-25);
           const nt = norm(msg.text);
-          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || (nt.startsWith(o) && o.length >= 12) || similarity(nt, o) >= 0.85; })) continue;
+          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || (nt.startsWith(o) && o.length >= 12) || similarity(nt, o) >= 0.85; })) { drop('duplicate', msg); continue; }
           const others = Object.values(m.players).filter(p => !p.isMe);
           // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
-          if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;
-          if (msg.sender && !msg.mine) msg.sender = resolve(bookRef.current, msg.sender).name;
-          let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
+          if (msg.text.trim() && msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) { drop('nameOnly', msg); continue; }
+          if (msg.sender && !msg.mine && msg.sender !== '?') msg.sender = resolve(bookRef.current, msg.sender).name;
+          let sender: string = msg.mine ? m.me : (msg.sender && msg.sender !== '?' ? fuzzyFind(msg.sender, others)?.id ?? 'unknown' : 'unknown');
+          // No readable name line (cut off, or a non-Latin name): the icon colour names the sender when it is unique.
+          if (sender === 'unknown' && !msg.mine && (!msg.sender || msg.sender === '?')) sender = senderByIconColor(msg.color, others) ?? 'unknown';
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
             const byColor = others.filter(p => p.color === msg.color);
             if (byColor.length === 1 && msg.sender && similarity(norm(msg.sender), norm(byColor[0].name)) > 0.4) sender = byColor[0].id;
@@ -609,9 +722,10 @@ export function useGameEvents() {
           }
           const stamp = s.stamp();
           const lineId = newId('ch');
-          s.dispatch({ kind: 'chat', payload: { id: lineId, meeting, stamp, sender, original: msg.text, source: 'ocr' } });
-          if (sender !== m.me) void translateLine(lineId, msg.text);
-          if (sender === 'unknown' || sender === m.me) continue;
+          s.dispatch({ kind: 'chat', payload: { id: lineId, meeting, stamp, sender, original: msg.text, source: 'ocr', ...(msg.unreadable ? { unreadable: true } : {}), ...(msg.script_hint ? { scriptHint: msg.script_hint } : {}), ...(msg.ocr_lang ? { ocrLang: msg.ocr_lang } : {}) } });
+          if (sender !== m.me) void translateLine(lineId, msg);
+          // Garbage OCR must not turn into claims (a misread could "say" anything).
+          if (sender === 'unknown' || sender === m.me || msg.unreadable) continue;
           const parsed = parseChatClaims(msg.text, sender, m);
           for (const b of parsed.filter(x => x.type === 'body' && x.room)) {
             const live = useMatch.getState().match!;
@@ -663,6 +777,7 @@ export function useGameEvents() {
           else if (key.includes('commontask')) { if (num >= 0 && num <= 4) patch.commonTasks = num; }
           else if (key.includes('longtask')) { if (num >= 0 && num <= 4) patch.longTasks = num; }
           else if (key.includes('shorttask')) { if (num >= 0 && num <= 6) patch.shortTasks = num; }
+          else if (key === 'map' || key.endsWith('map')) { const id = mapIdFromText(val); if (id) { patch.map = id; pendingMap = id; detectedMap = { id, source: 'lobby' }; } }
         }
         if (Object.keys(patch).length === 0) return;
         pendingSettings = { ...pendingSettings, ...patch };
@@ -681,6 +796,7 @@ export function useGameEvents() {
       }));
 
       guard(await listen<string>('game://room', e => {
+        inferMapFrom(e.payload);
         const s = useMatch.getState();
         const m = s.match;
         if (!m || m.map.rooms.length === 0) return;
@@ -724,6 +840,7 @@ export function useGameEvents() {
       }));
 
       guard(await listen<string[]>('game://tasks', e => {
+        for (const l of e.payload) if (!/total tasks|fake tasks/i.test(l)) inferMapFrom(l);
         const s = useMatch.getState();
         const m = s.match;
         if (!m) return;
@@ -747,7 +864,9 @@ export function useGameEvents() {
       }));
     })();
     return () => { cancelled = true; unlisten.forEach(u => u()); };
-  }, [settings, lobbyCode]);
+    // Deliberately not keyed on lobbyCode (read through lobbyRef): re-registering every listener on a new room
+    // code dropped events in the gap and wiped the closures' state (role, pending map/settings, votes).
+  }, [settingsLoaded]);
 
   const rescanNames = async (): Promise<string> => {
     if (!isTauri()) return 'needs the Tauri window';
@@ -786,5 +905,5 @@ export function useGameEvents() {
   const learnRemoved = (name: string) => learn(b => learnJunk(b, name, Date.now(), true));
   const nameBook = () => bookRef.current;
 
-  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster, learnRename, learnRemoved, nameBook };
+  return { settings, setSettings, watcher, captureOk, health, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster, learnRename, learnRemoved, nameBook };
 }

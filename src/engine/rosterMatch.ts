@@ -25,6 +25,8 @@ export interface RosterPlayer {
   slotMeeting?: number;
   iconHash?: string;
   isMe?: boolean;
+  /** Cell index in the first complete grid this match (all cards matched, read in one meeting). */
+  gridOrder?: number;
 }
 
 export interface Assignment { index: number; playerId: string | null; score: number; reasons: string[] }
@@ -66,7 +68,27 @@ export function hashDistance(a?: string, b?: string): number {
 
 const KNOWN = (c: string) => c !== 'unknown' && c !== 'gray';
 
-export function pairScore(p: RosterPlayer, e: GridEntry, meeting: number): { score: number; reasons: string[] } {
+/**
+ * Grid-order consistency (handoff #9). UNVERIFIED game fact: the grid lists players by player index with the
+ * dead moved to the end, so the relative order of ALIVE cards never changes. A card's rank among alive cards
+ * then equals its player's rank among alive players ordered by `gridOrder`. Only usable when every alive
+ * card has a candidate with a `gridOrder` (otherwise the ranks are shifted); null = don't use.
+ */
+export interface OrderContext { entryRank: Map<number, number>; playerRank: Map<string, number> }
+
+export function orderContext(players: RosterPlayer[], entries: GridEntry[]): OrderContext | null {
+  const aliveE = entries.filter(e => !e.dead).sort((a, b) => a.index - b.index);
+  const aliveP = players.filter(p => p.status === 'alive' && p.gridOrder !== undefined).sort((a, b) => a.gridOrder! - b.gridOrder!);
+  const aliveAll = players.filter(p => p.status === 'alive');
+  if (aliveE.length < 3 || aliveP.length !== aliveE.length || aliveAll.length !== aliveP.length) return null;
+  if (new Set(aliveP.map(p => p.gridOrder)).size !== aliveP.length) return null; // duplicate orders: corrupt
+  return { entryRank: new Map(aliveE.map((e, i) => [e.index, i])), playerRank: new Map(aliveP.map((p, i) => [p.id, i])) };
+}
+
+/** Enough to pair on its own (≥ MIN_ASSIGN) when nothing contradicts it; name (3) and icon (2.5) still win. */
+export const ORDER_BONUS = 1.5;
+
+export function pairScore(p: RosterPlayer, e: GridEntry, meeting: number, order?: OrderContext | null): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   let score = 0;
   const ns = nameScore(p.name, e.name);
@@ -78,6 +100,10 @@ export function pairScore(p: RosterPlayer, e: GridEntry, meeting: number): { sco
     if (p.slotMeeting === meeting) { score += 3; reasons.push('slot'); } else { score += 0.5; reasons.push('slot?'); }
   }
   if (!e.dead && p.status !== 'alive') score -= 2;   // the dead never come back
+  if (order && !e.dead) {
+    const er = order.entryRank.get(e.index), pr = order.playerRank.get(p.id);
+    if (er !== undefined && er === pr) { score += ORDER_BONUS; reasons.push('order'); }
+  }
   return { score, reasons };
 }
 
@@ -86,7 +112,8 @@ export const MIN_ASSIGN = 1.4;
 
 export function matchGrid(players: RosterPlayer[], entries: GridEntry[], meeting: number): Assignment[] {
   const pairs: { p: RosterPlayer; e: GridEntry; score: number; reasons: string[] }[] = [];
-  for (const p of players) for (const e of entries) { const r = pairScore(p, e, meeting); pairs.push({ p, e, ...r }); }
+  const order = orderContext(players, entries);
+  for (const p of players) for (const e of entries) { const r = pairScore(p, e, meeting, order); pairs.push({ p, e, ...r }); }
   pairs.sort((a, b) => b.score - a.score);
   const usedP = new Set<string>(); const usedE = new Set<number>();
   const out = new Map<number, Assignment>();

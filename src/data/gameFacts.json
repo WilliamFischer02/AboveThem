@@ -1,0 +1,173 @@
+{
+  "_doc": "Machine-readable game facts the lie checks need (docs/GAME_KNOWLEDGE.md section 1). Research agent, 2026-10-22. Room ids: skeld/polus match src/data/maps/*.json; mira/airship/fungle ids are proposals matching src/data/chatSlang.seed.json until the maps agent fills those files. Vent networks and task tables live in the map JSON, not here. 'tag' per block: F = 2 sources agree, F1 = single source (fandom wiki), U = uncertain. Sources: https://among-us.fandom.com/wiki/{Sabotage, Fix_Lights, Door_Sabotage, Doors, Admin_(ability), Security_(ability), Camera, Vitals, Doorlog, Binoculars, Emergency_meeting, Tasks, Visual_tasks, Kill, Dead_body}.",
+  "version": 1,
+  "rules": {
+    "tag": "F",
+    "killCooldownAtMatchStartSec": 10,
+    "killCooldownResetsAtMeetingEnd": true,
+    "killCooldownPausedInVent": true,
+    "killCooldownPausedOnCams": true,
+    "sabotageCooldownAtMatchStartSec": 10,
+    "sabotageCooldownAfterFixSec": 30,
+    "meetingRemovesAllBodies": true,
+    "reportEndsCriticalSabotage": true,
+    "reportEndsLightsOrComms": false,
+    "buttonUsableDuring": ["doors", "mixup"],
+    "commsDisables": ["admin", "cams", "vitals", "doorlog", "engineerVent", "scientistVitals", "tracker", "noisemakerAlert", "detective", "guardianAngel"],
+    "commsDoesNotDisable": ["impostorVent", "binoculars"],
+    "impostorWinWhenImpostorsAtLeastCrew": true,
+    "ghostSpeedMultiplier": 1.2,
+    "lightsCrewVisionDivisor": 5,
+    "adminShowsBodiesUntilMeeting": true,
+    "adminShowsVentOccupants": true,
+    "adminCoversHallways": false,
+    "adminKillFlash": false,
+    "camsBlinkWhenLivingViewer": true,
+    "vitalsStates": { "OK": "alive", "DED": "killed since the last meeting, body still on the map", "D/C": "ejected, killed before the last meeting, or disconnected" },
+    "engineerVentBlockedByComms": true,
+    "viperAndShapeshifterExclusive": true,
+    "minPlayersForImpostors": { "1": 4, "2": 7, "3": 9, "_tag": "F1 (outdated wiki screenshot)" }
+  },
+  "maps": {
+    "skeld": {
+      "meeting": { "room": "cafeteria" },
+      "criticalTimerSec": 30,
+      "sabotages": [
+        { "id": "reactor", "critical": true, "fixRooms": ["reactor"], "people": 2, "simultaneous": true },
+        { "id": "o2", "critical": true, "fixRooms": ["o2", "admin"], "people": 2, "simultaneous": false },
+        { "id": "lights", "critical": false, "fixRooms": ["electrical"], "people": 1 },
+        { "id": "comms", "critical": false, "fixRooms": ["communications"], "people": 1 }
+      ],
+      "doors": { "rooms": ["cafeteria", "electrical", "lowerEngine", "medbay", "security", "storage", "upperEngine"], "reopen": "auto10s" },
+      "monitors": {
+        "admin": ["admin"],
+        "cams": { "room": "security", "mode": "allFeedsAtOnce", "feeds": [
+          { "id": "navHall", "label": "Weapons-O2-Navigation-Shields hallway (camera left of Navigation)", "nearRooms": ["weapons", "o2", "navigation", "shields"] },
+          { "id": "adminHall", "label": "Admin/Cafeteria/Storage hallway (camera left of Admin)", "nearRooms": ["admin", "cafeteria", "storage"] },
+          { "id": "medbayHall", "label": "MedBay/Cafeteria/Upper Engine hallway (outside MedBay)", "nearRooms": ["medbay", "cafeteria", "upperEngine"] },
+          { "id": "securityHall", "label": "Security-Reactor hallway (right of Reactor)", "nearRooms": ["security", "reactor"] }
+        ] },
+        "vitals": null,
+        "doorlog": null,
+        "binoculars": null
+      },
+      "visualTasks": ["submitScan", "clearAsteroids", "primeShields", "emptyGarbage", "emptyChute"],
+      "commonTaskPool": ["fixWiring", "swipeCard"],
+      "dummyPanels": [{ "room": "reactor", "looksLike": "divertPower" }],
+      "noVentRooms": ["storage", "communications", "o2"]
+    },
+    "mira": {
+      "meeting": { "room": "cafeteria" },
+      "criticalTimerSec": 45,
+      "sabotages": [
+        { "id": "reactor", "critical": true, "fixRooms": ["reactor"], "people": 2, "simultaneous": true },
+        { "id": "o2", "critical": true, "fixRooms": ["greenhouse", "hallSouthWest"], "people": 2, "simultaneous": false, "_note": "second keypad is in the hallway south of Locker Room / near MedBay; no room id yet" },
+        { "id": "lights", "critical": false, "fixRooms": ["office"], "people": 1 },
+        { "id": "comms", "critical": false, "fixRooms": ["office", "communications"], "people": 2, "simultaneous": true, "_note": "code resets every ~10 s, both pads before reset" }
+      ],
+      "doors": { "rooms": [], "reopen": null, "_note": "no door sabotage; Decontamination and Balcony doors are not sabotageable" },
+      "monitors": {
+        "admin": ["admin"],
+        "cams": null,
+        "vitals": null,
+        "doorlog": { "room": "communications", "sensors": ["north", "southWest", "southEast"], "perPlayerCooldownSec": 5, "maxEntries": 20, "logsRealIdentity": true },
+        "binoculars": null
+      },
+      "visualTasks": ["submitScan"],
+      "notVisualHere": ["clearAsteroids", "primeShields", "emptyGarbage"],
+      "commonTaskPool": ["fixWiring", "enterIdCode"],
+      "dummyPanels": [],
+      "ventsAllConnected": true,
+      "noVentRooms": ["cafeteria", "communications", "storage"]
+    },
+    "polus": {
+      "meeting": { "room": "office" },
+      "criticalTimerSec": 60,
+      "sabotages": [
+        { "id": "seismic", "critical": true, "fixRooms": ["outsideLeft", "outsideRight"], "people": 2, "simultaneous": true, "_note": "stabilizers on opposite sides of Dropship" },
+        { "id": "lights", "critical": false, "fixRooms": ["electrical"], "people": 1 },
+        { "id": "comms", "critical": false, "fixRooms": ["communications"], "people": 1, "_note": "dial is on the satellite OUTSIDE the Communications pod; claims of fixing comms inside the pod are wrong" }
+      ],
+      "doors": { "rooms": ["communications", "electrical", "laboratory", "o2", "office", "storage", "weapons"], "reopen": "switches" },
+      "monitors": {
+        "admin": ["admin"],
+        "cams": { "room": "security", "mode": "oneFeedAtATime", "feeds": [
+          { "id": "east", "label": "outside Office right room (Record Temperature, Upload)", "nearRooms": ["office", "lava"] },
+          { "id": "central", "label": "between Communications and Office (comms fix panel)", "nearRooms": ["communications", "office"] },
+          { "id": "northEast", "label": "outside Laboratory (weather node MLG, a vent)", "nearRooms": ["laboratory"] },
+          { "id": "south", "label": "outside the south-west entrance of Office and Admin (a vent, wiring)", "nearRooms": ["office", "admin"] },
+          { "id": "southWest", "label": "outside O2 (part of Boiler Room, garbage)", "nearRooms": ["o2", "boilerRoom"] },
+          { "id": "northWest", "label": "outside Electrical (a fuel stop, a vent)", "nearRooms": ["electrical"] }
+        ] },
+        "vitals": ["office"],
+        "doorlog": null,
+        "binoculars": null
+      },
+      "visualTasks": ["submitScan", "clearAsteroids"],
+      "commonTaskPool": ["fixWiring", "swipeCard", "insertKeys", "scanBoardingPass"],
+      "dummyPanels": [{ "room": "office", "looksLike": "divertPower" }],
+      "adminBlindAreas": ["outsideLeft", "outsideRight", "lava"],
+      "ventsSilent": true,
+      "noCleanVent": true,
+      "noVentRooms": ["boilerRoom", "communications", "dropship", "medbay", "security", "specimen", "weapons", "lowerDecon", "upperDecon"]
+    },
+    "airship": {
+      "meeting": { "room": null, "stayInPlace": true, "spawnChoices": ["brig", "cargoBay", "engineRoom", "kitchen", "mainHall", "records"], "spawnOffered": 3, "spawnPickSec": 10 },
+      "criticalTimerSec": 90,
+      "sabotages": [
+        { "id": "crashCourse", "critical": true, "fixRooms": ["gapRoom"], "people": 2, "simultaneous": true, "_note": "keypads on both sides of Gap Room; code resets" },
+        { "id": "lights", "critical": false, "fixRooms": ["gapRoom", "viewingDeck", "cargoBay"], "people": 1, "_note": "any one panel fixes it" },
+        { "id": "comms", "critical": false, "fixRooms": ["communications"], "people": 1 }
+      ],
+      "doors": { "rooms": ["brig", "kitchen", "mainHall", "medical", "records"], "extra": ["hallway Engine Room-Cockpit"], "reopen": "cardSwipe", "_tag": "U: Doors page lists vault instead of kitchen" },
+      "monitors": {
+        "admin": ["cockpit", "records"],
+        "cams": { "room": "security", "mode": "oneFeedAtATime", "feeds": [
+          { "id": "engineRoom", "label": "left entrance of Engine Room", "nearRooms": ["engineRoom"] },
+          { "id": "vault", "label": "right entrance of Vault, near Brig", "nearRooms": ["vault", "brig"] },
+          { "id": "records", "label": "left and right entrances of Records (2 cams, 1 view)", "nearRooms": ["records"] },
+          { "id": "security", "label": "left entrance of Security, near Hall of Portraits", "nearRooms": ["security", "hallOfPortraits"] },
+          { "id": "cargoBay", "label": "left entrance of Cargo Bay, near Ventilation", "nearRooms": ["cargoBay", "ventilation"] },
+          { "id": "meetingRoom", "label": "Meeting Room above the ladder to Gap Room", "nearRooms": ["meetingRoom", "gapRoom"] }
+        ] },
+        "vitals": ["medical"],
+        "doorlog": null,
+        "binoculars": null
+      },
+      "visualTasks": [],
+      "commonTaskPool": ["fixWiring", "enterIdCode"],
+      "dummyPanels": [
+        { "room": "armory", "looksLike": "fixWiring" },
+        { "room": "communications", "looksLike": "fixWiring" },
+        { "room": "vault", "looksLike": "fixWiring" },
+        { "room": "lounge", "looksLike": "emptyGarbage" }
+      ],
+      "ladders": ["meetingRoom-gapRoom", "gapRoom (right side)", "mainHall-electrical"],
+      "movingPlatform": "gapRoom",
+      "noVentRooms": ["armory", "brig", "communications", "electrical", "hallOfPortraits", "lounge", "medical", "meetingRoom", "outside", "security", "ventilation"]
+    },
+    "fungle": {
+      "meeting": { "room": "meetingRoom" },
+      "criticalTimerSec": 60,
+      "sabotages": [
+        { "id": "reactor", "critical": true, "fixRooms": ["reactor"], "people": 2, "simultaneous": true },
+        { "id": "comms", "critical": false, "fixRooms": ["communications", "lookout"], "people": 2, "simultaneous": true },
+        { "id": "mixup", "critical": false, "fixRooms": [], "people": 0, "durationSec": 10, "buttonUsable": true, "_note": "unfixable; random colour/cosmetics; names hidden from crew" }
+      ],
+      "doors": { "rooms": ["communications", "kitchen", "laboratory", "lookout", "miningPit", "reactor", "storage"], "reopen": "mushrooms6", "_tag": "U: Door Sabotage page also lists greenhouse" },
+      "monitors": {
+        "admin": [],
+        "cams": null,
+        "vitals": ["laboratory"],
+        "doorlog": null,
+        "binoculars": { "room": "lookout", "covers": ["beach", "jungle"], "notCovered": ["cliffs"], "worksDuringComms": true }
+      },
+      "visualTasks": [],
+      "commonTaskPool": ["collectSamples", "enterIdCode", "replaceParts", "roastMarshmallow"],
+      "dummyPanels": [],
+      "lights": false,
+      "ladders": ["jungle-cliffs (x2)", "communications-upperEngine (x2)"],
+      "zipline": ["storage", "communications"]
+    }
+  }
+}

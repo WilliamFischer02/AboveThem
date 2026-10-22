@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame, Latest};
 use crate::lobby::read_lobby;
-use crate::chat::{read_chat, ChatMsg};
+use crate::chat::{read_chat_detailed, ChatMsg};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
@@ -41,7 +41,7 @@ pub const EV_GAME_OVER: &str = "game://game_over";
 pub const EV_CAPACITY: &str = "game://capacity";
 
 #[derive(Clone, Debug, serde::Serialize)]
-pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
+pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32, /** ms between the first frame showing this phase and its confirmation (hysteresis). */ pub lag_ms: u64 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RosterEvent { pub source: &'static str, pub entries: Vec<RosterEntry> }
@@ -103,6 +103,12 @@ pub struct WatcherStatus {
     pub frame_seq: u64,
     pub lobby_code: Option<String>,
     pub room: Option<String>,
+    /// Wall ms the loop started / last processed a new frame / stopped (0 = never). Lets the UI say "stopped since".
+    pub started_ms: u64,
+    pub last_frame_ms: u64,
+    pub stopped_ms: u64,
+    /// Panic message if the loop died.
+    pub last_panic: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -140,6 +146,17 @@ const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "ej
 /// Nothing recognisable for this long (main menu, alt-tabbed, map open for ages) => treat as the lobby.
 const UNKNOWN_TO_LOBBY: Duration = Duration::from_secs(120);
 
+/// Ejection text gone and no meeting for this long => the next round is running (handoff #7: a round
+/// after an ejection was missed once, probably because neither the task bar nor REPORT was readable).
+const EJECTION_TO_ROUND: Duration = Duration::from_secs(5);
+
+/// The phase to assume when nothing positive was read this frame. UNVERIFIED live (needs a dead-player round).
+pub fn fallback_phase(current: Option<Phase>, eject_gone_for: Option<Duration>, unknown_for: Option<Duration>) -> Option<Phase> {
+    if current == Some(Phase::Ejection) && eject_gone_for.map(|d| d >= EJECTION_TO_ROUND).unwrap_or(false) { return Some(Phase::Round); }
+    if unknown_for.map(|d| d > UNKNOWN_TO_LOBBY).unwrap_or(false) && current != Some(Phase::Lobby) { return Some(Phase::Lobby); }
+    None
+}
+
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
 fn ocr_rect(f: &Frame, r: Rect, scale: u32) -> String {
@@ -149,6 +166,34 @@ fn ocr_rect(f: &Frame, r: Rect, scale: u32) -> String {
         Ok(res) => res.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n"),
         Err(_) => String::new(),
     }
+}
+
+/// OCR of white text on a busy background (the lobby panel's stylised map logo): white-ish pixels become
+/// black ink on a white page, everything else white.
+pub fn ocr_white_text(f: &Frame, r: Rect, scale: u32) -> String {
+    let (mut c, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+    for px in c.chunks_exact_mut(4) {
+        let ink = px[0] >= 200 && px[1] >= 200 && px[2] >= 200;
+        let v = if ink { 0 } else { 255 };
+        px[0] = v; px[1] = v; px[2] = v;
+    }
+    let (u, uw, uh) = upscale_bgra(&c, w, h, scale);
+    match ocr_bgra(&u, uw, uh, None) {
+        Ok(res) => res.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n"),
+        Err(_) => String::new(),
+    }
+}
+
+/// The lobby panel's map logo (stylised white letters): binarised OCR at 1×, then 2×, then the plain crop.
+/// Returns the first text that names a map (else the last text read). Measured on `lobby_v2` (THE SKELD only):
+/// UNVERIFIED for the other four logos.
+pub fn read_map_logo(f: &Frame, r: Rect) -> String {
+    let mut last = String::new();
+    for t in [ocr_white_text(f, r, 1), ocr_white_text(f, r, 2), ocr_rect(f, r, 2)] {
+        if map_id_of(&t).is_some() { return t; }
+        if !t.trim().is_empty() { last = t; }
+    }
+    last
 }
 
 pub fn parse_eject(text: &str) -> Option<EjectEvent> {
@@ -193,6 +238,30 @@ pub fn lobby_code_of(text: &str) -> Option<String> {
         .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_uppercase()) && w != "CODE")
 }
 
+/// Map id from the lobby panel's map-name text. The region also holds the "ROOM SETTINGS" label, so keywords are
+/// searched inside the text (with the usual OCR swaps 0→O, 1→I, Q→O) before a per-line fuzzy match.
+/// Mirrors `mapIdFromText` in src/engine/map.ts.
+// UNVERIFIED: written by the maps agent without running cargo; the bugs-rust agent / lead must build + test.
+pub fn map_id_of(text: &str) -> Option<&'static str> {
+    let up = text.to_uppercase().replace("ROOM SETTINGS", " ").replace("GAME SETTINGS", " ");
+    let flat: String = up.chars()
+        .map(|c| match c { '0' => 'O', '1' | '|' | '!' => 'I', '5' => 'S', _ => c })
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    for (k, id) in [("SKELD", "skeld"), ("MIRAHQ", "mira"), ("MIRAHO", "mira"), ("MIRA", "mira"), ("POLUS", "polus"), ("AIRSHIP", "airship"), ("FUNGLE", "fungle")] {
+        if flat.contains(k) { return Some(id); }
+    }
+    let names = ["The Skeld", "Skeld", "MIRA HQ", "Polus", "The Airship", "Airship", "The Fungle", "Fungle"];
+    for line in up.lines() {
+        if let Some((m, score)) = fuzzy_best(line, names) {
+            if score >= 0.6 {
+                return Some(match m { "The Skeld" | "Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" | "Airship" => "airship", _ => "fungle" });
+            }
+        }
+    }
+    None
+}
+
 fn room_label_of(text: &str) -> Option<String> {
     let t = text.trim();
     let n = t.chars().count();
@@ -205,14 +274,28 @@ pub fn start<R: Runtime>(app: AppHandle<R>, state: &WatcherState, latest: Latest
     if state.running.swap(true, Ordering::SeqCst) { return; }
     let running = state.running.clone();
     let shared = state.shared.clone();
-    let handle = std::thread::spawn(move || run_loop(app, running, shared, latest));
-    *state.handle.lock().unwrap() = Some(handle);
+    let handle = std::thread::spawn(move || {
+        // A panic anywhere in the loop (odd frame size, OCR surprise) must not leave `running` stuck at true:
+        // the frontend restarts a stopped watcher every 8 s, but never a "running" dead one.
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_loop(app, running.clone(), shared.clone(), latest)));
+        let mut st = shared.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = r {
+            let msg = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
+            eprintln!("watcher thread panicked: {msg}");
+            st.status.last_panic = Some(msg);
+        }
+        st.status.running = false;
+        st.status.stopped_ms = crate::capture::now_ms();
+        drop(st);
+        running.store(false, Ordering::SeqCst);
+    });
+    *state.handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
 }
 
 pub fn stop(state: &WatcherState) {
     state.running.store(false, Ordering::SeqCst);
-    if let Some(h) = state.handle.lock().unwrap().take() { let _ = h.join(); }
-    let mut s = state.shared.lock().unwrap();
+    if let Some(h) = state.handle.lock().unwrap_or_else(|e| e.into_inner()).take() { let _ = h.join(); }
+    let mut s = state.shared.lock().unwrap_or_else(|e| e.into_inner());
     s.status.running = false;
 }
 
@@ -222,6 +305,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_seq = 0u64;
     let mut candidate: Option<Phase> = None;
     let mut candidate_count = 0u32;
+    let mut candidate_since = Instant::now();
     let mut last_roster: Vec<RosterEntry> = Vec::new();
     let mut last_roster_read = Instant::now() - Duration::from_secs(60);
     let mut last_lobby: Vec<RosterEntry> = Vec::new();
@@ -240,15 +324,19 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut impostor_buttons_seen = false;
     let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     let mut last_chat_read = Instant::now() - Duration::from_secs(60);
+    // Unreadable bubbles have no text to dedupe on: (sender, bubble pixel hash), confirmed by two reads.
+    let mut unreadable_seen: std::collections::VecDeque<(String, u64)> = std::collections::VecDeque::new();
+    let mut unreadable_pending: Vec<(String, u64)> = Vec::new();
     let mut me_dead_meeting: Option<u32> = None;
     let mut unknown_since: Option<Instant> = None;
+    let mut eject_gone_since: Option<Instant> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
-    { shared.lock().unwrap().status.running = true; }
+    { let mut s = shared.lock().unwrap_or_else(|e| e.into_inner()); s.status.running = true; s.status.started_ms = crate::capture::now_ms(); s.status.stopped_ms = 0; }
 
     while running.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(200));
-        let Some(frame) = latest.lock().unwrap().clone() else { continue };
+        let Some(frame) = latest.lock().unwrap_or_else(|e| e.into_inner()).clone() else { continue };
         if frame.seq == last_seq { continue; }
         last_seq = frame.seq;
         let regions = Regions::default().for_frame(frame.width, frame.height);
@@ -265,7 +353,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                 let t0 = Instant::now();
                 // Role card / banner text is huge (1× keeps us under the OCR size limit); task list is small (3×).
                 let scale = match name.as_str() { "role_card" | "meeting_banner" => 1, "task_list" => 3, _ => 2 };
-                tr.text = ocr_rect(&frame, r, scale);
+                tr.text = if name == "map_name" { read_map_logo(&frame, r) } else { ocr_rect(&frame, r, scale) };
                 ocr_ms += t0.elapsed().as_millis() as u64;
                 ocr_calls += 1;
                 tr.dirty = false;
@@ -352,9 +440,13 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             Some(_) => unknown_since = None,
             None => { if unknown_since.is_none() { unknown_since = Some(Instant::now()); } }
         }
-        let next = next.or_else(|| if unknown_since.map(|t| t.elapsed() > UNKNOWN_TO_LOBBY).unwrap_or(false) && detector.current != Some(Phase::Lobby) { Some(Phase::Lobby) } else { None });
+        // Ejection screen over (text gone, no meeting / lobby / role / end screen): start the clock for the round fallback.
+        if detector.current == Some(Phase::Ejection) && eject.is_none() && !meeting && !in_lobby && !role_card && !game_over {
+            eject_gone_since.get_or_insert_with(Instant::now);
+        } else { eject_gone_since = None; }
+        let next = next.or_else(|| fallback_phase(detector.current, eject_gone_since.map(|t| t.elapsed()), unknown_since.map(|t| t.elapsed())));
         if let Some(next) = next {
-            if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
+            if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; candidate_since = Instant::now(); }
             // Leaving a meeting, the task bar shows for a moment before the ejection text: a round
             // straight after a meeting needs ~2.5 s of evidence so the vote → eject → round sequence
             // is not counted as two rounds.
@@ -368,7 +460,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if candidate_count >= needed {
                 if let Some(p) = detector.step(matches!(next, Phase::RoundStart), matches!(next, Phase::MeetingDiscussion), matches!(next, Phase::Ejection), matches!(next, Phase::GameOver), matches!(next, Phase::Round)) {
                     let name = phase_name(p);
-                    let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting });
+                    let _ = app.emit(EV_PHASE, PhaseEvent { phase: name.to_string(), round: detector.round, meeting: detector.meeting, lag_ms: candidate_since.elapsed().as_millis() as u64 });
                     if p == Phase::GameOver {
                         let outcome = over_word.or_else(|| match accent.dominant() { Some("blue") => Some("victory"), _ => None });
                         let _ = app.emit(EV_GAME_OVER, GameOverEvent { outcome, accent: accent.dominant() });
@@ -400,7 +492,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 6. Lobby code.
         if let Some(code) = &lobby_code {
-            let mut s = shared.lock().unwrap();
+            let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
             if s.status.lobby_code.as_deref() != Some(code) {
                 s.status.lobby_code = Some(code.clone());
                 drop(s);
@@ -410,11 +502,12 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 6a. Map name from the lobby settings panel (needs the room code title nearby, i.e. the panel is open).
         if lobby_code.is_some() {
+            // UNVERIFIED (maps agent, not built/run): was a whole-region fuzzy match, which also contained the
+            // "ROOM SETTINGS" label above the logo and so never reached the 0.55 threshold (Polus games logged as Skeld).
             let mt = text("map_name");
-            if let Some((map, score)) = fuzzy_best(&mt, ["The Skeld", "MIRA HQ", "Polus", "The Airship", "The Fungle"]) {
-                if score > 0.55 && map != last_map {
-                    last_map = map.to_string();
-                    let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
+            if let Some(id) = map_id_of(&mt) {
+                if id != last_map {
+                    last_map = id.to_string();
                     let _ = app.emit(EV_MAP, id);
                 }
             }
@@ -444,7 +537,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         if let Some(room) = room_label_of(&text("room_label")) {
             if room != last_room && stable("room_label", 1) {
                 last_room = room.clone();
-                shared.lock().unwrap().status.room = Some(room.clone());
+                shared.lock().unwrap_or_else(|e| e.into_inner()).status.room = Some(room.clone());
                 let _ = app.emit(EV_ROOM, room);
             }
         } else { last_room.clear(); }
@@ -465,7 +558,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if !chat_open && since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4)
                 && (last_roster.len() > 0 || brightness_factor(&frame) < 1.12 || since.elapsed() > Duration::from_secs(6)) {
                 last_roster_read = Instant::now();
-                let known = shared.lock().unwrap().known_names.clone();
+                let known = shared.lock().unwrap_or_else(|e| e.into_inner()).known_names.clone();
                 if let Ok(r) = read_vote_grid(&frame, &known) {
                     ocr_calls += r.entries.len() as u64;
                     if r.entries.len() >= 3 && r.entries != last_roster {
@@ -508,18 +601,32 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if changed {
                 last_chat_read = Instant::now();
                 if let Some((_, t)) = tracks.iter_mut().find(|(k, _)| k == "chat_panel") { t.dirty = false; }
-                let known = shared.lock().unwrap().known_names.clone();
+                let known = shared.lock().unwrap_or_else(|e| e.into_inner()).known_names.clone();
                 let t0 = Instant::now();
-                if let Ok(msgs) = read_chat(&frame, &known) {
+                if let Ok(read) = read_chat_detailed(&frame, &known) {
                     ocr_calls += 1;
                     ocr_ms += t0.elapsed().as_millis() as u64;
-                    let fresh: Vec<ChatMsg> = msgs.into_iter().filter(|m| {
+                    let mut next_pending: Vec<(String, u64)> = Vec::new();
+                    let mut fresh: Vec<ChatMsg> = Vec::new();
+                    for m in read.msgs {
+                        if m.unreadable && m.text.is_empty() {
+                            let same = |(s, h): &(String, u64)| *s == m.sender && hamming(*h, m.bubble_hash) <= 10;
+                            if unreadable_seen.iter().any(same) { continue; }
+                            let confirmed = unreadable_pending.iter().any(same);
+                            next_pending.push((m.sender.clone(), m.bubble_hash));
+                            if !confirmed { continue; } // a bubble mid-scroll / mid-fade can look empty for one frame
+                            unreadable_seen.push_back((m.sender.clone(), m.bubble_hash));
+                            if unreadable_seen.len() > 30 { unreadable_seen.pop_front(); }
+                            fresh.push(m);
+                            continue;
+                        }
                         let key = format!("{}|{}|{}", m.sender, m.text.to_lowercase(), m.system);
-                        if chat_seen.contains(&key) { return false; }
+                        if chat_seen.contains(&key) { continue; }
                         chat_seen.push_back(key);
                         if chat_seen.len() > 60 { chat_seen.pop_front(); }
-                        true
-                    }).collect();
+                        fresh.push(m);
+                    }
+                    unreadable_pending = next_pending;
                     if !fresh.is_empty() { let _ = app.emit(EV_CHAT, fresh); }
                 }
             }
@@ -527,7 +634,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 8. Status for the UI.
         {
-            let mut s = shared.lock().unwrap();
+            let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
             s.status.phase = detector.current.map(|p| phase_name(p).to_string());
             s.status.round = detector.round;
             s.status.meeting = detector.meeting;
@@ -535,13 +642,14 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if ocr_ms > 0 { s.status.last_ocr_ms = ocr_ms; }
             s.status.ocr_calls = ocr_calls;
             s.status.frame_seq = frame.seq;
+            s.status.last_frame_ms = crate::capture::now_ms();
             if last_status_emit.elapsed() > Duration::from_millis(1000) {
                 last_status_emit = Instant::now();
                 let _ = app.emit(EV_STATUS, s.status.clone());
             }
         }
     }
-    shared.lock().unwrap().status.running = false;
+    shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = false;
 }
 
 fn phase_name(p: Phase) -> &'static str {
@@ -616,6 +724,22 @@ mod tests {
     }
 
     #[test]
+    fn ejection_without_a_readable_round_marker_becomes_a_round_after_5s() {
+        let s = Duration::from_secs;
+        assert_eq!(fallback_phase(Some(Phase::Ejection), Some(s(6)), Some(s(6))), Some(Phase::Round));
+        assert_eq!(fallback_phase(Some(Phase::Ejection), Some(s(2)), Some(s(2))), None);
+        assert_eq!(fallback_phase(Some(Phase::MeetingDiscussion), Some(s(9)), None), None);
+        assert_eq!(fallback_phase(Some(Phase::Round), None, Some(s(121))), Some(Phase::Lobby));
+        assert_eq!(fallback_phase(Some(Phase::Lobby), None, Some(s(500))), None);
+        // A round entered this way counts: Ejection → Round increments the round number.
+        let mut d = PhaseDetector::default();
+        d.step(false, true, false, false, false);
+        d.step(false, false, true, false, false);
+        assert_eq!(d.step(false, false, false, false, true), Some(Phase::Round));
+        assert_eq!(d.round, 1);
+    }
+
+    #[test]
     fn capacity_parse() {
         assert_eq!(capacity_of("15/15"), Some((15, 15)));
         assert_eq!(capacity_of("9I10"), Some((9, 10)));
@@ -641,5 +765,34 @@ mod tests {
         assert_eq!(room_label_of("Upper Engine").as_deref(), Some("Upper Engine"));
         assert_eq!(room_label_of("PING: 69 ms"), None);
         assert_eq!(room_label_of("0/8"), None);
+    }
+
+    // UNVERIFIED: added by the maps agent without running cargo.
+    #[test]
+    fn map_name_variants() {
+        for (t, want) in [
+            ("ROOM SETTINGS\nTHE SKELD", Some("skeld")), ("*THE SkßLL)", Some("skeld")),
+            ("MIRA HQ", Some("mira")), ("MIRAHQ", Some("mira")), ("M1RA HQ", Some("mira")), ("ROOM SETTINGS\nMIRA HO", Some("mira")),
+            ("POLUS", Some("polus")), ("P0LUS", Some("polus")),
+            ("THE AIRSHIP", Some("airship")), ("AIRSHIP", Some("airship")),
+            ("THE FUNGLE", Some("fungle")), ("FUNGLE", Some("fungle")),
+            ("ROOM SETTINGS", None), ("", None),
+        ] {
+            assert_eq!(map_id_of(t), want, "{t:?}");
+        }
+    }
+
+    // UNVERIFIED: the lobby_v2 fixture shows THE SKELD; this is the read the live watcher does.
+    #[cfg(windows)]
+    #[test]
+    fn map_name_reads_on_lobby_fixture() {
+        let r = Regions::default();
+        let f = load_fixture("lobby_v2");
+        // The plain crop of the old rect read only "ROOM SETTINGS"; the binarised logo below it reads "*THE SKEL)" / "SkELD".
+        let t = read_map_logo(&f, r.map_name);
+        assert_eq!(map_id_of(&t), Some("skeld"), "{t:?}");
+        // A frame without the panel yields no map.
+        let t = read_map_logo(&load_fixture("round_cafeteria"), r.map_name);
+        assert_eq!(map_id_of(&t), None, "{t:?}");
     }
 }

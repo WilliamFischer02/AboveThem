@@ -1,0 +1,83 @@
+{
+  "_note": "Per-map meeting questions and common-lie notes, from the research digest (relay game-knowledge.md section 4, 2026-10-22) plus the map data. Selected by src/engine/mapQuestions.ts. `when` fields (bodyRoom, claimRoom, claimTask, sabotage, claimMonitor = admin|cams|vitals|doorLog) are ANDed; a list means any of these; an empty `when` applies to every meeting on that map (questions only - lies always need a matching condition). Placeholders: {P} speaker/target player, {V} victim, {R} claimed room, {B} body room, {TASK} claimed task. An entry whose placeholders cannot be filled is skipped. `weight` 0..1 = how useful the question usually is (tactics judgement, not measured). Every room / task / sabotage id here is checked by src/data/maps/questions.test.ts.",
+  "maps": {
+    "skeld": {
+      "questions": [
+        { "id": "skeld_elec_storage", "when": { "claimRoom": "electrical" }, "text": "{P} you said elec. Did you see anyone leave through storage?", "why": "Electrical is a dead end: the only walking exit is Storage (vent to MedBay / Security aside).", "weight": 0.7 },
+        { "id": "skeld_upload_admin", "when": { "claimTask": "downloadUpload" }, "text": "{P} where did you download? Upload is always admin.", "why": "Skeld uploads only in Admin; downloads in Cafeteria, Comms, Electrical, Navigation, Weapons.", "weight": 0.7 },
+        { "id": "skeld_cams_medbay", "when": { "bodyRoom": ["medbay", "upperEngine", "cafeteria"] }, "text": "Who was on cams? Who walked the medbay hall?", "why": "A camera covers the MedBay / Upper Engine hallway.", "weight": 0.5 },
+        { "id": "skeld_wires_order", "when": { "claimTask": "fixWiring" }, "text": "{P} which wires? Wires go elec storage admin nav cafe sec.", "why": "Fix Wiring panels are always done in this order; a wrong order is a fake.", "weight": 0.6 },
+        { "id": "skeld_nav_vents", "when": { "bodyRoom": ["navigation", "weapons", "shields"] }, "text": "{P} nav has two vents. Who came out of shields or weps?", "why": "Navigation vents link to Weapons (upper) and Shields (lower).", "weight": 0.6 },
+        { "id": "skeld_card_common", "when": { "claimTask": "swipeCard" }, "text": "{P} you did card in admin. Card is common. Who else has it?", "why": "Swipe Card is a common task: everyone has it or nobody does.", "weight": 0.6 },
+        { "id": "skeld_o2_split", "when": { "sabotage": "o2" }, "text": "Who fixed O2 in admin and who in O2?", "why": "O2 is fixed at two keypads (Admin and O2); fixers are alibied for the fix moment.", "weight": 0.5 },
+        { "id": "skeld_reactor_security", "when": { "bodyRoom": ["reactor", "security", "upperEngine", "lowerEngine"] }, "text": "{P} reactor to security takes seconds. Where were you?", "why": "Reactor, Security and both engines are a few seconds apart, and Reactor vents to both engines.", "weight": 0.5 }
+      ],
+      "lies": [
+        { "id": "skeld_divert_reactor", "when": { "claimTask": "divertPower", "claimRoom": "reactor" }, "text": "The Divert Power panel in Reactor is a dummy — nobody can do it.", "weight": 0.9 },
+        { "id": "skeld_download_admin", "when": { "claimTask": "downloadUpload", "claimRoom": "admin" }, "text": "Nobody downloads in Admin on Skeld — Admin is the upload stage only.", "weight": 0.4 }
+      ]
+    },
+    "mira": {
+      "questions": [
+        { "id": "mira_doorlog", "when": {}, "text": "Who checked doorlog? Who crossed the north sensor?", "why": "The Doorlog in Communications lists living players crossing the three Hallway sensors.", "weight": 0.7 },
+        { "id": "mira_launchpad_doorlog", "when": { "claimRoom": "launchpad" }, "text": "{P} you came from launchpad. Doorlog would show you.", "why": "From Launchpad to the top rooms or Cafeteria you must cross a Hallway sensor (unless you vent).", "weight": 0.6 },
+        { "id": "mira_asteroids_not_visual", "when": { "claimTask": "clearAsteroids" }, "text": "{P} asteroids is not visual on Mira. That clears nobody.", "why": "On MIRA HQ only Submit Scan is visual.", "weight": 0.7 },
+        { "id": "mira_o2_fixers", "when": { "sabotage": "o2" }, "text": "Who fixed O2 in greenhouse and who by medbay?", "why": "O2 keypads are in Greenhouse and the corridor south of Locker Room.", "weight": 0.5 },
+        { "id": "mira_decon_behind", "when": { "claimRoom": ["reactor", "laboratory", "decontamination"] }, "text": "{P} you went through decon. Who was behind you?", "why": "Decontamination is slow (doors + spray); people queue and see each other.", "weight": 0.6 },
+        { "id": "mira_lights_office", "when": { "sabotage": "lights" }, "text": "Lights are fixed in office here. {P} where were you?", "why": "MIRA lights are fixed in Office, not Electrical.", "weight": 0.5 },
+        { "id": "mira_admin_idcode", "when": { "claimRoom": "admin" }, "text": "{P} which admin task? Id code is common.", "why": "Enter Id Code (Admin) is common: everyone has it or nobody does.", "weight": 0.5 },
+        { "id": "mira_one_vent_net", "when": { "bodyRoom": ["launchpad", "medbay", "lockerRoom", "decontamination", "reactor", "laboratory", "hallway", "office", "admin", "greenhouse", "balcony"] }, "text": "{P} every vent on Mira connects. Far away is not an alibi. Who saw you?", "why": "MIRA HQ has one vent system: any vent room reaches any other in seconds.", "weight": 0.4 }
+      ],
+      "lies": [
+        { "id": "mira_scan_only_visual", "when": { "claimTask": ["clearAsteroids", "primeShields", "emptyGarbage"] }, "text": "{TASK} is not a visual task on MIRA HQ — \"watch me do it\" proves nothing.", "weight": 0.8 },
+        { "id": "mira_no_cams", "when": { "claimMonitor": ["cams", "vitals"] }, "text": "MIRA HQ has no cameras and no vitals — \"I saw it on cams\" is made up.", "weight": 0.3 }
+      ]
+    },
+    "polus": {
+      "questions": [
+        { "id": "polus_vitals", "when": {}, "text": "Who checked vitals? When did {V} go DED?", "why": "Vitals in Office: DED = killed since the last meeting.", "weight": 0.6 },
+        { "id": "polus_weather_node", "when": { "claimTask": "fixWeatherNode" }, "text": "{P} which weather node? Then lab?", "why": "Weather node stage 1 is at a named outdoor node, stage 2 in Laboratory.", "weight": 0.6 },
+        { "id": "polus_elec_doors", "when": { "claimRoom": "electrical" }, "text": "{P} you were in elec with doors shut. Who let you out?", "why": "Polus doors stay shut until someone flips the switches.", "weight": 0.4 },
+        { "id": "polus_insert_keys", "when": { "claimTask": "insertKeys" }, "text": "{P} insert keys is in dropship. Everyone has it if it is common.", "why": "Insert Keys is a common task in Dropship.", "weight": 0.6 },
+        { "id": "polus_upload_comms", "when": { "claimTask": "downloadUpload" }, "text": "{P} upload on Polus is in comms. Where did you download?", "why": "Polus downloads in Electrical, O2, Office, Specimen or Weapons; uploads in Communications.", "weight": 0.6 },
+        { "id": "polus_lab_cam", "when": { "bodyRoom": ["laboratory", "outsideRight", "lava", "specimen"] }, "text": "Who was on cams? Did anyone pass the lab camera?", "why": "A camera watches the outside of Laboratory.", "weight": 0.5 },
+        { "id": "polus_specimen_decon", "when": { "claimRoom": "specimen" }, "text": "{P} specimen is behind decon. Who saw you go in?", "why": "Specimen is only reachable through a decontamination corridor.", "weight": 0.6 }
+      ],
+      "lies": [
+        { "id": "polus_specimen_reactor", "when": { "claimTask": "startReactor", "claimRoom": ["laboratory", "lowerDecon", "upperDecon", "admin", "office"] }, "text": "Polus has no Reactor room — Start Reactor is in Specimen Room.", "weight": 0.4 },
+        { "id": "polus_garbage_not_visual", "when": { "claimTask": "emptyGarbage" }, "text": "Empty Garbage is not visual on Polus.", "weight": 0.5 }
+      ]
+    },
+    "airship": {
+      "questions": [
+        { "id": "airship_spawn", "when": {}, "text": "{P} where did you spawn? Then where did you go?", "why": "Everyone picks a spawn after a meeting; the first room + route is checkable.", "weight": 0.6 },
+        { "id": "airship_gap_crossing", "when": { "claimRoom": ["gapRoom", "records", "brig", "meetingRoom"] }, "text": "{P} you crossed gap room. Platform or the long way?", "why": "Crossing Gap Room without the platform or the long route means venting (the two Gap Room vents connect).", "weight": 0.7 },
+        { "id": "airship_vitals", "when": {}, "text": "Who was on vitals? When did {V} die?", "why": "Vitals in Medical.", "weight": 0.5 },
+        { "id": "airship_fake_wiring", "when": { "claimTask": "fixWiring", "claimRoom": ["armory", "communications", "vault"] }, "text": "{P} wiring in {R} is fake. Which panel?", "why": "The Fix Wiring panels in Armory, Communications and Vault are dummies.", "weight": 0.8 },
+        { "id": "airship_ladder", "when": { "claimRoom": ["meetingRoom", "electrical", "mainHall", "gapRoom"] }, "text": "{P} which ladder did you take? We heard one.", "why": "Ladder sounds are heard map-wide.", "weight": 0.4 },
+        { "id": "airship_admin", "when": {}, "text": "Admin in records or cockpit. Did anyone check it?", "why": "Two Admin tables: Cockpit and Records.", "weight": 0.4 },
+        { "id": "airship_elec_maze", "when": { "claimRoom": "electrical" }, "text": "{P} you said electrical. Which room of the maze?", "why": "Electrical is a maze of small rooms; a vague answer is a tell.", "weight": 0.5 }
+      ],
+      "lies": [
+        { "id": "airship_no_visual", "when": { "claimTask": ["fixWiring", "putAwayPistols", "putAwayRifles", "pickUpTowels", "decontaminate", "emptyGarbage"] }, "text": "The Airship has no visual tasks — nobody can be cleared by watching {TASK}.", "weight": 0.5 },
+        { "id": "airship_meeting_one_way", "when": { "claimRoom": "meetingRoom" }, "text": "Meeting Room has one way in: the ladder from Gap Room (and it is on a camera).", "weight": 0.5 },
+        { "id": "airship_lounge_bin", "when": { "claimTask": "emptyGarbage", "claimRoom": "lounge" }, "text": "The bin in Lounge is a dummy — Empty Garbage can't be done there.", "weight": 0.9 }
+      ]
+    },
+    "fungle": {
+      "questions": [
+        { "id": "fungle_zipline", "when": { "claimRoom": ["storage", "communications"] }, "text": "{P} did you zip or walk from storage?", "why": "The zipline joins Storage and Communications.", "weight": 0.5 },
+        { "id": "fungle_binoculars", "when": { "bodyRoom": ["beach", "jungle", "splashZone", "kitchen", "laboratory", "greenhouse", "meetingRoom"] }, "text": "Who was on binoculars? Who was in the jungle?", "why": "Lookout binoculars survey Beach and Jungle (not The Cliffs), even during Comms.", "weight": 0.6 },
+        { "id": "fungle_mixup", "when": { "sabotage": "mushroomMixup" }, "text": "{P} that was during mixup. Are you sure of the colour?", "why": "Mushroom Mixup randomises colours and hides names for ~10 s.", "weight": 0.7 },
+        { "id": "fungle_vitals", "when": {}, "text": "Who checked vitals in lab? When did {V} die?", "why": "Vitals in Laboratory.", "weight": 0.5 },
+        { "id": "fungle_marshmallow", "when": { "claimTask": "roastMarshmallow" }, "text": "{P} marshmallow is common. Did everyone get it?", "why": "Roast Marshmallow is a common task.", "weight": 0.5 },
+        { "id": "fungle_cliff_ladder", "when": { "claimRoom": ["cliffs", "miningPit", "lookout", "upperEngine"] }, "text": "{P} you came down the cliff ladder. Who was up there?", "why": "The cliffs are reached by ladders from the Jungle (or the zipline / ladder from Communications).", "weight": 0.4 }
+      ],
+      "lies": [
+        { "id": "fungle_wiring_short", "when": { "claimTask": "fixWiring" }, "text": "Fix Wiring is a SHORT task on The Fungle, not common — \"we all have wires\" is false.", "weight": 0.5 },
+        { "id": "fungle_no_admin", "when": { "claimMonitor": "admin" }, "text": "The Fungle has no Admin table — \"I saw it on admin\" is made up.", "weight": 0.3 },
+        { "id": "fungle_no_visual", "when": { "claimTask": ["emptyGarbage", "collectShells", "throwFrisbee"] }, "text": "The Fungle has no visual tasks — watching {TASK} clears nobody.", "weight": 0.5 }
+      ]
+    }
+  }
+}

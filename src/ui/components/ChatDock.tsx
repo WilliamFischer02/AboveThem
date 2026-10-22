@@ -8,10 +8,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../../state/store';
 import { PlayerIcon } from './Crewmate';
+import { ChatHint } from './ChatHint';
+import { Transcript } from './Transcript';
 
-export function ChatDock() {
+export function ChatDock({ mini = false }: { mini?: boolean }) {
   const match = useMatch(s => s.match);
   const [open, setOpen] = useState(false);
+  const [bySpeaker, setBySpeaker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const count = match?.chat.length ?? 0;
 
@@ -30,12 +33,13 @@ export function ChatDock() {
   let lastMeeting = -1;
 
   return (
-    <div className={`chat-dock ${open ? 'open' : ''}`} onClick={() => { if (!open) setOpen(true); }}>
+    <div className={`chat-dock ${open ? 'open' : ''} ${mini ? 'mini' : ''}`} onClick={() => { if (!open) setOpen(true); }}>
       <div className="chat-bar" onClick={e => { e.stopPropagation(); setOpen(o => !o); }}>
         <span>{open ? '▾' : '▴'} Chat</span>
+        {open && count > 0 && <button className="btn xs chat-view" title="Group this meeting's chat per speaker, with accuse / clear badges" onClick={e => { e.stopPropagation(); setBySpeaker(v => !v); }}>{bySpeaker ? '💬 chat' : '👥 by speaker'}</button>}
         <span className="n">{count === 0 ? 'nothing read yet' : `${count} lines · ${open ? 'click to shrink' : 'click to expand'}`}</span>
       </div>
-      <div className="chat-scroll" ref={scrollRef}>
+      {open && bySpeaker ? <Transcript /> : <div className="chat-scroll" ref={scrollRef}>
         {lines.map(c => {
           const sep = open && c.meeting !== lastMeeting;
           lastMeeting = c.meeting;
@@ -46,12 +50,13 @@ export function ChatDock() {
           return (
             <div key={c.id} style={{ display: 'contents' }}>
               {sep && <span className="chat-sep">{c.meeting === curMeeting ? `meeting ${c.meeting + 1}` : `meeting ${c.meeting + 1}`}</span>}
-              <div className={`bubble-row ${mine ? 'mine' : ''}`}>
+              <div className={`bubble-row ${mine ? 'mine' : ''} ${(c as { unreadable?: boolean }).unreadable ? 'unreadable' : ''}`}>
                 <PlayerIcon id={c.sender} color={p?.color ?? 'unknown'} size={34} state={p && p.status !== 'alive' ? 'dead' : 'alive'} />
                 <div className="bubble">
                   <div className={`who ${red ? 'red-name' : ''}`}>{name(c.sender)}</div>
                   <div className="msg">{c.original}</div>
                   {c.translated && <div className="xlat"><span className="lang">{c.lang ?? '?'} → en</span>{c.translated}</div>}
+                  <ChatHint line={c} />
                   {open && claims.length > 0 && <div className="tags">{claims.map(k => k.type + (k.about ? ' ' + name(k.about) : '') + (k.room ? ' ' + (match.map.rooms.find(r => r.id === k.room)?.name ?? k.room) : '')).join(' · ')}</div>}
                 </div>
               </div>
@@ -59,7 +64,7 @@ export function ChatDock() {
           );
         })}
         {count === 0 && <div className="muted small" style={{ padding: 6 }}>Chat lines appear here as the game shows them (lobby and meetings). Non-English lines get a translation underneath.</div>}
-      </div>
+      </div>}
     </div>
   );
 }
