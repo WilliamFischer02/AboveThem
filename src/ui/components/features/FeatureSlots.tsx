@@ -14,6 +14,7 @@ import { AdminCheckCard } from './AdminCheckCard';
 import { VoteTracker } from './VoteTracker';
 import { TaskBarCard } from './TaskBarCard';
 import { TaskClaimsCard } from './TaskClaimsCard';
+import { MeetingPrepCard } from './MeetingPrepCard';
 import './shared';
 
 export function FeatureSlots() {
@@ -29,6 +30,7 @@ export function FeatureSlots() {
       {round && !ghost && <KillClock />}
       {round && !ghost && <TaskBarCard />}
       {round && <SecurityCard />}
+      {meeting && !ghost && <MeetingPrepCard />}
       {meeting && <MeetingMathCard />}
       {meeting && <KillWindowCard />}
       {meeting && <AdminCheckCard />}
