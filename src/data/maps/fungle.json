@@ -3,11 +3,11 @@
   "name": "The Fungle",
   "_verified": {
     "rooms": true,
-    "vents": false,
+    "vents": true,
     "tasks": true,
     "durations": false
   },
-  "_note": "Locations, ladders, zipline, doors, abilities and the task table were checked on 2026-10-22 against among-us.fandom.com (The_Fungle, Meeting_Room, Vent_(object), Tasks list table, Visual_tasks, Vitals, Admin_(ability)) and Pocket Tactics / allthings.how (three vent chains). NO VISUAL TASKS and NO ADMIN TABLE on The Fungle. VENTS ARE UNVERIFIED in detail: the wiki map page, the wiki vent table and Pocket Tactics disagree on names. System 1 is the beach/Splash Zone/Laboratory ring (wiki: two Beach vents + Splash Zone + Laboratory; Pocket Tactics: Splash Zone - Cafeteria - Storage - Laboratory), so beach, cafeteria and storage are all included to avoid false \"no vent here\" flags. System 2 is Kitchen - Jungle (two jungle vents, one near Greenhouse). System 3 is Reactor - Lookout - a vent on the cliff by Communications (wiki map page says The Cliffs, vent table and Pocket Tactics say Communications); both are listed. ADJACENCY is my reading of the wiki map image: Beach is the open sand around the campfire and joins Dropship, Cafeteria, Splash Zone, Storage, Meeting Room, Kitchen and the Jungle; the Jungle is the big mushroom area; two ladders lead from the Jungle up to The Cliffs, another ladder from the cliffs to Communications; the zipline joins Storage and Communications (fast down, slower up - averaged). Travel seconds are eyeballed at speed 1.0x and unverified; the Fungle is large, so they are larger than on the other maps. Keys: b Beach, d Dropship, c Cafeteria, z is reserved so Splash Zone = x, t Storage, n Meeting Room, y The Dorm, i Kitchen, p Dock (pier), j Jungle, l Laboratory, g Greenhouse, r Reactor, h The Cliffs (heights), o Mining Pit (ore), w Lookout (watch), u Upper Engine, q Communications.",
+  "_note": "Locations, ladders, zipline, doors, abilities and the task table were checked on 2026-10-22 against among-us.fandom.com (The_Fungle, Meeting_Room, Vent_(object), Tasks list table, Visual_tasks, Vitals, Admin_(ability)) and Pocket Tactics / allthings.how (three vent chains). NO VISUAL TASKS and NO ADMIN TABLE on The Fungle. VENTS: the three systems are confirmed by the per-location wiki pages (Beach, Splash_Zone, Laboratory, Jungle, Kitchen, The_Cliffs, Communications, Reactor) and Pocket Tactics; the only open point is naming - Pocket Tactics calls the two beach vents Cafeteria and Storage, so those rooms are included in system 1 (over-inclusive, see the vent note). The wiki vent TABLE row \"Communications\" is the clifftop vent outside its lower door. ADJACENCY is my reading of the wiki map image: Beach is the open sand around the campfire and joins Dropship, Cafeteria, Splash Zone, Storage, Meeting Room, Kitchen and the Jungle; the Jungle is the big mushroom area; two ladders lead from the Jungle up to The Cliffs, another ladder from the cliffs to Communications; the zipline joins Storage and Communications (fast down, slower up - averaged). Travel seconds are eyeballed at speed 1.0x and unverified; the Fungle is large, so they are larger than on the other maps. Keys: b Beach, d Dropship, c Cafeteria, z is reserved so Splash Zone = x, t Storage, n Meeting Room, y The Dorm, i Kitchen, p Dock (pier), j Jungle, l Laboratory, g Greenhouse, r Reactor, h The Cliffs (heights), o Mining Pit (ore), w Lookout (watch), u Upper Engine, q Communications.",
   "info": {
     "admin": [],
     "security": {
@@ -467,7 +467,7 @@
           "storage"
         ]
       ],
-      "_note": "UNVERIFIED names: wiki = Beach (north) - Splash Zone - Laboratory - Beach (south/east) ring; Pocket Tactics = Splash Zone - Cafeteria - Storage - Laboratory. Both readings included."
+      "_note": "Ring of four vents: Beach (north) - Beach (east) - Laboratory - Splash Zone (house) - Beach (north). Confirmed by the wiki Beach, Splash_Zone and Laboratory pages and the Fungle map page. Pocket Tactics names the two beach vents after the nearby buildings (Cafeteria, Storage), so cafeteria/storage are kept as aliases of the beach vents (UNVERIFIED which building each sits by) - over-inclusive on purpose so a true alibi is never called a lie."
     },
     {
       "id": "kitchen-jungle",
@@ -481,7 +481,7 @@
           "jungle"
         ]
       ],
-      "_note": "Kitchen links the west Jungle vent; the west vent links the second Jungle vent (wiki table says left/right, map page says south/east; one sits outside Greenhouse)."
+      "_note": "Kitchen vent (bottom-middle) <-> Jungle vent near Laboratory <-> second Jungle vent near Monitor Mushroom (wiki Kitchen + Jungle pages; Pocket Tactics: Kitchen - Jungle - outside Greenhouse)."
     },
     {
       "id": "reactor-lookout-cliff",
@@ -513,7 +513,7 @@
           "communications"
         ]
       ],
-      "_note": "Third vent: on The Cliffs by Communications (wiki map page) or \"Communications\" (wiki vent table, Pocket Tactics). Wiki trivia says Communications has no vent on any map - so this is the cliff-top vent just outside it."
+      "_note": "Reactor (bottom) <-> Lookout <-> clifftop vent just outside the lower door of Communications (wiki The_Cliffs, Communications, Reactor pages; Pocket Tactics: Lookout - Reactor - Communications). The vent is outside the room, so both cliffs and communications are listed."
     }
   ],
   "tasks": [

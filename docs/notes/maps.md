@@ -81,6 +81,26 @@ Ventilation(fans), o O2/Locker Room/Mining Pit, w Weapons/Showers/Lookout. Per-m
 4. Map inference thresholds (similarity ≥ 0.8, lead ≥ 1 point) are untested on real OCR task lines beyond the
    Polus strings from last night's logs.
 
+## Round 2 (after the first merge, 16e83d1)
+- `src/data/maps/questions.json` — per-map meeting questions (from the research digest §4) and lie notes, selected by
+  situation `{bodyRoom, claimRoom, claimTask, sabotage, claimMonitor}` through `src/engine/mapQuestions.ts`
+  (`selectMapQuestions`, `fillTemplate`, `validateQuestions`). The validator caught one bad entry of mine
+  (Polus "Divert Power" as a claimTask — not a Polus task id); that case is covered by `claimedTaskExists` → notOnMap
+  plus the Office dummy panel instead.
+- `src/engine/mapChecks.ts` — `findTask`, `claimedTaskExists` (not on map / wrong room / dummy panel),
+  `commonTaskMismatch` (claimed common task missing from my fully-read list), `monitorContradiction` (Admin empty room,
+  Vitals DED before the claimed sighting, MIRA Doorlog crossing without an entry — shaky because vents skip sensors).
+  `walkPath` added to map.ts. Nothing reads Admin/Vitals/Doorlog screens yet; the checks are ready for manual input or OCR.
+- **Fungle vents**: now `_verified.vents = true`. The per-location wiki pages (Beach, Splash_Zone, Laboratory, Jungle,
+  Kitchen, The_Cliffs, Communications, Reactor) agree with each other and with Pocket Tactics on the three systems; the
+  wiki vent TABLE's "Communications" is the clifftop vent outside its lower door. Cafeteria/Storage stay in system 1
+  only because Pocket Tactics names the beach vents after them (over-inclusive on purpose).
+- **Travel seconds: not refined, deliberately.** The wiki gives no distances or walking speed in world units, and the
+  wiki map images are not on a common scale, so any "refinement" from pixels would be my eyeballing with extra decimals.
+  Added `src/engine/mapDiameter.test.ts` as a typo guard instead (longest walk at speed 1.0: Skeld 28 s, MIRA 25 s,
+  Polus 43 s, Airship 33 s, Fungle 27 s). My honest guess: Airship and Fungle are 20–30 % too short (ladders, the
+  platform wait and the Fungle's size). Real fix: log `myRoom` transitions with stamps in live games and take medians.
+
 ## Next ideas
 - Read Admin / Vitals / Doorlog screens when the local player opens them (legit: own screen) → observations.
 - Detect Mushroom Mixup (all nameplates hidden + random colours) and mark sightings in that window shaky.
