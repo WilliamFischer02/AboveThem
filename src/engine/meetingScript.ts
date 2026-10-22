@@ -73,8 +73,6 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
   const alive = Object.values(m.players).filter(p => p.status === 'alive').length;
   const impRemaining = impostorsRemaining(m);
   const crewAlive = alive - impRemaining;
-  // Critical: after one more kill the impostors could win (crew ≤ imp + 1), or it's already parity.
-  const critical = impRemaining > 0 && crewAlive <= impRemaining + 2;
   const endgame = impRemaining > 0 && crewAlive <= impRemaining + 1;
 
   // 1. Hard clears first — the most valuable thing you can say.
@@ -136,20 +134,12 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
     addWatch(S.two_left_endgame.watch, vars);
   }
 
-  // 6. Vote recommendation.
+  // 6. Vote recommendation — taken from the situational headline (engine/headline.ts) so the
+  //    header and the vote card can never disagree. One source of truth.
+  const hl = situationHeadline(m, scores);
   const ranked = scores.filter(s => s.verdict !== 'certainCrew' && s.verdict !== 'hardClear');
   const top = ranked[0];
-  const second = ranked[1];
-  let vote: MeetingScript['vote'];
-  if (top && top.verdict === 'certainImpostor') {
-    vote = { target: top.player, confidence: 1, reason: top.evidence.find(e => e.category === 'hard')?.label ?? 'Confirmed impostor.' };
-  } else if (top && top.probability >= weights.vote.threshold && (!second || top.probability - second.probability >= weights.vote.marginToSecond)) {
-    vote = { target: top.player, confidence: top.probability, alternative: 'skip', reason: top.evidence.filter(e => e.weight > 0).map(e => e.label).slice(0, 2).join('; ') };
-  } else if (critical && top && top.probability > 0.3) {
-    vote = { target: top.player, confidence: top.probability, alternative: 'skip', reason: 'Critical vote — skipping hands them the game. Best available suspect.' };
-  } else {
-    vote = { target: 'skip', confidence: top ? 1 - top.probability : 1, alternative: top?.player, reason: 'No suspect clears the threshold. Skip and stack next round.' };
-  }
+  const vote: MeetingScript['vote'] = { ...hl.vote };
 
   const anySignal = ask.some(q => q.why.length > 0) || (top !== undefined && top.evidence.some(e => Math.abs(e.weight) >= MIN_SIGNAL));
   const insufficient = !anySignal && vote.target === 'skip';
@@ -160,7 +150,7 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
   }
 
   // One source of truth for the situational header (engine/headline.ts).
-  const headline = headlineText(situationHeadline(m, scores));
+  const headline = headlineText(hl);
 
   return {
     meeting,

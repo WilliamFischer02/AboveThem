@@ -113,4 +113,48 @@ describe('headline', () => {
     const script = buildMeetingScript(fixture, scores, 0);
     expect(script.headline).toBe(headlineText(headline(fixture, scores)));
   });
+  it('vote follows the headline: 79% / 62% → Leaning, vote Red, Green as the follow-up', () => {
+    const h = headline(match(), [sc('red', 0.79), sc('green', 0.62), sc('blue', 0.2)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.subtitle).toMatch(/Red \(79%\) — vote · next: Green \(62%\)/);
+    expect(h.vote.target).toBe('red');
+    expect(h.vote.alternative).toBe('green');
+    expect(h.vote.reason).toMatch(/Green next if Red was crew/);
+  });
+
+  it('vote: weak lean (0.5 / 0.3) skips with the lead as the alternative', () => {
+    const h = headline(match(), [sc('red', 0.5), sc('blue', 0.3)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.vote.target).toBe('skip');
+    expect(h.vote.alternative).toBe('red');
+  });
+
+  it('vote: two close suspects split → skip; two strong ones → vote the top, #2 next', () => {
+    const split = headline(match(), [sc('red', 0.55), sc('blue', 0.5)]);
+    expect(split.kind).toBe('twoSuspects');
+    expect(split.vote.target).toBe('skip');
+    const strong = headline(match(), [sc('red', 0.75), sc('blue', 0.66)]);
+    expect(strong.kind).toBe('twoSuspects');
+    expect(strong.vote).toMatchObject({ target: 'red', alternative: 'blue' });
+    expect(strong.subtitle).toMatch(/vote Red, then Blue/);
+  });
+
+  it('vote: one major suspect → vote; not enough info → skip; confirmed → vote at 100%', () => {
+    expect(headline(match(), [sc('red', 0.72), sc('blue', 0.1)]).vote).toMatchObject({ target: 'red', alternative: 'skip' });
+    expect(headline(match(), [sc('red', 0.3)]).vote.target).toBe('skip');
+    expect(headline(match(), [sc('red', 0.3), sc('blue', 1, 'certainImpostor')]).vote).toMatchObject({ target: 'blue', confidence: 1 });
+  });
+
+  it('vote edge: a critical vote does not skip when the top suspect is above 0.3', () => {
+    const m = match({}, ['me', 'red', 'blue'], 1); // crew 2 − imp 1 = 1
+    const h = headline(m, [sc('red', 0.35), sc('blue', 0.2)]);
+    expect(h.basis).toBe('notEnoughInfo');
+    expect(h.vote.target).toBe('red');
+    expect(headline(m, [sc('red', 0.25), sc('blue', 0.2)]).vote.target).toBe('skip');
+  });
+
+  it('meetingScript.vote is exactly the headline vote', () => {
+    const scores = scoreAll(fixture);
+    expect(buildMeetingScript(fixture, scores, 0).vote).toEqual(headline(fixture, scores).vote);
+  });
 });
