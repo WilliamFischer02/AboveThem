@@ -8,8 +8,8 @@ trend/delta, a one-line summary and a sorted "why" list. 118 tests green (72 at 
 `npm run build` OK. The model is documented in `docs/DEDUCTION_ENGINE.md`, with an ADR appended to `docs/decisions.md`.
 
 **Branch base:** my worktree was cut from the stale `origin/main` (71c2c1b). I fast-forwarded it to
-local `main` (7bf75ba) before any work. I have since **merged `main` twice** (maps rounds 1+2, ui-streamline,
-bugs-rust; last merge 338b84e). Conflicts resolved: `src/engine/marks.ts` = mine (ui-streamline's was a stub; I added
+local `main` (7bf75ba) before any work. I have since **merged `main` twice** (maps ×3, ui-streamline,
+bugs-rust, research; three merges in total). Conflicts resolved: `src/engine/marks.ts` = mine (ui-streamline's was a stub; I added
 their type re-exports and a string-tolerant `reasonInfo`), and ui-streamline's `src/engine/chatNlu.ts` file stub is
 deleted because it shadowed my `src/engine/chatNlu/` folder stub (same `parseMeetingChat` export, which Transcript.tsx uses).
 
@@ -73,6 +73,15 @@ deleted because it shadowed my `src/engine/chatNlu/` folder stub (same `parseMee
 - "Bandwagon late votes": the vote screen has no order or timing, so this can't be done without hidden info.
 - "Momentum" as an extra weight on a rising score would double-count the same evidence. I implemented it as
   `trend` / `delta` (display), plus a *recurrence* bonus for suspicion in separate rounds (independent signals).
+
+## Research corrections (applied)
+- `LobbySettings.roles` (additive). Engineers on ⇒ a seen vent is +2.5 soft, not a hard impostor. Shapeshifter on ⇒ a seen
+  kill is still hard but its identity is marked shaky. **Needs a UI control / lobby OCR to set it**; nobody sets it yet.
+- Visual hard clears only for tasks with `visual: true` in THIS map's JSON (MIRA asteroids are not); no task id ⇒ hard
+  but shaky. A "visual" confirmation of a non-visual task ⇒ −0.3 soft.
+- Kill window lower bound = round start + cooldown (10 s at match start), already in `killWindow`.
+- Not done: a loader for research's `lieChecks.json`. Its ask/say lines are meeting-script material (ui-streamline owns
+  meetingScript.ts / headline.ts); the checks I could ground in logged data are implemented as rules (see knowledge.test.ts).
 
 ## Verified against chat-nlu's real parser
 I copied chat-nlu's modules into my tree temporarily (not committed) and ran real chat lines through `scoreAll`.
