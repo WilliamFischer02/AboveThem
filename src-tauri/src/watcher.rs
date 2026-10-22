@@ -193,6 +193,30 @@ pub fn lobby_code_of(text: &str) -> Option<String> {
         .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_uppercase()) && w != "CODE")
 }
 
+/// Map id from the lobby panel's map-name text. The region also holds the "ROOM SETTINGS" label, so keywords are
+/// searched inside the text (with the usual OCR swaps 0→O, 1→I, Q→O) before a per-line fuzzy match.
+/// Mirrors `mapIdFromText` in src/engine/map.ts.
+// UNVERIFIED: written by the maps agent without running cargo; the bugs-rust agent / lead must build + test.
+pub fn map_id_of(text: &str) -> Option<&'static str> {
+    let up = text.to_uppercase().replace("ROOM SETTINGS", " ").replace("GAME SETTINGS", " ");
+    let flat: String = up.chars()
+        .map(|c| match c { '0' => 'O', '1' | '|' | '!' => 'I', '5' => 'S', _ => c })
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    for (k, id) in [("SKELD", "skeld"), ("MIRAHQ", "mira"), ("MIRAHO", "mira"), ("MIRA", "mira"), ("POLUS", "polus"), ("AIRSHIP", "airship"), ("FUNGLE", "fungle")] {
+        if flat.contains(k) { return Some(id); }
+    }
+    let names = ["The Skeld", "Skeld", "MIRA HQ", "Polus", "The Airship", "Airship", "The Fungle", "Fungle"];
+    for line in up.lines() {
+        if let Some((m, score)) = fuzzy_best(line, names) {
+            if score >= 0.6 {
+                return Some(match m { "The Skeld" | "Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" | "Airship" => "airship", _ => "fungle" });
+            }
+        }
+    }
+    None
+}
+
 fn room_label_of(text: &str) -> Option<String> {
     let t = text.trim();
     let n = t.chars().count();
@@ -410,11 +434,12 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 6a. Map name from the lobby settings panel (needs the room code title nearby, i.e. the panel is open).
         if lobby_code.is_some() {
+            // UNVERIFIED (maps agent, not built/run): was a whole-region fuzzy match, which also contained the
+            // "ROOM SETTINGS" label above the logo and so never reached the 0.55 threshold (Polus games logged as Skeld).
             let mt = text("map_name");
-            if let Some((map, score)) = fuzzy_best(&mt, ["The Skeld", "MIRA HQ", "Polus", "The Airship", "The Fungle"]) {
-                if score > 0.55 && map != last_map {
-                    last_map = map.to_string();
-                    let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
+            if let Some(id) = map_id_of(&mt) {
+                if id != last_map {
+                    last_map = id.to_string();
                     let _ = app.emit(EV_MAP, id);
                 }
             }
@@ -641,5 +666,30 @@ mod tests {
         assert_eq!(room_label_of("Upper Engine").as_deref(), Some("Upper Engine"));
         assert_eq!(room_label_of("PING: 69 ms"), None);
         assert_eq!(room_label_of("0/8"), None);
+    }
+
+    // UNVERIFIED: added by the maps agent without running cargo.
+    #[test]
+    fn map_name_variants() {
+        for (t, want) in [
+            ("ROOM SETTINGS\nTHE SKELD", Some("skeld")), ("*THE SkßLL)", Some("skeld")),
+            ("MIRA HQ", Some("mira")), ("MIRAHQ", Some("mira")), ("M1RA HQ", Some("mira")), ("ROOM SETTINGS\nMIRA HO", Some("mira")),
+            ("POLUS", Some("polus")), ("P0LUS", Some("polus")),
+            ("THE AIRSHIP", Some("airship")), ("AIRSHIP", Some("airship")),
+            ("THE FUNGLE", Some("fungle")), ("FUNGLE", Some("fungle")),
+            ("ROOM SETTINGS", None), ("", None),
+        ] {
+            assert_eq!(map_id_of(t), want, "{t:?}");
+        }
+    }
+
+    // UNVERIFIED: the lobby_v2 fixture shows THE SKELD; this is the read the live watcher does.
+    #[cfg(windows)]
+    #[test]
+    fn map_name_reads_on_lobby_fixture() {
+        let r = Regions::default();
+        let f = load_fixture("lobby_v2");
+        let t = ocr_rect(&f, r.map_name, 2);
+        assert_eq!(map_id_of(&t), Some("skeld"), "{t:?}");
     }
 }
