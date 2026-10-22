@@ -101,7 +101,7 @@ describe('roster consolidation events', () => {
     ];
     const m = replay(log)!;
     expect(m.players.chat7).toBeUndefined();
-    expect(m.players.red.name).toBe(fixture.players.red.name);
+    expect(m.players.red.name).toBe('Reddd');   // the fixture's 'Red' is a colour-word placeholder; the typed name wins
     expect(m.players.red.status).toBe('dead');
     expect(m.observations[0]).toMatchObject({ player: 'red', withPlayers: ['red', 'blue'] });
     expect(m.claims[0]).toMatchObject({ by: 'red', about: 'red' });
