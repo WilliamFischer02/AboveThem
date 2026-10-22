@@ -11,7 +11,7 @@
  *   - the "pack" = players ≥ 0.45 and within PACK (0.15) of the top:
  *       ≥ 3 → threeSuspects, 2 → twoSuspects,
  *       1 and top ≥ MAJOR (0.6) and #2 < SECOND_LOW (0.4) → oneSuspect, else → leaning
- *   Critical vote (crew alive − impostors left ≤ 2: a wrong vote plus one kill loses) wraps
+ *   Critical vote (crew alive − impostors left ≤ 1: a wrong eject loses immediately) wraps
  *   any of the above except confirmedImpostor; `basis` keeps the underlying classification.
  *   A dead "me" becomes imDead (same basis). Lobby / game over short-circuit.
  * Every listed player links to the evidence ids that put them there (`why`).
@@ -39,6 +39,8 @@ export interface Headline {
   short: string;
   /** A wrong vote (plus at most one kill) can lose the game. */
   critical: boolean;
+  /** safe · careful (crew − imp == 2: wrong vote now + one kill loses) · critical (crew − imp ≤ 1). */
+  danger: 'safe' | 'careful' | 'critical';
   /** Evidence ids behind the listed players (strongest first). */
   why: string[];
   /** The vote recommendation for this situation (meetingScript.vote is exactly this). */
@@ -58,7 +60,7 @@ export const CRITICAL_MIN = 0.3;
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 
-/** Crew alive minus impostors left; ≤ 2 = critical, ≤ 1 = the next wrong vote loses outright. */
+/** Crew alive minus impostors left; ≤ 1 = critical (a wrong eject loses), 2 = careful. */
 export function voteMargin(m: MatchState): { imp: number; crew: number; margin: number } {
   const alive = Object.values(m.players).filter(p => p.status === 'alive').length;
   const imp = impostorsRemaining(m);
@@ -84,8 +86,11 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
   const withPct = (s: SuspectScore) => `${name(s.player)} (${pct(s.probability)})`;
 
   const { imp, margin } = voteMargin(m);
-  const critical = imp > 0 && margin <= 2;
-  const lastVote = imp > 0 && margin <= 1;
+  // MERGE: use meetingMath(m) from src/engine/features/meetingMath.ts once the features branch is on main
+  // (danger 'critical' = wrongVoteLoses, 'careful' = skipThenOneKillLoses-style margin 2). Rule (lead decision):
+  // critical = a wrong eject loses immediately: crew − 1 ≤ imp  ⇔  crew − imp ≤ 1; careful = crew − imp == 2.
+  const critical = imp > 0 && margin <= 1;
+  const careful = imp > 0 && margin === 2;
 
   let base: Headline;
   const confirmed = ranked.filter(s => s.verdict === 'certainImpostor');
@@ -135,12 +140,21 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
       ...base,
       kind: 'criticalVote',
       title: 'Critical Vote',
-      subtitle: `${lastVote ? 'A wrong vote loses the game' : 'Wrong vote + one kill loses'} · ${base.title.replace(' | Skip Vote', '')}${base.subtitle ? ' · ' + base.subtitle : ''}`,
+      subtitle: `A wrong vote loses the game · ${base.title.replace(' | Skip Vote', '')}${base.subtitle ? ' · ' + base.subtitle : ''}`,
       tone: 'danger',
       short: `Critical · ${base.short}`,
     };
+  } else if (careful && base.kind !== 'confirmedImpostor' && base.kind !== 'skipVote') {
+    // One wrong vote from critical: wrong eject now + one kill = loss. Same classification, louder tone.
+    base = {
+      ...base,
+      subtitle: `One wrong vote from critical${base.subtitle ? ' · ' + base.subtitle : ''}`,
+      tone: base.tone === 'danger' ? 'danger' : 'warn',
+      short: `Careful · ${base.short}`,
+    };
   }
   base.critical = critical;
+  base.danger = critical ? 'critical' : careful ? 'careful' : 'safe';
 
   const me = m.players[m.me];
   if (me && me.status !== 'alive') {
@@ -150,7 +164,7 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
 }
 
 function simple(kind: HeadlineKind, title: string, subtitle: string | undefined, tone: HeadlineTone): Headline {
-  return { kind, basis: kind, title, subtitle, players: [], tone, short: title, critical: false, why: [], vote: { target: 'skip', confidence: 1, reason: '' } };
+  return { kind, basis: kind, title, subtitle, players: [], tone, short: title, critical: false, danger: 'safe', why: [], vote: { target: 'skip', confidence: 1, reason: '' } };
 }
 
 /**
@@ -159,7 +173,7 @@ function simple(kind: HeadlineKind, title: string, subtitle: string | undefined,
  *  leaning: top ≥ MAJOR → vote top (#2 as the follow-up); else skip, top as the alternative
  *  two/three: every listed ≥ MAJOR → vote top, #2 next; else skip (don't split the vote)
  *  notEnoughInfo / skipVote → skip
- *  critical (crew − imp ≤ 2) and the plan is skip and top > CRITICAL_MIN → vote top (skipping can lose).
+ *  critical (crew − imp ≤ 1) and the plan is skip and top > CRITICAL_MIN → vote top (skipping can lose).
  */
 export function recommendVote(basis: HeadlineKind, ranked: SuspectScore[], critical: boolean, name: (id: PlayerId) => string): HeadlineVote {
   const [p1, p2] = ranked;

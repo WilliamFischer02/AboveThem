@@ -66,22 +66,30 @@ describe('headline', () => {
     expect(h.subtitle).toMatch(/next: Blue \(42%\)/);
   });
 
-  it('critical vote when crew alive − impostors ≤ 2; basis keeps the classification', () => {
-    // alive: me, red, blue, green (4), 1 impostor left → crew 3 − imp 1 = 2
-    const m = match({}, ['me', 'red', 'blue', 'green'], 1);
-    const h = headline(m, [sc('red', 0.7), sc('blue', 0.2), sc('green', 0.1)]);
+  it('critical vote only when a wrong eject loses immediately (crew − imp ≤ 1); basis keeps the classification', () => {
+    // alive: me, red, blue (3), 1 impostor left → crew 2 − imp 1 = 1
+    const m = match({}, ['me', 'red', 'blue'], 1);
+    const h = headline(m, [sc('red', 0.7), sc('blue', 0.2)]);
     expect(h.kind).toBe('criticalVote');
     expect(h.basis).toBe('oneSuspect');
     expect(h.critical).toBe(true);
+    expect(h.danger).toBe('critical');
     expect(h.tone).toBe('danger');
     expect(h.players).toEqual(['red']);
-    expect(h.subtitle).toMatch(/Wrong vote \+ one kill loses/);
+    expect(h.subtitle).toMatch(/A wrong vote loses the game/);
   });
 
-  it('not critical with a comfortable margin; last-vote wording at margin 1', () => {
-    expect(headline(match(), [sc('red', 0.7)]).critical).toBe(false);
-    const m = match({}, ['me', 'red', 'blue'], 1); // crew 2 − imp 1 = 1
-    expect(headline(m, [sc('red', 0.3), sc('blue', 0.2)]).subtitle).toMatch(/A wrong vote loses the game/);
+  it('edge: crew − imp == 2 is "careful" (warn), not critical — and does not force a vote', () => {
+    // alive: me, red, blue, green (4), 1 impostor left → crew 3 − imp 1 = 2
+    const m = match({}, ['me', 'red', 'blue', 'green'], 1);
+    const h = headline(m, [sc('red', 0.5), sc('blue', 0.3), sc('green', 0.1)]);
+    expect(h.kind).toBe('leaning');
+    expect(h.critical).toBe(false);
+    expect(h.danger).toBe('careful');
+    expect(h.tone).toBe('warn');
+    expect(h.subtitle).toMatch(/^One wrong vote from critical/);
+    expect(h.vote.target).toBe('skip');
+    expect(headline(match(), [sc('red', 0.7)]).danger).toBe('safe');
   });
 
   it('confirmed impostor wins over everything (even critical), cleared players are excluded', () => {
