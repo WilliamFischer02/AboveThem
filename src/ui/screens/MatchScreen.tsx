@@ -60,6 +60,9 @@ export function MatchScreen() {
         <div className="brand">Above<span>Them</span></div>
         {impostor && <span className="badge imp role-pill">IMPOSTOR</span>}
         <span className="muted small">{match.map.name} · {alive} alive · {impLeft} imp</span>
+        {!ghost && phase !== 'lobby' && phase !== 'gameOver' && (
+          <button className="btn xs ghost" title="I just got killed: switch to ghost mode" onClick={() => useMatch.getState().dispatch({ kind: 'player', payload: { id: match.me, status: 'dead', aliveLockMeeting: undefined } })}>☠ I'm dead</button>
+        )}
         <span className={`phase-pill right ${pill[0]}`} key={phase + (outcome ?? '')}>
           {pill[1]}
           {phase !== 'lobby' && phase !== 'gameOver' && <span className="clock">R{st.round + 1} {fmt(st.t)}</span>}

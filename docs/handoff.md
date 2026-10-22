@@ -78,7 +78,8 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
    between; the clock then under-counts rounds). Check whether the task bar / REPORT button is
    readable while dead, and consider "ejection text gone + no meeting for 5 s ⇒ round".
 8. "I'm not dead" (ghost panel) marks me alive and ignores death reads for the rest of that
-   meeting (`Player.aliveLockMeeting`); the DEAD header now needs a still frame with no banner.
+   meeting (`Player.aliveLockMeeting`); "☠ I'm dead" (top bar, while alive in a game) does
+   the opposite and clears the lock. The DEAD header now needs a still frame with no banner.
    William was falsely read dead once tonight — if it recurs, log which signal fired.
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,

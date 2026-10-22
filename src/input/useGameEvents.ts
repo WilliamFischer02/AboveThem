@@ -88,6 +88,9 @@ export function useGameEvents() {
   const [meGuessed, setMeGuessed] = useState(false);
   const [lobbyCode, setLobbyCode] = useState<string | null>(null);
   const resetRosterRef = useRef<() => void>(() => {});
+  /** The resume-from-disk attempt has finished: only then may a screen read create a new match
+   *  (a reload mid-game otherwise races the resume and starts a fresh match with everyone alive). */
+  const resumeDone = useRef(!isTauri());
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
 
@@ -95,12 +98,14 @@ export function useGameEvents() {
   useEffect(() => {
     if (!isTauri()) return;
     (async () => {
-      if (useMatch.getState().match) return;
-      const list = await persist.listMatches().catch(() => []);
-      const newest = list[0];
-      if (!newest || Date.now() - newest.modified_ms > 20 * 60_000) return;
-      const ok = await useMatch.getState().loadMatch(newest.id);
-      if (ok) useMatch.getState().showToast(`Resumed match ${newest.id}`);
+      try {
+        if (useMatch.getState().match) return;
+        const list = await persist.listMatches().catch(() => []);
+        const newest = list[0];
+        if (!newest || Date.now() - newest.modified_ms > 20 * 60_000) return;
+        const ok = await useMatch.getState().loadMatch(newest.id);
+        if (ok) useMatch.getState().showToast(`Resumed match ${newest.id}`);
+      } finally { resumeDone.current = true; }
     })();
   }, []);
 
@@ -300,7 +305,7 @@ export function useGameEvents() {
         const fromLobby = source === 'lobby';
         const meetingNow = s.match?.phase.meeting ?? 0;
         if (!s.match) {
-          if (creating) return;
+          if (creating || !resumeDone.current) return;
           creating = true;
           const presets = await loadPresets();
           if (useMatch.getState().match) { creating = false; return; }
@@ -446,7 +451,7 @@ export function useGameEvents() {
           // Already in a game (app started mid-match): open a provisional match with a placeholder "me";
           // the next vote-grid read fills the roster and re-points "me" by name.
           if (!['round', 'roundStart', 'meetingDiscussion', 'ejection'].includes(e.payload.phase)) return;
-          if (creating) return;
+          if (creating || !resumeDone.current) return;
           creating = true;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
           s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyCode ?? undefined,
