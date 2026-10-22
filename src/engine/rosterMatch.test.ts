@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchGrid, hashDistance, rosterConfidence, type RosterPlayer, type GridEntry } from './rosterMatch';
+import { matchGrid, hashDistance, rosterConfidence, orderContext, pairScore, ORDER_BONUS, type RosterPlayer, type GridEntry } from './rosterMatch';
 
 const P = (id: string, name: string, color: string, extra: Partial<RosterPlayer> = {}): RosterPlayer => ({ id, name, color, status: 'alive', ...extra });
 const E = (index: number, name: string, color: string, extra: Partial<GridEntry> = {}): GridEntry => ({ index, name, color, dead: false, ...extra });
@@ -65,3 +65,39 @@ describe('rosterMatch', () => {
     expect(good).toBeLessThanOrEqual(1);
   });
 });
+
+describe('grid-order consistency (handoff #9)', () => {
+  // First complete grid: A0 B1 C2 D3. Later B is dead → grid: A0 C1 D2 B3(dead).
+  const base = () => [
+    P('a', 'Alpha', 'red', { gridOrder: 0 }), P('b', 'Bravo', 'blue', { gridOrder: 1, status: 'dead' }),
+    P('c', 'Charlie', 'green', { gridOrder: 2 }), P('d', 'Delta', 'pink', { gridOrder: 3 }),
+  ];
+
+  it('two unreadable alive cards are told apart by their rank among the alive', () => {
+    // C and D both unreadable, same colourless read; only the order distinguishes them.
+    const entries = [E(0, 'Alpha', 'red'), E(1, '#2', 'unknown'), E(2, '#3', 'unknown'), E(3, 'Bravo', 'blue', { dead: true })];
+    const a = matchGrid(base(), entries, 2);
+    expect(a.map(x => x.playerId)).toEqual(['a', 'c', 'd', 'b']);
+    expect(a[1].reasons).toContain('order');
+    expect(a[2].reasons).toContain('order');
+  });
+
+  it('is switched off when an alive player has no order (ranks would shift) or orders collide', () => {
+    const players = [...base(), P('e', 'Echo', 'lime')]; // joined late, never in the first grid
+    const entries = [E(0, 'Alpha', 'red'), E(1, '#2', 'unknown'), E(2, '#3', 'unknown'), E(3, 'Echo', 'lime')];
+    expect(orderContext(players, entries)).toBeNull();
+    const clash = base().map(p => (p.id === 'd' ? { ...p, gridOrder: 2 } : p));
+    expect(orderContext(clash, [E(0, 'x', 'red'), E(1, 'y', 'red'), E(2, 'z', 'red')])).toBeNull();
+  });
+
+  it('the bonus is a tie-breaker: a clear name match still wins over order', () => {
+    const order = orderContext(base(), [E(0, 'Alpha', 'red'), E(1, 'Delta', 'pink'), E(2, 'Charlie', 'green')])!;
+    // Entry 1 reads "Delta" but rank 1 belongs to Charlie by order.
+    const forC = pairScore(base()[2], E(1, 'Delta', 'pink'), 2, order);
+    const forD = pairScore(base()[3], E(1, 'Delta', 'pink'), 2, order);
+    expect(forC.reasons).toContain('order');
+    expect(forD.score).toBeGreaterThan(forC.score);
+    expect(ORDER_BONUS).toBeLessThan(3);
+  });
+});
+

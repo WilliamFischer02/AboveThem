@@ -14,6 +14,7 @@
 //!   files     — %APPDATA%/AboveThem: match NDJSON logs, presets, settings (Phase 1)
 //!   overlay   — transparent always-on-top click-through legend/clock window (Phase 1.5)
 //!   translate — provider trait + implementations (Phase 3)
+//!   textscore — OCR-text plausibility + script detection (chat language fallback)
 //!   ipc       — Tauri commands/events, the only module the frontend talks to
 //!
 //! Everything Windows-specific is cfg(windows) and stubbed elsewhere so the crate
@@ -31,6 +32,7 @@ pub mod overlay;
 pub mod phase;
 pub mod regions;
 pub mod roster;
+pub mod textscore;
 pub mod translate;
 pub mod watcher;
 
