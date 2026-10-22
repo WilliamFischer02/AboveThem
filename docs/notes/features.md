@@ -6,7 +6,7 @@ The branch started on stale 71c2c1b. I reset it (empty) to local main 7bf75ba, t
 ## TL;DR
 - 9 pure engine modules in `src/engine/features/`, each with Vitest tests: 6 from the brief, 2 stretch items, and the lie checks I picked from the research catalogue.
 - 12 self-contained cards in `src/ui/components/features/`. They mount through one `<FeatureSlots />`, and every style rule lives in `src/ui/features.css`, scoped under `.feat`.
-- Tests: 196 passing (72 at baseline, 192 after the main merge). `tsc --noEmit` is clean, `npm run build` is OK.
+- Tests: 230 passing (72 at baseline; 192 after merging main; 225 after merging the maps branch). `tsc --noEmit` is clean, `npm run build` is OK.
 - I rendered round, discussion and voting at 380 px in headless Edge with a temporary harness that seeds the Skeld fixture (not committed). No feature card overflows horizontally. I did **not** run the real Tauri/WebView2 window.
 
 ## Mount (re-apply if MatchScreen changes again)
@@ -37,6 +37,15 @@ FeatureSlots picks the cards by phase:
 - `src/state/events.ts`: `PLAYER_LIST_KEYS` gained `'dead', 'alive', 'dc'`, so `mergePlayers` repoints vitals reads (tested).
 - `src/state/store.ts`: two `describe()` cases for the new observation types.
 - `src/ui/screens/MatchScreen.tsx`: the two marked lines above.
+
+## Round 3 (lead relay: maps' mapChecks)
+- I merged the **maps branch tip 717c22e** (`worktree-agent-aa0041fc9ecc9d7d7`) into this branch (`f575e53`) to import `engine/mapChecks.ts`. That is consistent with the merge order (maps before features). Merge maps first, and this branch's copy of their files is identical.
+- `DoorLogReadObs` appended to the union (`| AdminReadObs | VitalsReadObs | DoorLogReadObs`). `repoint()` now also walks arrays of objects, so door-log `entries[].player` follows merges. This is an additive `else if` in events.ts and is tested.
+- `security.ts`:
+  - `obsToMonitorRead(o, m)` and `monitorChecks(m)` adapt my reads to maps' `monitorContradiction`. Admin zero-fills only the rooms the Admin map covers.
+  - `doorLogObservation()`.
+  - `adminCovers()`: Polus "Outside" rooms and the MIRA Hallway are admin blind spots, and my own `adminChecks` respects them too (that was a latent false-positive).
+- UI: the Security card has a one-tap door-log logger. The "Monitor check" meeting card shows admin, vitals and door-log contradictions.
 
 ## Things the lead must know
 - **Two "critical vote" rules exist.** ui-streamline's `headline.ts` uses `crew − impostors ≤ 2`. `meetingMath.wrongVoteLoses` is exact: a wrong ejection loses when `crew − 1 ≤ impostors`. Example: 7 alive with 2 impostors is 5 crew, so headline says critical while meetingMath says one more death of slack. Unify them on `meetingMath` (or at least make the headline say "careful", not "critical").
