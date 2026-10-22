@@ -26,7 +26,11 @@
     "map.rooms.adjacent": "MapRoom.adjacent (walk seconds at 1.0x)",
     "map.rooms.deadEnd": "MapRoom.deadEnd",
     "map.vents": "MapData.vents",
-    "map.cameras": "* camera coverage per map (not in map JSON yet)",
+    "facts.monitors": "src/data/gameFacts.json maps.<id>.monitors (admin rooms, cam feeds + nearRooms, vitals, doorlog, binoculars)",
+    "facts.sabotages": "gameFacts.json maps.<id>.sabotages (fixRooms, people, critical)",
+    "facts.dummyPanels": "gameFacts.json maps.<id>.dummyPanels",
+    "facts.meeting": "gameFacts.json maps.<id>.meeting (room or Airship spawnChoices)",
+    "facts.rules": "gameFacts.json rules (cooldowns, comms effects, admin behaviour)",
     "myTasks": "my own task list (setup screen)",
     "obs.sighting": "sighting observation",
     "obs.withMe": "withMe observation",
@@ -201,12 +205,13 @@
       "inputs": [
         "map.id",
         "obs.sighting",
-        "obs.sawTask"
+        "obs.sawTask",
+        "facts.dummyPanels"
       ],
       "check": "Dummy panels: Skeld Reactor divert power, Polus Office divert power, Airship Armory/Communications/Vault wiring, Airship Lounge garbage bin.",
       "ask": "{P} that panel in {R} is fake. Nobody can do it.",
       "caveats": [
-        "Map JSON has no dummy-panel field yet; needs a list per map."
+        "Dummy panel list: src/data/gameFacts.json maps.<id>.dummyPanels."
       ],
       "wiredIn": null,
       "sources": [
@@ -843,7 +848,8 @@
       "effect": "suspect",
       "inputs": [
         "obs.sabotage",
-        "claim.sighting"
+        "claim.sighting",
+        "facts.rules"
       ],
       "check": "Comms disables Admin, Cams, Vitals and Doorlog (not Fungle binoculars). A claimed reading inside a comms window is false.",
       "ask": "Comms were down. Cams and admin were off then.",
@@ -866,7 +872,8 @@
       "inputs": [
         "map.id",
         "claim.sighting",
-        "lobby.roles"
+        "lobby.roles",
+        "facts.monitors"
       ],
       "check": "No cams on MIRA, no admin on Fungle, no vitals on Skeld/MIRA (except Scientist), doorlog only on MIRA.",
       "ask": "There are no cams on this map {P}.",
@@ -934,7 +941,8 @@
       "effect": "invalidateClear",
       "inputs": [
         "map.id",
-        "claim.sighting"
+        "claim.sighting",
+        "facts.monitors"
       ],
       "check": "Admin does not show hallways or Polus Outside. \"Admin showed nobody there\" is no evidence for those areas.",
       "ask": "Admin doesnt show {R}. That proves nothing.",
@@ -954,13 +962,13 @@
       "inputs": [
         "obs.cams",
         "claim.location",
-        "map.cameras"
+        "facts.monitors"
       ],
       "check": "I watched a feed covering corridor C for the window; P claims to have walked through C then and never appeared.",
       "ask": "I was on cams. {P} never walked past {R}.",
       "caveats": [
         "Polus/Airship feeds show one camera at a time.",
-        "No cams observation type or camera coverage table yet."
+        "No cams observation type yet; feed coverage is in gameFacts.json monitors.cams."
       ],
       "wiredIn": null,
       "sources": [
@@ -1043,7 +1051,8 @@
       "inputs": [
         "map.id",
         "claim.location",
-        "obs.sabotage"
+        "obs.sabotage",
+        "facts.sabotages"
       ],
       "check": "Fix points: Skeld reactor Reactor, O2 O2+Admin, lights Electrical, comms Comms; MIRA reactor Reactor, O2 Greenhouse+SW hall, lights Office, comms Office+Comms; Polus seismic both sides of Dropship, lights Electrical, comms outside by Comms; Airship crash both sides of Gap Room, lights Gap/Viewing/Cargo, comms Comms; Fungle reactor Reactor, comms Comms+Lookout, no lights.",
       "ask": "{TASK} isnt fixed in {R} on this map.",
@@ -1124,7 +1133,8 @@
       "effect": "suspect",
       "inputs": [
         "map.id",
-        "claim.location"
+        "claim.location",
+        "facts.meeting"
       ],
       "check": "Airship spawn choices after a meeting are only Brig, Cargo Bay, Engine Room, Kitchen, Main Hall, Records (3 offered each time).",
       "ask": "You cant spawn in {R} on Airship.",

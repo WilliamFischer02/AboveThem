@@ -9,6 +9,7 @@ import impostor from './impostor.json';
 import slang from '../chatSlang.seed.json';
 import skeld from '../maps/skeld.json';
 import polus from '../maps/polus.json';
+import facts from '../gameFacts.json';
 
 const CONFIDENCE = ['hard', 'high', 'med', 'low'];
 const EFFECT = ['suspect', 'clear', 'invalidateClear', 'constraint'];
@@ -110,6 +111,47 @@ describe('chatSlang.seed.json', () => {
         for (const s of list as string[]) expect(s, `${k}/${lang}`).toBe(s.toLowerCase());
       }
     }
+  });
+});
+
+describe('gameFacts.json', () => {
+  type MapFacts = {
+    criticalTimerSec: number;
+    meeting: { room: string | null; spawnChoices?: string[] };
+    sabotages: { id: string; fixRooms: string[]; critical: boolean }[];
+    doors: { rooms: string[] };
+    monitors: { admin: string[] | null; vitals: string[] | null; cams: { feeds: { nearRooms: string[] }[] } | null };
+    visualTasks: string[];
+    commonTaskPool: string[];
+    dummyPanels: { room: string }[];
+  };
+  const maps = facts.maps as unknown as Record<string, MapFacts>;
+
+  it('critical timers match the wiki (30/45/60/90/60)', () => {
+    expect([maps.skeld, maps.mira, maps.polus, maps.airship, maps.fungle].map(m => m.criticalTimerSec)).toEqual([30, 45, 60, 90, 60]);
+  });
+
+  it('skeld/polus room and task ids exist in the map data', () => {
+    for (const [id, map] of [['skeld', skeld], ['polus', polus]] as const) {
+      const rooms = new Set(map.rooms.map(r => r.id));
+      const tasks = new Set(map.tasks.map(t => t.id));
+      const f = maps[id];
+      const roomRefs = [
+        ...(f.meeting.room ? [f.meeting.room] : []),
+        ...f.sabotages.flatMap(s => s.fixRooms), ...f.doors.rooms, ...(f.monitors.admin ?? []), ...(f.monitors.vitals ?? []),
+        ...(f.monitors.cams?.feeds.flatMap(x => x.nearRooms) ?? []), ...f.dummyPanels.map(d => d.room),
+      ];
+      for (const r of roomRefs) expect(rooms.has(r), `${id} room ${r}`).toBe(true);
+      for (const t of [...f.visualTasks, ...f.commonTaskPool]) expect(tasks.has(t), `${id} task ${t}`).toBe(true);
+      // the map JSON's visual flags must agree with the fact sheet
+      for (const t of map.tasks) expect(f.visualTasks.includes(t.id), `${id} visual ${t.id}`).toBe(t.visual);
+    }
+  });
+
+  it('airship has no fixed meeting room but 6 spawn choices; every map has exactly one critical sabotage', () => {
+    expect(maps.airship.meeting.room).toBeNull();
+    expect(maps.airship.meeting.spawnChoices).toHaveLength(6);
+    for (const [id, m] of Object.entries(maps)) expect(m.sabotages.filter(s => s.critical).length, id).toBe(1 + (id === 'skeld' || id === 'mira' ? 1 : 0));
   });
 });
 
