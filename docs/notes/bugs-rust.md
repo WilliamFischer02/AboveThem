@@ -79,6 +79,32 @@ Cyrillic chat font (the fixture is GDI+ Arial pasted into a real bubble).
   lobby who first appears on the grid is dropped as an OCR miss.
 - Keyless Google endpoint: no backoff when rate-limited (failures now visible as `translateFailed` diags).
 
+## Review round (other agents' code, after merging main)
+Fixed, with tests (`phaseEdges.test.ts`, `mapEdges.test.ts`, `features/degenerate.test.ts`, `eventsRobustness.test.ts`,
+`rosterConsolidate.test.ts`):
+- headline.ts / meetingScript.ts: an unfilled roster (provisional match: only me alive, 2 impostors) read as
+  "Critical Vote" / endgame (crew − imp negative). Now needs crew > imp. headline ignores non-finite probabilities;
+  SusMeter clamps (no "NaN%").
+- map.ts `walkSeconds`: threw on an unknown `from`, returned Infinity (= "too far" = contradiction in alibi /
+  contradictions / rules) for an unknown `to`. Now 0 ("could be anywhere"); bad speed → 1. `couldReach(NaN)` → true.
+- mapChecks: monitor reads without a usable time fell back to t=0 (or NaN, which slips through every window check) and
+  could end in a contradiction. Admin/vitals without a stamp → null (I changed the maps agent's test expectation for
+  that one case); NaN times → null.
+- CardMenu / Roster 👥 / hotkeys / GhostPanel logged task / vent / with-me in `rooms[0]` (Cafeteria) when my room was
+  unknown — a fabricated location. Now `'unknown'` (safe now that walkSeconds fails soft).
+- Transcript showed a look-alike guess translation as the quote; Roster's 3 s reason strip could commit into a new
+  match or onto a merged card.
+- VoteTracker: after the ejection event the ejectee was no longer alive → their vote and the votes against them could
+  not be tapped in. `meetingVoters()` = alive + this meeting's ejectee.
+- `events.repoint`: no mutation (verified by test); recursion capped at depth 8 (a cyclic payload overflowed the stack).
+- rosterConsolidate: "Bob"/"Bobby" (prefix-nested clean names) no longer merge before the first grid without the same
+  known colour. OCR substitutions and start-hidden fragments ("ymidland") still merge.
+Checked and fine: Popover / prefs (all storage access wrapped, listeners cleaned up), KillClock `useTick` interval
+cleared, FeatureSlots per-phase mounting (all card engines survive stub map / nobody alive / me dead), keyboard handlers
+skip inputs and modifier chords.
+Not changed: HeadlineBar anchors the "why" popover to the first suspect for every suspect (cosmetic); Popover's Escape
+also reaches the reason strip's window listener (both close, harmless); VoteTracker layout at 380 px not checked visually.
+
 ## Next ideas
 - Install the Russian OCR pack on the dev PC and record a real Cyrillic chat frame as a fixture.
 - Fixtures for Mira/Polus/Airship/Fungle lobby logos to verify `read_map_logo`.
