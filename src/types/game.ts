@@ -32,6 +32,8 @@ export interface Player {
   knownRole: Role;
   /** Marked by user as "my impostor partner" (impostor mode only). */
   isPartner?: boolean;
+  /** The user set this player's role / partner flag by hand: automatic reads must not change it. */
+  roleLocked?: boolean;
   /** 1-based position in the meeting vote grid (what the player sees); hotkey target prefix+digit. */
   slot?: number;
   /** Colour was set by the user; automatic reads must not change it. */

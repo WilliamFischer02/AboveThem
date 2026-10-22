@@ -224,6 +224,13 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             <button className="btn sm danger" onClick={() => { observe({ type: 'sawVent', player: p.id, room: here }, `${p.name} VENTED`); done(); }}>Saw vent</button>
             <button className="btn sm danger" onClick={() => setMode('kill')}>Saw kill…</button>
           </div>
+          {match.myRole === 'impostor' && (
+            <div className="row">
+              {p.isPartner
+                ? <button className="btn sm primary" title="The red-name read was wrong: this player is crew" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, isPartner: false, knownRole: 'crew', roleLocked: true } }); done(); }}>Not my partner — crew</button>
+                : <button className="btn sm danger" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor', roleLocked: true } }); done(); }}>This is my partner</button>}
+            </div>
+          )}
           <div className="row">
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => setMode('victim')}>Found dead…</button>}
             {p.status === 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); done(); }}>Disconnected</button>}

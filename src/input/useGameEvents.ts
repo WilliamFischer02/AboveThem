@@ -578,7 +578,7 @@ export function useGameEvents() {
           const p = fuzzyFind(nm, Object.values(live.players));
           if (!p) continue;
           if (live.myRole !== 'impostor' && !live.myRoleLocked && live.players[live.me]?.status === 'alive') { role = 'impostor'; roleAt = Date.now(); s.dispatch({ kind: 'myRole', payload: { role: 'impostor', auto: true } }); s.showToast('Red name seen — you are IMPOSTOR (auto)'); }
-          if (!p.isMe && !p.isPartner) { s.dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor' } }); s.showToast(`${p.name} is your partner (red name)`); }
+          if (!p.isMe && !p.isPartner && !p.roleLocked) { s.dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor' } }); s.showToast(`${p.name} is your partner (red name)`); }
         }
         const room = myRoomNow(m);
         if (!room) return;
