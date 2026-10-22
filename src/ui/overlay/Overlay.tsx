@@ -36,6 +36,8 @@ export function Overlay() {
         <span className="ov-count">{snap.myRoom ? `${snap.myRoom} · ` : ''}{snap.alive} alive · {snap.impLeft} imp</span>
       </div>
 
+      {snap.watch && snap.phase !== 'lobby' && snap.phase !== 'gameOver' && <div className={`ov-box ov-watch ov-tone-${snap.watch.tone}`}>{snap.watch.text}</div>}
+
       {(snap.pending || snap.toast) && (
         <div className={`ov-box ov-toast ${snap.pending ? 'pending' : ''}`}>
           {snap.pending

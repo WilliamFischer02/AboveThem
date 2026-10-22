@@ -55,7 +55,12 @@ export const CLEAR_REASONS: readonly MarkReasonInfo<ClearReason>[] = [
 
 const ALL = new Map<MarkReason, MarkReasonInfo>([...SUS_REASONS, ...CLEAR_REASONS].map(r => [r.id, r]));
 
-export const reasonInfo = (r: MarkReason | undefined): MarkReasonInfo | undefined => (r ? ALL.get(r) : undefined);
+/** Accepts any string (UI state, old logs): unknown reasons → undefined. */
+export const reasonInfo = (r: MarkReason | string | undefined): MarkReasonInfo | undefined => (r ? ALL.get(r as MarkReason) : undefined);
+
+/** Re-exported so UI code can import the reason types from here (ui-streamline's stub did). */
+export type { SusReason, ClearReason, MarkReason };
+export type MarkKind = ManualMarkObs['mark'];
 
 /** Weight for a mark: explicit override > reason > default per mark. */
 export function markWeight(mark: 'sus' | 'clear', reason?: MarkReason, override?: number): number {
