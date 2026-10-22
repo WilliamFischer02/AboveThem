@@ -1,0 +1,2737 @@
+{
+  "_doc": "Among Us chat lexicon for src/engine/chatNlu. All phrases are lower-case, apostrophes removed ('wasn't' -> 'wasnt'), single spaces. Multi-word phrases are matched longest-first (up to 4 words). Colours resolve to the player wearing that colour; rooms/tasks resolve against the current map (by room id OR room name), so per-map ids only need to agree with src/data/maps/<map>.json by id or name. Fuzzy matching (Damerau/OSA edit distance) applies only to colours, room aliases and long verbs: words of <= 4 letters must match exactly, 5-6 letters allow 1 edit, 7+ allow 2; anything in fuzzyBlock never fuzzy-matches.",
+  "version": 1,
+  "fuzzyBlock": [
+    "read",
+    "reed",
+    "bed",
+    "led",
+    "rest",
+    "fellow",
+    "fellows",
+    "mellow",
+    "hello",
+    "hellow",
+    "hollow",
+    "yellows",
+    "while",
+    "write",
+    "whine",
+    "whale",
+    "whites",
+    "whilst",
+    "block",
+    "slack",
+    "blank",
+    "blacks",
+    "crown",
+    "grown",
+    "drown",
+    "frown",
+    "brows",
+    "brawn",
+    "greed",
+    "greet",
+    "greek",
+    "preen",
+    "range",
+    "ranges",
+    "orangy",
+    "bandana",
+    "moral",
+    "macron",
+    "purples",
+    "people",
+    "rented",
+    "vested",
+    "tented",
+    "filled",
+    "billed",
+    "killer",
+    "clean",
+    "cleans",
+    "cleaner",
+    "venter",
+    "dented",
+    "skilled",
+    "spilled",
+    "repeated",
+    "remote",
+    "reports",
+    "selected",
+    "follow",
+    "allowed",
+    "hallowed",
+    "sweat",
+    "where",
+    "there",
+    "their",
+    "these",
+    "those",
+    "three",
+    "wires",
+    "tired",
+    "fired",
+    "lighter",
+    "lights",
+    "night",
+    "nights",
+    "right",
+    "might",
+    "fight",
+    "light",
+    "admin",
+    "medal",
+    "metal",
+    "storm",
+    "store",
+    "stone",
+    "office",
+    "offer",
+    "shield",
+    "shell",
+    "shells",
+    "smell",
+    "decent",
+    "recent",
+    "second",
+    "secure",
+    "coming",
+    "common",
+    "cooking",
+    "looking",
+    "booking",
+    "lower",
+    "power",
+    "tower",
+    "upper",
+    "supper",
+    "proper",
+    "paper",
+    "react",
+    "rector",
+    "doctor",
+    "launch",
+    "lunch",
+    "bunch",
+    "fallen",
+    "follower",
+    "dread",
+    "bread",
+    "greedy",
+    "bluey",
+    "lemon",
+    "melon",
+    "liked",
+    "limed",
+    "timed",
+    "pinked",
+    "cyans",
+    "sussed"
+  ],
+  "colors": {
+    "red": [
+      "red",
+      "rd",
+      "redd",
+      "reddy",
+      "redy"
+    ],
+    "blue": [
+      "blue",
+      "blu",
+      "bleu",
+      "bloo",
+      "blue s",
+      "blou",
+      "dark blue",
+      "darkblue",
+      "db"
+    ],
+    "green": [
+      "green",
+      "grn",
+      "gren",
+      "grean",
+      "greem",
+      "grren",
+      "dark green",
+      "dg"
+    ],
+    "pink": [
+      "pink",
+      "pnk",
+      "pinky",
+      "pinkk",
+      "pnik",
+      "hot pink"
+    ],
+    "orange": [
+      "orange",
+      "org",
+      "orng",
+      "orang",
+      "oran",
+      "orenge",
+      "ornge",
+      "orage",
+      "oj",
+      "orangee",
+      "orang3"
+    ],
+    "yellow": [
+      "yellow",
+      "ylw",
+      "yel",
+      "yell",
+      "yello",
+      "yelo",
+      "yllw",
+      "yellw",
+      "yelow",
+      "ylo",
+      "yllow",
+      "yelloe"
+    ],
+    "black": [
+      "black",
+      "blk",
+      "blck",
+      "blak",
+      "blac",
+      "blacc",
+      "blaq",
+      "blek"
+    ],
+    "white": [
+      "white",
+      "wht",
+      "whit",
+      "wite",
+      "whte",
+      "whie",
+      "whitey",
+      "whi",
+      "wyt",
+      "whyte"
+    ],
+    "purple": [
+      "purple",
+      "purp",
+      "prpl",
+      "purpel",
+      "purpl",
+      "prple",
+      "pur",
+      "purps",
+      "purpul",
+      "violet",
+      "pruple"
+    ],
+    "brown": [
+      "brown",
+      "brwn",
+      "brn",
+      "brow",
+      "browm",
+      "brownie",
+      "broun"
+    ],
+    "cyan": [
+      "cyan",
+      "cy",
+      "cyn",
+      "cian",
+      "cyann",
+      "light blue",
+      "lightblue",
+      "lblue",
+      "lb",
+      "teal",
+      "aqua"
+    ],
+    "lime": [
+      "lime",
+      "lim",
+      "lyme",
+      "light green",
+      "lightgreen",
+      "lgreen",
+      "lime green",
+      "neon"
+    ],
+    "maroon": [
+      "maroon",
+      "mar",
+      "mrn",
+      "maron",
+      "marron",
+      "maroom",
+      "dark red",
+      "darkred",
+      "burgundy"
+    ],
+    "rose": [
+      "rose",
+      "rse",
+      "light pink",
+      "lightpink",
+      "lpink",
+      "rosa",
+      "rosy pink"
+    ],
+    "banana": [
+      "banana",
+      "ban",
+      "bana",
+      "nana",
+      "bnna",
+      "bannana",
+      "light yellow",
+      "lightyellow",
+      "cream"
+    ],
+    "gray": [
+      "gray",
+      "grey",
+      "gry",
+      "gra",
+      "grai",
+      "grae",
+      "gery"
+    ],
+    "tan": [
+      "tan",
+      "beige",
+      "tann",
+      "khaki"
+    ],
+    "coral": [
+      "coral",
+      "crl",
+      "corl",
+      "corall",
+      "salmon"
+    ]
+  },
+  "rooms": [
+    {
+      "id": "cafeteria",
+      "names": [
+        "cafeteria"
+      ],
+      "aliases": [
+        "cafe",
+        "caf",
+        "caff",
+        "cafet",
+        "cafetria",
+        "cafateria",
+        "caffeteria",
+        "button",
+        "table",
+        "spawn"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "fungle"
+      ]
+    },
+    {
+      "id": "weapons",
+      "names": [
+        "weapons"
+      ],
+      "aliases": [
+        "weps",
+        "wep",
+        "weap",
+        "weapon",
+        "weaps",
+        "wepons",
+        "guns"
+      ],
+      "maps": [
+        "skeld",
+        "polus"
+      ]
+    },
+    {
+      "id": "o2",
+      "names": [
+        "o2",
+        "oxygen"
+      ],
+      "aliases": [
+        "02",
+        "oxy",
+        "o 2",
+        "o two",
+        "0 2",
+        "oz"
+      ],
+      "maps": [
+        "skeld",
+        "polus"
+      ]
+    },
+    {
+      "id": "navigation",
+      "names": [
+        "navigation"
+      ],
+      "aliases": [
+        "nav",
+        "navi",
+        "navigaton",
+        "nave",
+        "navs"
+      ],
+      "maps": [
+        "skeld"
+      ]
+    },
+    {
+      "id": "shields",
+      "names": [
+        "shields"
+      ],
+      "aliases": [
+        "shield",
+        "shld",
+        "sheilds",
+        "shilds"
+      ],
+      "maps": [
+        "skeld"
+      ]
+    },
+    {
+      "id": "communications",
+      "names": [
+        "communications",
+        "comms"
+      ],
+      "aliases": [
+        "coms",
+        "com",
+        "comm",
+        "communication",
+        "comunications",
+        "commz"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "polus",
+        "airship",
+        "fungle"
+      ]
+    },
+    {
+      "id": "storage",
+      "names": [
+        "storage"
+      ],
+      "aliases": [
+        "store",
+        "stor",
+        "strg",
+        "storge",
+        "storag"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "polus",
+        "fungle"
+      ]
+    },
+    {
+      "id": "admin",
+      "names": [
+        "admin"
+      ],
+      "aliases": [
+        "adm",
+        "admn",
+        "addmin",
+        "admin table"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "polus"
+      ]
+    },
+    {
+      "id": "electrical",
+      "names": [
+        "electrical"
+      ],
+      "aliases": [
+        "elec",
+        "electric",
+        "elect",
+        "elc",
+        "elek",
+        "electricty",
+        "electrics",
+        "eletrical",
+        "elecc",
+        "lights",
+        "elec room"
+      ],
+      "maps": [
+        "skeld",
+        "polus",
+        "airship"
+      ]
+    },
+    {
+      "id": "lowerEngine",
+      "names": [
+        "lower engine"
+      ],
+      "aliases": [
+        "lower",
+        "low eng",
+        "le",
+        "bottom engine",
+        "lower eng",
+        "low engine",
+        "bot engine",
+        "l engine",
+        "lower engines",
+        "bottom eng"
+      ],
+      "maps": [
+        "skeld",
+        "fungle"
+      ]
+    },
+    {
+      "id": "upperEngine",
+      "names": [
+        "upper engine"
+      ],
+      "aliases": [
+        "upper",
+        "up eng",
+        "ue",
+        "top engine",
+        "upper eng",
+        "up engine",
+        "u engine",
+        "upper engines",
+        "top eng"
+      ],
+      "maps": [
+        "skeld",
+        "fungle"
+      ]
+    },
+    {
+      "id": "security",
+      "names": [
+        "security"
+      ],
+      "aliases": [
+        "sec",
+        "cams",
+        "cameras",
+        "cam",
+        "secu",
+        "securty",
+        "secruity",
+        "camera",
+        "security room"
+      ],
+      "maps": [
+        "skeld",
+        "polus",
+        "airship"
+      ]
+    },
+    {
+      "id": "reactor",
+      "names": [
+        "reactor"
+      ],
+      "aliases": [
+        "react",
+        "reac",
+        "rector",
+        "reacter",
+        "reactr",
+        "reacto"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "fungle"
+      ]
+    },
+    {
+      "id": "medbay",
+      "names": [
+        "medbay",
+        "medbay"
+      ],
+      "aliases": [
+        "med",
+        "med bay",
+        "medical",
+        "scan room",
+        "medic",
+        "meds",
+        "medbey"
+      ],
+      "maps": [
+        "skeld",
+        "mira",
+        "polus"
+      ]
+    },
+    {
+      "id": "dropship",
+      "names": [
+        "dropship"
+      ],
+      "aliases": [
+        "drop",
+        "ship",
+        "drop ship",
+        "spawn"
+      ],
+      "maps": [
+        "polus",
+        "fungle"
+      ]
+    },
+    {
+      "id": "outsideLeft",
+      "names": [
+        "outside left",
+        "outside"
+      ],
+      "aliases": [
+        "outside",
+        "left outside",
+        "outside left",
+        "out left"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "outsideRight",
+      "names": [
+        "outside right"
+      ],
+      "aliases": [
+        "right outside",
+        "outside right",
+        "out right"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "lava",
+      "names": [
+        "lava pit"
+      ],
+      "aliases": [
+        "lava",
+        "pit",
+        "lava pit"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "boilerRoom",
+      "names": [
+        "boiler room"
+      ],
+      "aliases": [
+        "boiler",
+        "boilers",
+        "boil"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "office",
+      "names": [
+        "office"
+      ],
+      "aliases": [
+        "offic",
+        "ofice",
+        "offce",
+        "vitals"
+      ],
+      "maps": [
+        "mira",
+        "polus"
+      ]
+    },
+    {
+      "id": "lowerDecon",
+      "names": [
+        "lower decontamination"
+      ],
+      "aliases": [
+        "lower decon",
+        "bottom decon",
+        "low decon",
+        "decon 2"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "upperDecon",
+      "names": [
+        "upper decontamination"
+      ],
+      "aliases": [
+        "decon",
+        "upper decon",
+        "top decon",
+        "up decon"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "specimen",
+      "names": [
+        "specimen room",
+        "specimen"
+      ],
+      "aliases": [
+        "spec",
+        "specimens",
+        "speci",
+        "specimin",
+        "specs"
+      ],
+      "maps": [
+        "polus"
+      ]
+    },
+    {
+      "id": "laboratory",
+      "names": [
+        "laboratory"
+      ],
+      "aliases": [
+        "lab",
+        "labs",
+        "labratory",
+        "laboratoy"
+      ],
+      "maps": [
+        "mira",
+        "polus",
+        "fungle"
+      ]
+    },
+    {
+      "id": "launchpad",
+      "names": [
+        "launchpad",
+        "launch pad"
+      ],
+      "aliases": [
+        "launch",
+        "lp",
+        "rocket",
+        "launch pad",
+        "pad"
+      ],
+      "maps": [
+        "mira"
+      ],
+      "_verified": false,
+      "_note": "Mira ids guessed; matched by name when the map file uses another id."
+    },
+    {
+      "id": "lockerRoom",
+      "names": [
+        "locker room"
+      ],
+      "aliases": [
+        "locker",
+        "lockers",
+        "locker room",
+        "lr"
+      ],
+      "maps": [
+        "mira"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "decontamination",
+      "names": [
+        "decontamination"
+      ],
+      "aliases": [
+        "decon",
+        "decontam"
+      ],
+      "maps": [
+        "mira"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "greenhouse",
+      "names": [
+        "greenhouse"
+      ],
+      "aliases": [
+        "green house",
+        "gh",
+        "garden",
+        "plants"
+      ],
+      "maps": [
+        "mira",
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "balcony",
+      "names": [
+        "balcony"
+      ],
+      "aliases": [
+        "balc",
+        "balcany",
+        "balcon"
+      ],
+      "maps": [
+        "mira"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "hallway",
+      "names": [
+        "hallway"
+      ],
+      "aliases": [
+        "hall",
+        "hallways",
+        "crossroads",
+        "middle",
+        "cross"
+      ],
+      "maps": [
+        "mira"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "cockpit",
+      "names": [
+        "cockpit"
+      ],
+      "aliases": [
+        "cock pit",
+        "cokpit",
+        "cock"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false,
+      "_note": "Airship ids guessed; matched by name when the map file uses another id."
+    },
+    {
+      "id": "armory",
+      "names": [
+        "armory"
+      ],
+      "aliases": [
+        "armoury",
+        "armor",
+        "arm"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "viewingDeck",
+      "names": [
+        "viewing deck"
+      ],
+      "aliases": [
+        "viewing",
+        "deck",
+        "vd",
+        "view deck"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "engineRoom",
+      "names": [
+        "engine room",
+        "engine"
+      ],
+      "aliases": [
+        "engine",
+        "engines",
+        "eng",
+        "engine room"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "kitchen",
+      "names": [
+        "kitchen"
+      ],
+      "aliases": [
+        "kitch",
+        "kitchn"
+      ],
+      "maps": [
+        "airship",
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "mainHall",
+      "names": [
+        "main hall"
+      ],
+      "aliases": [
+        "main",
+        "main hall",
+        "hall"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "brig",
+      "names": [
+        "brig"
+      ],
+      "aliases": [
+        "jail",
+        "prison"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "vault",
+      "names": [
+        "vault"
+      ],
+      "aliases": [
+        "valt",
+        "safe room"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "gapRoom",
+      "names": [
+        "gap room"
+      ],
+      "aliases": [
+        "gap",
+        "gap room",
+        "platform"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "meetingRoom",
+      "names": [
+        "meeting room"
+      ],
+      "aliases": [
+        "meeting",
+        "meeting room",
+        "button"
+      ],
+      "maps": [
+        "airship",
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "medical",
+      "names": [
+        "medical"
+      ],
+      "aliases": [
+        "med",
+        "medbay",
+        "medic",
+        "vitals"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "records",
+      "names": [
+        "records"
+      ],
+      "aliases": [
+        "record",
+        "rec",
+        "recs"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "lounge",
+      "names": [
+        "lounge"
+      ],
+      "aliases": [
+        "lounge room",
+        "toilet",
+        "toilets",
+        "bathroom"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "showers",
+      "names": [
+        "showers"
+      ],
+      "aliases": [
+        "shower"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "cargoBay",
+      "names": [
+        "cargo bay"
+      ],
+      "aliases": [
+        "cargo",
+        "cargo bay"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "ventilation",
+      "names": [
+        "ventilation"
+      ],
+      "aliases": [
+        "ventilation room",
+        "vent room"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "beach",
+      "names": [
+        "beach"
+      ],
+      "aliases": [
+        "beech"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false,
+      "_note": "Fungle ids guessed; matched by name when the map file uses another id."
+    },
+    {
+      "id": "splashZone",
+      "names": [
+        "splash zone"
+      ],
+      "aliases": [
+        "splash",
+        "splash zone"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "lookout",
+      "names": [
+        "lookout"
+      ],
+      "aliases": [
+        "look out",
+        "tower",
+        "binos"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "miningPit",
+      "names": [
+        "mining pit"
+      ],
+      "aliases": [
+        "mining",
+        "mines",
+        "mining pit"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "jungle",
+      "names": [
+        "jungle"
+      ],
+      "aliases": [
+        "jungel",
+        "forest"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "dock",
+      "names": [
+        "dock"
+      ],
+      "aliases": [
+        "docks",
+        "pier"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "campfire",
+      "names": [
+        "campfire"
+      ],
+      "aliases": [
+        "camp fire",
+        "camp"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "hallOfPortraits",
+      "names": [
+        "hall of portraits"
+      ],
+      "aliases": [
+        "portraits",
+        "portrait",
+        "portrait hall"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "outside",
+      "names": [
+        "outside"
+      ],
+      "aliases": [
+        "outside",
+        "out side"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "dormitory",
+      "names": [
+        "dormitory",
+        "dorm"
+      ],
+      "aliases": [
+        "dorm",
+        "dorms",
+        "bedroom"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "cliffs",
+      "names": [
+        "cliffs",
+        "cliff"
+      ],
+      "aliases": [
+        "cliff",
+        "cliffs"
+      ],
+      "maps": [
+        "fungle"
+      ],
+      "_verified": false
+    }
+  ],
+  "tasks": [
+    {
+      "id": "fixWiring",
+      "names": [
+        "fix wiring"
+      ],
+      "aliases": [
+        "wires",
+        "wire",
+        "wiring",
+        "wirez",
+        "wirse"
+      ]
+    },
+    {
+      "id": "swipeCard",
+      "names": [
+        "swipe card"
+      ],
+      "aliases": [
+        "card",
+        "swipe",
+        "card swipe",
+        "swipe card",
+        "swiping"
+      ]
+    },
+    {
+      "id": "downloadUpload",
+      "names": [
+        "download upload data"
+      ],
+      "aliases": [
+        "download",
+        "upload",
+        "data",
+        "dl",
+        "downloading",
+        "uploading"
+      ]
+    },
+    {
+      "id": "submitScan",
+      "names": [
+        "submit scan"
+      ],
+      "aliases": [
+        "scan",
+        "medscan",
+        "med scan",
+        "medbay scan",
+        "scanned",
+        "scanning",
+        "scan room"
+      ]
+    },
+    {
+      "id": "clearAsteroids",
+      "names": [
+        "clear asteroids"
+      ],
+      "aliases": [
+        "asteroids",
+        "asteroid",
+        "astroids",
+        "asteroyds",
+        "shooting"
+      ]
+    },
+    {
+      "id": "primeShields",
+      "names": [
+        "prime shields"
+      ],
+      "aliases": [
+        "shields",
+        "prime",
+        "prime shields"
+      ]
+    },
+    {
+      "id": "emptyGarbage",
+      "names": [
+        "empty garbage"
+      ],
+      "aliases": [
+        "garbage",
+        "trash",
+        "chute trash"
+      ]
+    },
+    {
+      "id": "emptyChute",
+      "names": [
+        "empty chute"
+      ],
+      "aliases": [
+        "chute"
+      ]
+    },
+    {
+      "id": "fuelEngines",
+      "names": [
+        "fuel engines"
+      ],
+      "aliases": [
+        "fuel",
+        "gas",
+        "fueling",
+        "refuel"
+      ]
+    },
+    {
+      "id": "alignEngine",
+      "names": [
+        "align engine output"
+      ],
+      "aliases": [
+        "align",
+        "engines",
+        "align engine"
+      ]
+    },
+    {
+      "id": "startReactor",
+      "names": [
+        "start reactor"
+      ],
+      "aliases": [
+        "reactor",
+        "simon",
+        "simon says",
+        "start reactor"
+      ]
+    },
+    {
+      "id": "unlockManifolds",
+      "names": [
+        "unlock manifolds"
+      ],
+      "aliases": [
+        "manifolds",
+        "manifold",
+        "numbers"
+      ]
+    },
+    {
+      "id": "inspectSample",
+      "names": [
+        "inspect sample"
+      ],
+      "aliases": [
+        "sample",
+        "samples",
+        "inspect"
+      ]
+    },
+    {
+      "id": "divertPower",
+      "names": [
+        "divert power"
+      ],
+      "aliases": [
+        "divert",
+        "power",
+        "divert power",
+        "accept power"
+      ]
+    },
+    {
+      "id": "chartCourse",
+      "names": [
+        "chart course"
+      ],
+      "aliases": [
+        "chart",
+        "course"
+      ]
+    },
+    {
+      "id": "stabilizeSteering",
+      "names": [
+        "stabilize steering"
+      ],
+      "aliases": [
+        "steering",
+        "stabilize"
+      ]
+    },
+    {
+      "id": "cleanO2Filter",
+      "names": [
+        "clean o2 filter"
+      ],
+      "aliases": [
+        "filter",
+        "o2 filter",
+        "clean filter",
+        "leaves"
+      ]
+    },
+    {
+      "id": "calibrateDistributor",
+      "names": [
+        "calibrate distributor"
+      ],
+      "aliases": [
+        "distributor",
+        "calibrate"
+      ]
+    },
+    {
+      "id": "cleanVent",
+      "names": [
+        "clean vent"
+      ],
+      "aliases": [
+        "clean vent",
+        "cleaning vent"
+      ]
+    },
+    {
+      "id": "insertKeys",
+      "names": [
+        "insert keys"
+      ],
+      "aliases": [
+        "keys",
+        "key"
+      ]
+    },
+    {
+      "id": "scanBoardingPass",
+      "names": [
+        "scan boarding pass"
+      ],
+      "aliases": [
+        "boarding pass",
+        "boarding",
+        "id card"
+      ]
+    },
+    {
+      "id": "rebootWifi",
+      "names": [
+        "reboot wifi"
+      ],
+      "aliases": [
+        "wifi",
+        "reboot"
+      ]
+    },
+    {
+      "id": "recordTemperature",
+      "names": [
+        "record temperature"
+      ],
+      "aliases": [
+        "temperature",
+        "temp"
+      ]
+    },
+    {
+      "id": "fixWeatherNode",
+      "names": [
+        "fix weather node"
+      ],
+      "aliases": [
+        "weather",
+        "node",
+        "weather node"
+      ]
+    },
+    {
+      "id": "openWaterways",
+      "names": [
+        "open waterways"
+      ],
+      "aliases": [
+        "waterways",
+        "valves",
+        "wheels"
+      ]
+    },
+    {
+      "id": "replaceWaterJug",
+      "names": [
+        "replace water jug"
+      ],
+      "aliases": [
+        "water jug",
+        "jug"
+      ]
+    },
+    {
+      "id": "monitorTree",
+      "names": [
+        "monitor tree"
+      ],
+      "aliases": [
+        "tree",
+        "oxygen tree"
+      ]
+    },
+    {
+      "id": "fillCanisters",
+      "names": [
+        "fill canisters"
+      ],
+      "aliases": [
+        "canisters",
+        "canister"
+      ]
+    },
+    {
+      "id": "storeArtifacts",
+      "names": [
+        "store artifacts"
+      ],
+      "aliases": [
+        "artifacts",
+        "artifact"
+      ]
+    },
+    {
+      "id": "repairDrill",
+      "names": [
+        "repair drill"
+      ],
+      "aliases": [
+        "drill"
+      ]
+    },
+    {
+      "id": "alignTelescope",
+      "names": [
+        "align telescope"
+      ],
+      "aliases": [
+        "telescope"
+      ]
+    },
+    {
+      "id": "buyBeverage",
+      "names": [
+        "buy beverage"
+      ],
+      "aliases": [
+        "drink",
+        "beverage",
+        "soda"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "waterPlants",
+      "names": [
+        "water plants"
+      ],
+      "aliases": [
+        "water plants",
+        "watering"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "sortSamples",
+      "names": [
+        "sort samples"
+      ],
+      "aliases": [
+        "sort"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "runDiagnostics",
+      "names": [
+        "run diagnostics"
+      ],
+      "aliases": [
+        "diagnostics",
+        "diagnostic"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "assembleArtifact",
+      "names": [
+        "assemble artifact"
+      ],
+      "aliases": [
+        "assemble",
+        "crystal"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "measureWeather",
+      "names": [
+        "measure weather"
+      ],
+      "aliases": [
+        "measure"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "resetBreakers",
+      "names": [
+        "reset breakers"
+      ],
+      "aliases": [
+        "breakers",
+        "breaker"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "polishRuby",
+      "names": [
+        "polish ruby"
+      ],
+      "aliases": [
+        "ruby",
+        "polish",
+        "gem"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "developPhotos",
+      "names": [
+        "develop photos"
+      ],
+      "aliases": [
+        "photos",
+        "photo"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "unlockSafe",
+      "names": [
+        "unlock safe"
+      ],
+      "aliases": [
+        "safe task",
+        "unlock safe"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "rewindTapes",
+      "names": [
+        "rewind tapes"
+      ],
+      "aliases": [
+        "tapes",
+        "rewind"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "makeBurger",
+      "names": [
+        "make burger"
+      ],
+      "aliases": [
+        "burger"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "sortRecords",
+      "names": [
+        "sort records"
+      ],
+      "aliases": [
+        "sort records",
+        "folders"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "pickUpTowels",
+      "names": [
+        "pick up towels"
+      ],
+      "aliases": [
+        "towels",
+        "towel"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "dressMannequin",
+      "names": [
+        "dress mannequin"
+      ],
+      "aliases": [
+        "mannequin",
+        "dress"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "enterIdCode",
+      "names": [
+        "enter id code"
+      ],
+      "aliases": [
+        "id code",
+        "code"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "catchFish",
+      "names": [
+        "catch fish"
+      ],
+      "aliases": [
+        "fish",
+        "fishing"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "collectShells",
+      "names": [
+        "collect shells"
+      ],
+      "aliases": [
+        "shells",
+        "seashells"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "mineOres",
+      "names": [
+        "mine ores"
+      ],
+      "aliases": [
+        "ores",
+        "ore",
+        "mining"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "roastMarshmallow",
+      "names": [
+        "roast marshmallow"
+      ],
+      "aliases": [
+        "marshmallow",
+        "roast"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "crankGenerator",
+      "names": [
+        "crank generator"
+      ],
+      "aliases": [
+        "crank",
+        "generator"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "liftWeights",
+      "names": [
+        "lift weights"
+      ],
+      "aliases": [
+        "weights",
+        "lifting"
+      ],
+      "_verified": false
+    }
+  ],
+  "words": {
+    "sus": [
+      "sus",
+      "suss",
+      "sussy",
+      "suspicious",
+      "suspish",
+      "sussing",
+      "suspect",
+      "suspecting",
+      "sussed",
+      "suspected",
+      "susp",
+      "imp",
+      "impo",
+      "impostor",
+      "imposter",
+      "impster",
+      "imposta",
+      "impastor",
+      "the imp",
+      "an imp",
+      "the impostor",
+      "the imposter",
+      "killer",
+      "the killer",
+      "sketchy",
+      "shady",
+      "weird",
+      "acting weird",
+      "acting sus",
+      "fishy",
+      "guilty",
+      "sussy baka",
+      "red flag",
+      "on my sus list",
+      "in my sus list",
+      "my sus list",
+      "sus list",
+      "sus af",
+      "so sus",
+      "hella sus",
+      "mad sus",
+      "very sus",
+      "super sus",
+      "sussy af"
+    ],
+    "vent": [
+      "vent",
+      "vented",
+      "venting",
+      "vents",
+      "vnt",
+      "vnted",
+      "ventd",
+      "venterd",
+      "went in vent",
+      "came out of vent",
+      "came out of a vent",
+      "jumped in vent",
+      "hopped in vent",
+      "popped out of vent",
+      "out of vent",
+      "in a vent",
+      "into vent",
+      "vent hopping"
+    ],
+    "kill": [
+      "kill",
+      "killed",
+      "killing",
+      "kills",
+      "kil",
+      "killd",
+      "kiled",
+      "murdered",
+      "murder",
+      "stabbed",
+      "stab",
+      "did it",
+      "dunnit",
+      "shot",
+      "snapped"
+    ],
+    "selfReport": [
+      "self report",
+      "self reported",
+      "self reporting",
+      "selfreport",
+      "selfreported",
+      "self rep",
+      "self repo",
+      "self reporter",
+      "sr",
+      "self",
+      "second report",
+      "2nd report",
+      "third report",
+      "3rd report",
+      "reported twice",
+      "reports twice",
+      "double report"
+    ],
+    "followed": [
+      "followed",
+      "following",
+      "follow",
+      "follows",
+      "chased",
+      "chasing",
+      "chase",
+      "stalking",
+      "stalked",
+      "tailing",
+      "tailed",
+      "was behind me",
+      "behind me",
+      "on my tail",
+      "following me",
+      "followed me",
+      "chased me",
+      "chasing me"
+    ],
+    "fake": [
+      "faked",
+      "faking",
+      "fake",
+      "fake tasking",
+      "fake task",
+      "fake tasked",
+      "faker",
+      "fake tasks",
+      "fakeing",
+      "didnt do task",
+      "no task bar"
+    ],
+    "lying": [
+      "lying",
+      "lied",
+      "liar",
+      "lie",
+      "lies",
+      "cap",
+      "capping",
+      "making it up",
+      "lyin",
+      "lyer"
+    ],
+    "stack": [
+      "stack",
+      "stacked",
+      "stacking",
+      "in the stack",
+      "in stack"
+    ],
+    "clear": [
+      "clear",
+      "clr",
+      "cleared",
+      "safe",
+      "sfe",
+      "innocent",
+      "inno",
+      "crew",
+      "crewmate",
+      "crewmates",
+      "cm",
+      "trusted",
+      "trust",
+      "legit",
+      "fine",
+      "proven",
+      "confirmed crew",
+      "hard clear",
+      "hardclear",
+      "hard cleared",
+      "cleared by",
+      "a crewmate",
+      "vouch",
+      "vouched",
+      "i vouch",
+      "vouching"
+    ],
+    "scan": [
+      "scan",
+      "scanned",
+      "scanning",
+      "medscan",
+      "med scan",
+      "did scan",
+      "scaned"
+    ],
+    "visual": [
+      "visual",
+      "visuals",
+      "vis",
+      "visual task",
+      "did visual",
+      "visually"
+    ],
+    "see": [
+      "saw",
+      "seen",
+      "see",
+      "watched",
+      "watch",
+      "spotted",
+      "spot",
+      "noticed",
+      "caught",
+      "witnessed",
+      "sees",
+      "seeing",
+      "i see",
+      "sawed"
+    ],
+    "do": [
+      "did",
+      "do",
+      "doing",
+      "done",
+      "does",
+      "finished",
+      "finish",
+      "completed",
+      "complete",
+      "was doing",
+      "doin",
+      "finishing"
+    ],
+    "taskWord": [
+      "task",
+      "tasks",
+      "tasking",
+      "my task",
+      "my tasks"
+    ],
+    "vote": [
+      "vote",
+      "voting",
+      "votes",
+      "vot",
+      "voted",
+      "vote out",
+      "eject",
+      "ejecting",
+      "kick",
+      "kick out",
+      "boot",
+      "toss",
+      "yeet",
+      "throw out",
+      "get rid of",
+      "vote off",
+      "lets vote",
+      "everyone vote",
+      "vote for",
+      "voting for",
+      "im voting",
+      "i vote"
+    ],
+    "out": [
+      "out",
+      "gone"
+    ],
+    "skip": [
+      "skip",
+      "skp",
+      "skipping",
+      "skipped",
+      "skiping",
+      "skip vote",
+      "sk1p"
+    ],
+    "with": [
+      "with",
+      "w",
+      "wit",
+      "wth",
+      "wif",
+      "along with"
+    ],
+    "together": [
+      "together",
+      "with each other",
+      "w each other",
+      "toghether",
+      "togehter",
+      "as a pair",
+      "paired"
+    ],
+    "be": [
+      "was",
+      "is",
+      "were",
+      "am",
+      "been",
+      "are",
+      "r",
+      "wuz",
+      "waz",
+      "ws",
+      "iz",
+      "s",
+      "be",
+      "being",
+      "stayed",
+      "staying",
+      "stay",
+      "was at",
+      "has been",
+      "have been"
+    ],
+    "move": [
+      "went",
+      "going",
+      "go",
+      "goes",
+      "came",
+      "come",
+      "coming",
+      "ran",
+      "run",
+      "running",
+      "walked",
+      "walking",
+      "walk",
+      "headed",
+      "heading",
+      "left",
+      "leaving",
+      "leave",
+      "entered",
+      "entering",
+      "came out",
+      "coming out",
+      "on my way",
+      "passed",
+      "passing",
+      "moved",
+      "moving",
+      "camping",
+      "camped"
+    ],
+    "body": [
+      "body",
+      "bod",
+      "bdy",
+      "bodie",
+      "corpse",
+      "dead body",
+      "the body",
+      "bodies",
+      "a body",
+      "boddy"
+    ],
+    "dead": [
+      "dead",
+      "died",
+      "ded",
+      "got killed",
+      "was killed",
+      "is dead",
+      "die",
+      "got stabbed",
+      "was stabbed",
+      "got murdered"
+    ],
+    "its": [
+      "its",
+      "it s",
+      "is it",
+      "it is",
+      "it was",
+      "itz",
+      "its def",
+      "has to be",
+      "gotta be",
+      "must be"
+    ],
+    "so": [
+      "so"
+    ],
+    "or": [
+      "or",
+      "either",
+      "or maybe",
+      "50 50",
+      "5050",
+      "one of",
+      "one of them"
+    ],
+    "and": [
+      "and",
+      "n",
+      "an",
+      "nd",
+      "&",
+      "+",
+      "plus",
+      "and also"
+    ],
+    "neg": [
+      "not",
+      "no",
+      "isnt",
+      "wasnt",
+      "aint",
+      "dont",
+      "didnt",
+      "doesnt",
+      "cant",
+      "never",
+      "werent",
+      "arent",
+      "isn",
+      "wasn",
+      "didn",
+      "nt",
+      "did not",
+      "was not",
+      "is not",
+      "do not",
+      "why me"
+    ],
+    "agree": [
+      "same",
+      "agreed",
+      "agree",
+      "facts",
+      "exactly",
+      "this",
+      "real",
+      "true",
+      "fr",
+      "ikr",
+      "yes",
+      "yep",
+      "yup"
+    ],
+    "bound": [
+      "but",
+      "then",
+      "because",
+      "bc",
+      "cuz",
+      "cause",
+      "coz",
+      "and then",
+      "after that",
+      "also",
+      "plus also",
+      "tho",
+      "though",
+      "while"
+    ],
+    "prepIn": [
+      "in",
+      "at",
+      "inside",
+      "into",
+      "on",
+      "in the",
+      "at the"
+    ],
+    "prepNear": [
+      "near",
+      "by",
+      "next to",
+      "around",
+      "close to",
+      "beside",
+      "over",
+      "standing on",
+      "on top of",
+      "nearby"
+    ],
+    "prepFrom": [
+      "from",
+      "out of",
+      "outta",
+      "out from",
+      "away from",
+      "fromm"
+    ],
+    "prepTo": [
+      "to",
+      "towards",
+      "toward",
+      "twd",
+      "into the",
+      "to the"
+    ],
+    "self": [
+      "i",
+      "me",
+      "my",
+      "myself",
+      "mine",
+      "ive",
+      "id",
+      "ill"
+    ],
+    "selfBe": [
+      "im",
+      "i m",
+      "i am",
+      "iam",
+      "i was",
+      "i were",
+      "ima",
+      "i been",
+      "i have been",
+      "i went"
+    ],
+    "you": [
+      "u",
+      "you",
+      "ur",
+      "youre",
+      "ya",
+      "urself",
+      "yourself",
+      "your",
+      "yours",
+      "you re",
+      "yu"
+    ],
+    "pronSingular": [
+      "him",
+      "he",
+      "she",
+      "her",
+      "hes",
+      "shes",
+      "that guy",
+      "this guy",
+      "that one",
+      "that dude",
+      "this dude",
+      "dude",
+      "he s",
+      "she s",
+      "they themselves"
+    ],
+    "pronPlural": [
+      "them",
+      "they",
+      "theyre",
+      "both",
+      "those two",
+      "the two",
+      "both of them",
+      "them two",
+      "em",
+      "dem",
+      "thm",
+      "they re",
+      "those",
+      "both are",
+      "these two"
+    ],
+    "report": [
+      "reported",
+      "report",
+      "reporting",
+      "found",
+      "i found",
+      "i reported",
+      "found it"
+    ],
+    "filler": [
+      "the",
+      "a",
+      "an",
+      "of",
+      "like",
+      "just",
+      "literally",
+      "um",
+      "uh",
+      "it",
+      "that",
+      "this one",
+      "too",
+      "also",
+      "all",
+      "like the",
+      "lol",
+      "lmao",
+      "xd",
+      "bruh",
+      "ok",
+      "okay",
+      "yeah",
+      "guys",
+      "pls",
+      "plz",
+      "please",
+      "ngl",
+      "tbh",
+      "bro",
+      "dude bro",
+      "honestly",
+      "rn",
+      "now",
+      "yo",
+      "oh",
+      "hey",
+      "well",
+      "list",
+      "whole",
+      "whole time",
+      "the whole time",
+      "entire time",
+      "all round",
+      "all game",
+      "the entire time",
+      "time",
+      "there",
+      "here",
+      "room",
+      "area",
+      "way",
+      "again",
+      "only",
+      "even",
+      "just now",
+      "earlier",
+      "before",
+      "after",
+      "barely",
+      "got",
+      "away",
+      "straight",
+      "clearly",
+      "no cap",
+      "on god",
+      "ong",
+      "stfu",
+      "shut up",
+      "dc",
+      "hacker"
+    ]
+  },
+  "hedges": {
+    "kinda": 0.6,
+    "kind of": 0.6,
+    "sorta": 0.6,
+    "sort of": 0.6,
+    "maybe": 0.6,
+    "mayb": 0.6,
+    "mabye": 0.6,
+    "maybee": 0.6,
+    "possibly": 0.6,
+    "could be": 0.6,
+    "prob": 0.8,
+    "probably": 0.8,
+    "prolly": 0.8,
+    "probs": 0.8,
+    "i think": 0.8,
+    "think": 0.85,
+    "thinking": 0.85,
+    "i guess": 0.7,
+    "guess": 0.75,
+    "might": 0.7,
+    "might be": 0.7,
+    "lowkey": 0.75,
+    "low key": 0.75,
+    "lil": 0.7,
+    "little": 0.7,
+    "a little": 0.7,
+    "a bit": 0.7,
+    "bit": 0.75,
+    "slightly": 0.7,
+    "imo": 0.85,
+    "idk": 0.6,
+    "not sure": 0.5,
+    "ish": 0.7,
+    "i feel": 0.8,
+    "feel like": 0.8,
+    "seems": 0.8,
+    "seem": 0.8,
+    "kinda sorta": 0.5,
+    "unsure": 0.5,
+    "perhaps": 0.6
+  },
+  "intensifiers": {
+    "100": 0.3,
+    "1000": 0.35,
+    "hard": 0.3,
+    "100%": 0.35,
+    "100 percent": 0.35,
+    "def": 0.25,
+    "deff": 0.25,
+    "defo": 0.25,
+    "definitely": 0.25,
+    "definately": 0.25,
+    "defintely": 0.25,
+    "deffo": 0.25,
+    "confirmed": 0.3,
+    "conf": 0.25,
+    "really": 0.1,
+    "very": 0.15,
+    "super": 0.15,
+    "for sure": 0.25,
+    "fs": 0.2,
+    "sure": 0.15,
+    "obviously": 0.2,
+    "obv": 0.2,
+    "i swear": 0.2,
+    "istg": 0.2,
+    "fr fr": 0.15,
+    "with my own eyes": 0.3,
+    "own eyes": 0.3,
+    "actually": 0.1,
+    "totally": 0.2,
+    "1000%": 0.4,
+    "absolutely": 0.25,
+    "100 sure": 0.35,
+    "no doubt": 0.25,
+    "fully": 0.15,
+    "!": 0.05,
+    "no cap": 0.2,
+    "on god": 0.2,
+    "ong": 0.2,
+    "af": 0.15
+  },
+  "questions": {
+    "where": [
+      "where",
+      "wher",
+      "whre",
+      "wya",
+      "where were you",
+      "where were u",
+      "where u",
+      "where r u",
+      "where was",
+      "location",
+      "loc",
+      "locs",
+      "locations",
+      "wer",
+      "wherre",
+      "whereabouts",
+      "where were",
+      "were where",
+      "wh",
+      "where body",
+      "body where",
+      "where was the body"
+    ],
+    "who": [
+      "who",
+      "whom",
+      "whos",
+      "who is it",
+      "who was it",
+      "who sus",
+      "whos sus",
+      "hoo",
+      "who did it",
+      "who is",
+      "who was",
+      "who reported",
+      "anyone sus",
+      "who reported",
+      "who called"
+    ],
+    "why": [
+      "why",
+      "wy",
+      "why tho",
+      "how come",
+      "whyy",
+      "y tho"
+    ],
+    "what": [
+      "what",
+      "wat",
+      "wut",
+      "wdym",
+      "whats",
+      "whatd",
+      "what happened",
+      "wha",
+      "wym"
+    ],
+    "proof": [
+      "proof",
+      "evidence",
+      "prove",
+      "prove it",
+      "any proof"
+    ],
+    "how": [
+      "how",
+      "hw",
+      "how do you know",
+      "how u know"
+    ]
+  },
+  "noise": [
+    "lol",
+    "lmao",
+    "lmfao",
+    "rofl",
+    "haha",
+    "hahaha",
+    "xd",
+    "xdd",
+    "gg",
+    "ggs",
+    "ggwp",
+    "wp",
+    "ez",
+    "ok",
+    "okay",
+    "okey",
+    "k",
+    "kk",
+    "hi",
+    "hello",
+    "hey",
+    "yo",
+    "sup",
+    "bruh",
+    "bro",
+    "wtf",
+    "omg",
+    "oh",
+    "ah",
+    "hm",
+    "hmm",
+    "hmmm",
+    "uh",
+    "um",
+    "yes",
+    "yeah",
+    "ya",
+    "yea",
+    "yep",
+    "yup",
+    "no",
+    "nope",
+    "nah",
+    "idc",
+    "dunno",
+    "thx",
+    "ty",
+    "gl",
+    "hf",
+    "glhf",
+    "pls",
+    "plz",
+    "please",
+    "wait",
+    "rip",
+    "f",
+    "ff",
+    "brb",
+    "afk",
+    "nice",
+    "good game",
+    "lets go",
+    "pog",
+    "smh",
+    "jk",
+    "same",
+    "true",
+    "fr",
+    "idk",
+    "ikr",
+    "bye",
+    "cya",
+    "lag",
+    "laggy",
+    "mb",
+    "my bad",
+    "sorry",
+    "sry",
+    "oof",
+    "wow",
+    "huh",
+    "ehh",
+    "eh",
+    "lmk",
+    "ig",
+    "gn",
+    "gm",
+    "lol no",
+    "dc",
+    "hacker",
+    "stfu",
+    "shut up",
+    "l",
+    "ww",
+    "gj",
+    "wb"
+  ]
+}

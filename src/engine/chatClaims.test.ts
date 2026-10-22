@@ -26,7 +26,7 @@ describe('chat → claims', () => {
   it('accusations with and without reasons, votes, defenses, clears', () => {
     expect(p('blue is sus')).toEqual([{ type: 'accusation', about: 'blue', reason: undefined }]);
     expect(p('i saw purple vent in nav')).toEqual([{ type: 'accusation', about: 'purple', reason: 'vent' }]);
-    expect(p('purple self reported')).toEqual([{ type: 'accusation', about: 'purple', reason: 'self reported' }]);
+    expect(p('purple self reported')).toEqual([{ type: 'accusation', about: 'purple', reason: 'self report' }]);
     expect(p('vote yellow', 'black')).toEqual([{ type: 'accusation', about: 'yellow', reason: undefined }]);
     expect(p('green is clear, scanned', 'yellow')).toEqual([{ type: 'clear', about: 'green' }]);
     expect(p('its not blue', 'yellow')).toEqual([{ type: 'defense', about: 'blue' }]);
