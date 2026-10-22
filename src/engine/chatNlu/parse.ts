@@ -296,7 +296,9 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
 
   // --- dead: "yellow is dead" ---------------------------------------------------------------
   if (has('dead')) {
-    if (freeOthers.length && !negLeft) emit({ kind: 'dead', about: freeOthers, polarity: 0, base: 0.6, conf: 0.85 });
+    // "is red dead?" asks; it must not mark red dead (the app acts on 'dead' readings)
+    if (freeOthers.length && !negLeft && !cl.qmark) emit({ kind: 'dead', about: freeOthers, polarity: 0, base: 0.6, conf: 0.85 });
+    else if (freeOthers.length && cl.qmark) emit({ kind: 'question', about: freeOthers, polarity: 0, question: 'what', base: 0.5, conf: 0.6 });
     return out;
   }
 

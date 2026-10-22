@@ -119,6 +119,8 @@ const CASES: [string, string, string[]][] = [
   ['blue vouch', 'white', ['clear:blue']],
   ['everyone vote black', 'white', ['voteCall:black']],
   ['i sus blue i barely see him', 'white', ['accuse:blue']],
+  ['is red dead?', 'white', ['question:red']],
+  ['red isnt dead', 'white', []],
 ];
 
 describe('chat NLU: single lines', () => {
