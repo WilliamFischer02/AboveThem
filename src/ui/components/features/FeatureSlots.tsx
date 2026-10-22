@@ -7,6 +7,7 @@
 import { useMatch } from '../../../state/store';
 import { KillClock } from './KillClock';
 import { KillWindowCard } from './KillWindowCard';
+import { MeetingMathCard } from './MeetingMathCard';
 import './shared';
 
 export function FeatureSlots() {
@@ -19,6 +20,7 @@ export function FeatureSlots() {
   return (
     <div className="feat">
       {(phase === 'round' || phase === 'roundStart') && !ghost && <KillClock />}
+      {meeting && <MeetingMathCard />}
       {meeting && <KillWindowCard />}
     </div>
   );
