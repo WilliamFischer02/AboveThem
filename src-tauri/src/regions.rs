@@ -82,6 +82,8 @@ pub struct Regions {
     /// Lobby button at the bottom centre: "WAITING FOR HOST" (guest) / "START" (host). Visible even when
     /// the room-code panel is closed, so it is the primary lobby marker.
     pub lobby_button: Rect,
+    /// "CAPACITY  N/MAX" value on the lobby panel (green "10/10"): the number of players in the room.
+    pub lobby_capacity: Rect,
 }
 
 impl Default for Regions {
@@ -110,6 +112,7 @@ impl Default for Regions {
             chat_counter:    Rect::new(1370, 750, 140, 50),
             action_buttons:  Rect::new(1380, 960, 540, 115),
             lobby_button:    Rect::new(700, 860, 520, 105),
+            lobby_capacity:  Rect::new(1760, 470, 130, 60), // the green value only; the icon to its left breaks OCR at 2x
         }
     }
 }
@@ -139,6 +142,7 @@ impl Regions {
             chat_counter: self.chat_counter.scaled(sx, sy),
             action_buttons: self.action_buttons.scaled(sx, sy),
             lobby_button: self.lobby_button.scaled(sx, sy),
+            lobby_capacity: self.lobby_capacity.scaled(sx, sy),
         }
     }
 
@@ -148,14 +152,14 @@ impl Regions {
             "chat_panel" => self.chat_panel, "chat_input" => self.chat_input, "lobby_settings" => self.lobby_settings,
             "lobby_code" => self.lobby_code, "map_name" => self.map_name, "vote_grid" => self.vote_grid,
             "meeting_header" => self.meeting_header, "eject_text" => self.eject_text, "voting_timer" => self.voting_timer, "sabotage_banner" => self.sabotage_banner,
-            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner, "settings_feed" => self.settings_feed, "chat_counter" => self.chat_counter, "action_buttons" => self.action_buttons, "lobby_button" => self.lobby_button,
+            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner, "settings_feed" => self.settings_feed, "chat_counter" => self.chat_counter, "action_buttons" => self.action_buttons, "lobby_button" => self.lobby_button, "lobby_capacity" => self.lobby_capacity,
             _ => return None,
         })
     }
 
     pub const NAMES: &'static [&'static str] = &[
         "task_list", "task_bar", "role_card", "chat_panel", "chat_input", "lobby_settings", "lobby_code", "map_name",
-        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner", "settings_feed", "chat_counter", "action_buttons", "lobby_button",
+        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner", "settings_feed", "chat_counter", "action_buttons", "lobby_button", "lobby_capacity",
     ];
 }
 

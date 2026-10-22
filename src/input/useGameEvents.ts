@@ -21,6 +21,7 @@ import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
 import { parseChatClaims, toClaims } from '../engine/chatClaims';
 import { matchGrid, rosterConfidence, norm, similarity, nameScore, type GridEntry, type RosterPlayer } from '../engine/rosterMatch';
+import { consolidate, NAME_MAX, type ConsolidatePlayer } from '../engine/rosterConsolidate';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
@@ -33,7 +34,8 @@ export interface WatcherStatus { running: boolean; phase: string | null; round: 
 
 /** UI words the lobby reader can mistake for names when a settings panel is open. */
 const NOT_NAMES = /^(roles?|role amounts?|crewmate roles?|impostor roles?|scientist|engineer|guardian angel|noisemaker|tracker|shapeshifter|phantom|detective|viper|% ?chance|chance|amount|cosmetics|host|back|close|apply|reset|general|chat|filters?|map|skeld|mira hq|polus|airship|fungle|waiting for host|starting in \d+)$/i;
-const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.test(n) && n.trim().length >= 2;
+/** A name the game could have accepted: 2–12 characters, no brackets (the host line reads "Name (Red)"), not a UI word. */
+const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.test(n) && n.trim().length >= 2 && n.trim().length <= NAME_MAX && !/[()]/.test(n);
 /** Lobby names must be seen in two consecutive reads before they become players. */
 const lobbySeen = new Map<string, number>();
 
@@ -180,6 +182,53 @@ export function useGameEvents() {
     };
     resetRosterRef.current = () => rollOver('Roster reset', false);
 
+    /** Vote-grid card count per meeting: trusted once two reads agree (a fading grid can be short). */
+    let gridCount = { meeting: -1, n: 0, seen: 0 };
+
+    /**
+     * Merge duplicate cards (OCR spellings, "(Black)", chat senders) into the better-evidenced card and
+     * drop the weakest cards until the roster fits what the screen says: vote-grid cards (exact) or the
+     * lobby CAPACITY counter (±1). Disconnected players are not on screen and are left alone.
+     */
+    const tidyRoster = (why: string, tolerance: number) => {
+      const st = useMatch.getState();
+      const m = st.match;
+      if (!m) return;
+      const refs = new Map<string, number>();
+      const bump = (id: unknown) => { if (typeof id === 'string') refs.set(id, (refs.get(id) ?? 0) + 1); };
+      for (const o of m.observations) { const r = o as unknown as Record<string, unknown>; bump(r.player); bump(r.victim); bump(r.killer); bump(r.reporter); }
+      for (const c of m.claims) { bump(c.by); bump(c.about); }
+      for (const v of m.votes) { bump(v.voter); bump(v.target); }
+      for (const c of m.chat) bump(c.sender);
+      const meeting = m.phase.meeting ?? 0;
+      const cps: ConsolidatePlayer[] = Object.values(m.players).filter(p => p.status !== 'disconnected').map(p => ({
+        id: p.id, name: p.name, color: p.color, status: p.status, isMe: p.isMe, slot: p.slot, slotMeeting: p.slotMeeting,
+        iconHash: st.iconHashes[p.id], colorLocked: p.colorLocked, roleLocked: p.roleLocked, refs: refs.get(p.id) ?? 0,
+      }));
+      const actions = consolidate(cps, { size: m.rosterSize ?? null, tolerance, meeting });
+      const merged: string[] = []; const dropped: string[] = [];
+      for (const a of actions) {
+        const live = useMatch.getState();
+        if (!live.match) return;
+        if (a.kind === 'merge') {
+          const from = live.match.players[a.from], into = live.match.players[a.into];
+          if (!from || !into) continue;
+          // Headshot / icon hash / body sample follow the survivor when it has none of its own.
+          if (!live.avatars[a.into] && live.avatars[a.from]) live.setAvatar(a.into, live.avatars[a.from]);
+          if (!live.iconHashes[a.into] && live.iconHashes[a.from]) live.setIconHash(a.into, live.iconHashes[a.from]);
+          if (!live.bodySamples[a.into] && live.bodySamples[a.from]) live.setBodySample(a.into, live.bodySamples[a.from]);
+          live.dispatch({ kind: 'mergePlayers', payload: { from: a.from, into: a.into, why: a.why } });
+          merged.push(`${from.name} → ${into.name}`);
+        } else {
+          const p = live.match.players[a.id];
+          if (!p || p.isMe) continue;
+          live.dispatch({ kind: 'removePlayer', payload: { id: a.id } });
+          dropped.push(p.name);
+        }
+      }
+      if (merged.length || dropped.length) useMatch.getState().showToast(`${why}: ${[merged.length ? `merged ${merged.join(', ')}` : '', dropped.length ? `dropped ${dropped.join(', ')}` : ''].filter(Boolean).join('; ')}`);
+    };
+
     const translateLine = async (id: string, text: string) => {
       if (looksEnglish(text)) return;
       const s = useMatch.getState();
@@ -214,6 +263,14 @@ export function useGameEvents() {
         useMatch.getState().showToast(`Lobby ${e.payload} detected`);
       }));
 
+      guard(await listen<{ current: number; max: number }>('game://capacity', e => {
+        const s = useMatch.getState();
+        const m = s.match;
+        if (!m || playedRounds(m)) return;   // the lobby counter only matters before the game starts
+        if (m.rosterSize !== e.payload.current || m.rosterSizeSource !== 'lobby') s.dispatch({ kind: 'rosterSize', payload: { size: e.payload.current, source: 'lobby' } });
+        tidyRoster('Lobby count', 1);
+      }));
+
       guard(await listen<string>('game://role', e => {
         role = e.payload === 'impostor' ? 'impostor' : 'crew';
         roleAt = Date.now();
@@ -231,10 +288,12 @@ export function useGameEvents() {
         // A grid read with several unreadable cells is occluded (chat panel, fade) — ignore it.
         if (source === 'grid' && entries.filter(x => x.name.startsWith('#')).length >= 3) return;
         // The grid fills without gaps: a lone card after a gap is UI text misread as a card.
+        let gridComplete = false;
         if (source === 'grid') {
           const sorted = [...entries].sort((a, b) => a.index - b.index);
           const keep: RosterEntry[] = [];
           for (const en of sorted) { if (en.index !== keep.length) break; keep.push(en); }
+          gridComplete = keep.length === sorted.length && keep.length >= 4;
           entries = keep;
           if (entries.length < 3) return;
         }
@@ -291,6 +350,8 @@ export function useGameEvents() {
             }
             if (!p) {
               const live = useMatch.getState().match!;
+              // The room is full per the CAPACITY counter: a new label is a misread, not a newcomer.
+              if (live.rosterSize && Object.values(live.players).filter(x => x.status !== 'disconnected').length >= live.rosterSize + 1) continue;
               const { players } = playersFromRoster([en], '');
               const np = { ...players[0], slot: undefined, slotMeeting: undefined };
               const id = live.players[np.id] || Object.values(live.players).some(x => x.color === np.color) ? `slot${en.index + 1}` : np.id;
@@ -300,6 +361,7 @@ export function useGameEvents() {
             // Lobby colour sampling is noisy: only fill a colour that is still the unknown fallback, never flip a set one.
             if (en.color !== 'unknown' && en.color !== p.color && (p.color === 'gray' || p.color === 'unknown') && !existing.some(x => x.color === en.color && x.id !== p.id)) s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
           }
+          tidyRoster('Lobby', 1);
           return;
         }
 
@@ -363,6 +425,17 @@ export function useGameEvents() {
           }
           // The card went grey / got the X: they died since the last meeting.
           if (en.dead && p.status === 'alive' && p.aliveLockMeeting !== meetingNow) { s.dispatch({ kind: 'player', payload: { id: p.id, status: 'dead' } }); if (!p.isMe) s.showToast(`${p.name} is dead (vote grid)`); }
+        }
+        // The grid is the roster size: every player in the game has a card. Trust a count once two reads
+        // agree (or it matches what we already know); a fading grid can come up short.
+        if (gridComplete) {
+          if (gridCount.meeting !== meetingNow) gridCount = { meeting: meetingNow, n: 0, seen: 0 };
+          if (gridCount.n === entries.length) gridCount.seen++; else gridCount = { meeting: meetingNow, n: entries.length, seen: 1 };
+          const live = useMatch.getState().match!;
+          if (gridCount.seen >= 2 || live.rosterSize === entries.length) {
+            if (live.rosterSize !== entries.length || live.rosterSizeSource !== 'grid') s.dispatch({ kind: 'rosterSize', payload: { size: entries.length, source: 'grid' } });
+            tidyRoster('Vote grid', 0);
+          }
         }
       }));
 
@@ -484,10 +557,11 @@ export function useGameEvents() {
           }
           const slotted = Object.values(m.players).filter(p => p.slot !== undefined).length;
           // Once the vote grid has established the roster, unknown chat senders are OCR misses, not new players.
-          if (sender === 'unknown' && slotted < 8 && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
+          const roomFor = !m.rosterSize || Object.values(m.players).filter(p => p.status !== 'disconnected').length < m.rosterSize + (m.rosterSizeSource === 'grid' ? 0 : 1);
+          if (sender === 'unknown' && slotted < 8 && roomFor && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
             // Chat bubbles are a roster source too: a new name with a readable icon becomes a player.
             const color = (COLOR_IDS as string[]).includes(msg.color) && !others.some(p => p.color === msg.color) ? (msg.color as PlayerColor) : 'gray';
-            const id = color !== 'gray' && !m.players[color] ? color : `chat${Object.keys(m.players).length + 1}`;
+            const id = color !== 'gray' && !m.players[color] ? color : `chat_${Date.now().toString(36)}`;
             s.dispatch({ kind: 'addPlayer', payload: { id, name: msg.sender, color, isMe: false, status: 'alive', knownRole: 'unknown' } });
             sender = id;
           }

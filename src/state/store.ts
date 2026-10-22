@@ -219,6 +219,8 @@ export function describe(e: MatchEvent): string {
     case 'me': return `me = ${e.payload.id}`;
     case 'addPlayer': return `player ${e.payload.name} joined`;
     case 'removePlayer': return `removed ${e.payload.id}`;
+    case 'mergePlayers': return `merged ${e.payload.from} into ${e.payload.into}`;
+    case 'rosterSize': return `${e.payload.size} players (${e.payload.source})`;
     case 'myTasks': return `my tasks: ${e.payload.map(t => t.name).join(', ')}`;
     case 'chatPatch': return `translation`;
   }

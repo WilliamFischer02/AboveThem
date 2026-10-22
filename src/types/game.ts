@@ -388,6 +388,9 @@ export interface MatchState {
   lobbyCode?: string;
   /** Set by hand in the UI: automatic reads must not change myRole for the rest of this match. */
   myRoleLocked?: boolean;
+  /** How many players the screen says there are: vote-grid cards (exact) or the lobby CAPACITY counter (±1). */
+  rosterSize?: number;
+  rosterSizeSource?: 'grid' | 'lobby' | 'manual';
   players: Record<PlayerId, Player>;
   phase: PhaseChange;
   observations: Observation[];

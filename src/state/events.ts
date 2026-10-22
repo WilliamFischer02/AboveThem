@@ -42,6 +42,10 @@ export type MatchEvent =
   | { kind: 'addPlayer'; wall: number; payload: Player }
   /** Drop a junk entry (OCR picked up a UI word as a name). */
   | { kind: 'removePlayer'; wall: number; payload: { id: PlayerId } }
+  /** Two cards are the same person: fold `from` into `into` (every observation / claim / vote / chat line follows). */
+  | { kind: 'mergePlayers'; wall: number; payload: { from: PlayerId; into: PlayerId; why?: string } }
+  /** How many players the screen says there are (vote grid = exact, lobby counter = ±1). */
+  | { kind: 'rosterSize'; wall: number; payload: { size: number; source: 'grid' | 'lobby' | 'manual' } }
   /** My task list, read from the top-left of the screen. */
   | { kind: 'myTasks'; wall: number; payload: MyTask[] }
   /** Translation / language detected for a chat line (arrives after the line itself). */
@@ -52,7 +56,7 @@ export type MatchEvent =
 export type EventKind = MatchEvent['kind'];
 
 /** `init` can't be undone; everything else can. */
-export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo' && e.kind !== 'chatPatch';
+export const isUndoable = (e: MatchEvent): boolean => e.kind !== 'init' && e.kind !== 'undo' && e.kind !== 'chatPatch' && e.kind !== 'mergePlayers' && e.kind !== 'rosterSize';
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -79,6 +83,25 @@ export function initState(p: InitPayload): MatchState {
     ledger: [],
   };
 }
+
+const PLAYER_KEYS = new Set(['player', 'killer', 'victim', 'reporter', 'sender', 'by', 'about', 'voter', 'target', 'calledBy', 'to', 'companion']);
+const PLAYER_LIST_KEYS = new Set(['withPlayers', 'present', 'fixers']);
+
+/** Replace every PlayerId-typed reference to `from` with `into` (deep; returns the same object when nothing changed). */
+export function repoint<T>(obj: T, from: PlayerId, into: PlayerId): T {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+  let changed = false;
+  for (const [k, v] of Object.entries(out)) {
+    if (PLAYER_KEYS.has(k) && v === from) { out[k] = into; changed = true; }
+    else if (PLAYER_LIST_KEYS.has(k) && Array.isArray(v) && v.includes(from)) { out[k] = v.map(x => (x === from ? into : x)); changed = true; }
+    else if (v && typeof v === 'object' && !Array.isArray(v)) { const r = repoint(v, from, into); if (r !== v) { out[k] = r; changed = true; } }
+  }
+  return changed ? (out as T) : obj;
+}
+
+const PLACEHOLDER = (n: string) => n.trim().length < 2 || /^(#\d+|slot\d+|you|unknown|\(.*\))$/i.test(n.trim());
+const KNOWN_COLOUR = (c: string) => c !== 'unknown' && c !== 'gray';
 
 function patchPlayer(m: MatchState, id: PlayerId, patch: Partial<Player>): MatchState {
   const cur = m.players[id];
@@ -137,6 +160,32 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       delete players[e.payload.id];
       return { ...m, players };
     }
+    case 'mergePlayers': {
+      const { from, into } = e.payload;
+      const a = m.players[from], b = m.players[into];
+      if (!a || !b || from === into) return m;
+      const now = m.phase.meeting ?? 0;
+      const merged: Player = {
+        ...b,
+        name: PLACEHOLDER(b.name) && !PLACEHOLDER(a.name) ? a.name : b.name,
+        color: KNOWN_COLOUR(b.color) || !KNOWN_COLOUR(a.color) ? b.color : a.color,
+        colorLocked: b.colorLocked || a.colorLocked,
+        roleLocked: b.roleLocked || a.roleLocked,
+        isMe: b.isMe || a.isMe,
+        isPartner: b.isPartner || a.isPartner,
+        knownRole: b.knownRole !== 'unknown' ? b.knownRole : a.knownRole,
+        // The survivor's status stands when the grid read it this meeting; otherwise the dead never come back.
+        status: b.status !== 'alive' || (b.slot !== undefined && b.slotMeeting === now) ? b.status : a.status,
+        slot: b.slot ?? a.slot,
+        slotMeeting: b.slot !== undefined ? b.slotMeeting : a.slotMeeting,
+        aliveLockMeeting: b.aliveLockMeeting ?? a.aliveLockMeeting,
+      };
+      const players = { ...m.players, [into]: merged };
+      delete players[from];
+      const rp = <T,>(x: T): T => repoint(x, from, into);
+      return { ...m, me: m.me === from ? into : m.me, players, observations: m.observations.map(rp), claims: m.claims.map(rp), votes: m.votes.map(rp), ejections: m.ejections.map(rp), chat: m.chat.map(rp), ledger: m.ledger.map(rp) };
+    }
+    case 'rosterSize': return { ...m, rosterSize: e.payload.size, rosterSizeSource: e.payload.source };
   }
 }
 

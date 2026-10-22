@@ -44,6 +44,7 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
     <section className="panel">
       <div className="row" style={{ marginBottom: 6 }}>
         <h3>Roster<ConfidenceDot /></h3>
+        {match.rosterSize ? <span className="muted small" title={`${match.rosterSize} players on screen (${match.rosterSizeSource === 'grid' ? 'vote grid' : 'lobby counter'})`}>{Object.values(match.players).filter(p => p.status !== 'disconnected').length}/{match.rosterSize}</span> : null}
         <button className="btn xs ghost right" title="Wrong people carried over: keep only me, refill from the lobby / next meeting" onClick={() => auto?.resetRoster()}>⟲ reset</button>
       </div>
       <div className="roster">

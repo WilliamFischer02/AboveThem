@@ -38,6 +38,7 @@ pub const EV_MAP: &str = "game://map";
 pub const EV_SETTINGS: &str = "game://settings";
 pub const EV_CHAT: &str = "game://chat";
 pub const EV_GAME_OVER: &str = "game://game_over";
+pub const EV_CAPACITY: &str = "game://capacity";
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct PhaseEvent { pub phase: String, pub round: u32, pub meeting: u32 }
@@ -134,7 +135,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons", "voting_timer", "chat_counter", "lobby_button"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons", "voting_timer", "chat_counter", "lobby_button", "lobby_capacity"];
 
 /// Nothing recognisable for this long (main menu, alt-tabbed, map open for ages) => treat as the lobby.
 const UNKNOWN_TO_LOBBY: Duration = Duration::from_secs(120);
@@ -169,6 +170,22 @@ pub fn parse_eject(text: &str) -> Option<EjectEvent> {
 }
 
 /// A 6-letter code, only when the panel title ("ROOM CODE") is in the same text.
+/// The lobby panel's CAPACITY value: "10/10", "9/15". OCR sometimes renders the slash as I, l or |.
+pub fn capacity_of(text: &str) -> Option<(u32, u32)> {
+    for line in text.lines() {
+        let t: String = line.chars().map(|c| if matches!(c, 'I' | 'l' | '|' | '\\') { '/' } else if matches!(c, 'O' | 'o') { '0' } else { c }).collect();
+        let Some(slash) = t.find('/') else { continue };
+        let left: String = t[..slash].trim_end().chars().rev().take_while(|c| c.is_ascii_digit()).collect::<Vec<_>>().into_iter().rev().collect();
+        let right: String = t[slash + 1..].chars().skip_while(|c| *c == ' ').take_while(|c| c.is_ascii_digit()).collect();
+        let (Ok(cur), Ok(max)) = (left.parse::<u32>(), right.parse::<u32>()) else { continue };
+        if (4..=15).contains(&max) && cur >= 1 && cur <= max { return Some((cur, max)); }
+    }
+    None
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct CapacityEvent { pub current: u32, pub max: u32 }
+
 pub fn lobby_code_of(text: &str) -> Option<String> {
     let up = text.to_uppercase();
     if !up.contains("CODE") { return None; }
@@ -218,6 +235,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut last_tasks = String::new();
     let mut last_banner = String::new();
     let mut last_map = String::new();
+    let mut last_capacity: Option<(u32, u32)> = None;
     let mut last_settings = String::new();
     let mut impostor_buttons_seen = false;
     let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
@@ -398,6 +416,16 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                     last_map = map.to_string();
                     let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
                     let _ = app.emit(EV_MAP, id);
+                }
+            }
+        }
+
+        // 6a''. Lobby CAPACITY "N/MAX": how many people are in the room (the roster size).
+        if in_lobby && !chat_open {
+            if let Some(cap) = capacity_of(&text("lobby_capacity")) {
+                if Some(cap) != last_capacity && stable("lobby_capacity", 1) {
+                    last_capacity = Some(cap);
+                    let _ = app.emit(EV_CAPACITY, CapacityEvent { current: cap.0, max: cap.1 });
                 }
             }
         }
@@ -585,6 +613,26 @@ mod tests {
         let f = load_fixture("round_cafeteria");
         let t = ocr_rect(&f, r.lobby_button, 2).to_uppercase();
         assert!(!(t.contains("WAITING") || t.contains("START")), "round frame must not look like the lobby: {t:?}");
+    }
+
+    #[test]
+    fn capacity_parse() {
+        assert_eq!(capacity_of("15/15"), Some((15, 15)));
+        assert_eq!(capacity_of("9I10"), Some((9, 10)));
+        assert_eq!(capacity_of("CAPACITY\n 7 / 15"), Some((7, 15)));
+        assert_eq!(capacity_of("0/100"), None, "chat counter");
+        assert_eq!(capacity_of("PING: 64 ms"), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn lobby_capacity_reads_on_both_lobby_fixtures() {
+        let r = Regions::default();
+        for (name, want) in [("lobby", (10, 10)), ("lobby_v2", (15, 15))] {
+            let f = load_fixture(name);
+            let t = ocr_rect(&f, r.lobby_capacity, 2);
+            assert_eq!(capacity_of(&t), Some(want), "{name}: {t:?}");
+        }
     }
 
     #[test]

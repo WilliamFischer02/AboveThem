@@ -87,3 +87,44 @@ describe('round clock', () => {
     expect(m.players.red.knownRole).toBe('unknown');
   });
 });
+
+describe('roster consolidation events', () => {
+  it('mergePlayers folds a duplicate card and re-points every reference to it', () => {
+    const log: MatchEvent[] = [
+      { kind: 'init', wall: 1000, payload: init },
+      { kind: 'addPlayer', wall: 1500, payload: { id: 'chat7', name: 'Reddd', color: 'gray', isMe: false, status: 'alive', knownRole: 'unknown' } },
+      { kind: 'observation', wall: 2000, payload: { id: 'o1', type: 'sighting', stamp: st(5), source: 'me', confidence: 0.9, player: 'chat7', room: 'admin', withPlayers: ['chat7', 'blue'] } },
+      { kind: 'claim', wall: 2500, payload: { id: 'c1', meeting: 0, stamp: st(60), by: 'chat7', type: 'location', room: 'admin', text: 'admin', about: 'chat7' } },
+      { kind: 'chat', wall: 2600, payload: { id: 'ch1', meeting: 0, stamp: st(61), sender: 'chat7', original: 'admin', source: 'ocr' } },
+      { kind: 'player', wall: 2700, payload: { id: 'chat7', status: 'dead' } },
+      { kind: 'mergePlayers', wall: 3000, payload: { from: 'chat7', into: 'red', why: 'name' } },
+    ];
+    const m = replay(log)!;
+    expect(m.players.chat7).toBeUndefined();
+    expect(m.players.red.name).toBe(fixture.players.red.name);
+    expect(m.players.red.status).toBe('dead');
+    expect(m.observations[0]).toMatchObject({ player: 'red', withPlayers: ['red', 'blue'] });
+    expect(m.claims[0]).toMatchObject({ by: 'red', about: 'red' });
+    expect(m.chat[0].sender).toBe('red');
+    // an undo removes the user's last action, never an automatic merge
+    const undone = effective([...log, { kind: 'undo', wall: 3100 }]);
+    expect(undone.some(e => e.kind === 'mergePlayers')).toBe(true);
+    expect(undone.some(e => e.kind === 'player')).toBe(false);
+  });
+
+  it('mergePlayers keeps the survivor alive when the grid read it alive this meeting, and names a placeholder', () => {
+    const log: MatchEvent[] = [
+      { kind: 'init', wall: 1000, payload: init },
+      { kind: 'addPlayer', wall: 1500, payload: { id: 'slot4', name: '#4', color: 'black', isMe: false, status: 'alive', knownRole: 'unknown', slot: 4, slotMeeting: 0 } },
+      { kind: 'addPlayer', wall: 1600, payload: { id: 'black', name: '(Black)', color: 'black', isMe: false, status: 'dead', knownRole: 'unknown' } },
+      { kind: 'addPlayer', wall: 1700, payload: { id: 'chat2', name: 'straykids', color: 'gray', isMe: false, status: 'alive', knownRole: 'unknown' } },
+      { kind: 'mergePlayers', wall: 3000, payload: { from: 'black', into: 'slot4' } },
+      { kind: 'mergePlayers', wall: 3100, payload: { from: 'chat2', into: 'slot4' } },
+      { kind: 'rosterSize', wall: 3200, payload: { size: 10, source: 'grid' } },
+    ];
+    const m = replay(log)!;
+    expect(m.players.slot4).toMatchObject({ name: 'straykids', color: 'black', status: 'alive', slot: 4 });
+    expect(m.rosterSize).toBe(10);
+    expect(m.rosterSizeSource).toBe('grid');
+  });
+});

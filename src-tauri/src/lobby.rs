@@ -27,6 +27,8 @@ fn looks_like_name(text: &str) -> bool {
     if !(2..=16).contains(&n) { return false; }
     let up = t.to_uppercase();
     if STOP.iter().any(|s| up.contains(s)) { return false; }
+    // The host line "HOST: Name (Red)": the game never allows brackets in a name.
+    if t.contains('(') || t.contains(')') { return false; }
     let alnum = t.chars().filter(|c| c.is_alphanumeric()).count();
     if alnum * 10 < n * 6 { return false; }
     // "set to 30.0s", "0/8", "1/100" style fragments
@@ -109,6 +111,8 @@ mod tests {
         assert!(!looks_like_name("PING: 65 ms"));
         assert!(!looks_like_name("0/8"));
         assert!(!looks_like_name("Kill Cooldown set to 30.0s"));
+        assert!(!looks_like_name("(Red)"), "host line colour suffix");
+        assert!(!looks_like_name("LJ (Banana)"));
     }
 
     #[cfg(windows)]

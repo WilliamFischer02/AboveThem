@@ -3,21 +3,29 @@
 > Update this file at the end of **every** session. Future-you (or the next
 > Claude Code session) reads this first.
 
-## State (2026-10-21, session 3, evening)
+## State (2026-10-22, session 4)
 
-Phases 0–3 core live. Session 3 fixed the things William listed from play: phases no
-longer snap back to the lobby, the vote grid is matched by identity (headshots stay with
-their player), role reads cannot be flipped by chat, marks persist on the cards, chat is
-a game-styled dock with live translation, and the UI lost its diagnostic clutter.
-Everything below was verified in William's live public lobbies (Skeld) from the NDJSON
-logs unless marked UNVERIFIED.
+Phases 0–3 core live. Session 3 fixed phase snapping, identity-matched headshots, role
+locks, persistent marks, the chat dock and translation. Session 4 (this one) attacked the
+roster bloat William reported (30–40 cards per game): the screen now sets the roster
+size (lobby CAPACITY counter, vote-grid card count) and a consolidation pass merges
+duplicate / junk cards into the best-evidenced one (ADR-022). Engine + OCR parts are
+unit/fixture-tested; the live behaviour across a full game is still to be confirmed from
+the NDJSON log (look for `rosterSize` and `mergePlayers` lines).
+
+### Launching
+`npm run tauri dev` from `C:\dev\AboveThem` (hot reload, auto-rebuild). A release build
+(`npm run tauri build`) produces `src-tauri\target\release\abovethem.exe` (standalone) and
+an installer under `src-tauri\target\release\bundle\`; see "Open questions" for whether
+the first release build succeeded.
 
 ### What runs automatically now (zero clicks)
 | Signal | Source | Event → effect |
 |---|---|---|
 | Game window | `capture.rs` (Windows Graphics Capture) | auto-start capture + watcher every 8 s |
 | Lobby code, map name, lobby settings | lobby panel + announcements | `game://lobby`, `game://map`, `game://settings` |
-| Lobby roster | floating names (`lobby.rs`) | match created in the lobby (2 consecutive sightings) |
+| Lobby roster | floating names (`lobby.rs`; the host line "Name (Red)" is dropped) | match created in the lobby (2 consecutive sightings); never above CAPACITY + 1 |
+| Roster size | lobby CAPACITY "9/15" (`lobby_capacity`, 2× OCR) in the lobby; vote-grid card count at meetings (two agreeing reads) | `game://capacity` → `rosterSize {size, source}`; then `tidyRoster` merges duplicates (`src/engine/rosterConsolidate.ts`, `mergePlayers` re-points all evidence) and drops the weakest cards over the size (±1 in the lobby, exact at a meeting) |
 | Phase | task bar **or** REPORT/KILL/SABOTAGE/VENT = round (USE is in the lobby too); header **or** voting timer = meeting (sticky under chat); eject text; "WAITING FOR HOST" / "START" button **or** room code = lobby (sticky under chat); VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
 | Role | CREWMATE/IMPOSTOR word, or teal/red letters on the black role screen; KILL/SABOTAGE buttons; red floating names; "Fake Tasks:" header (round only) | `game://role`; user toggle locks it (`myRoleLocked`) |
 | Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, colours (voted), dead (X **or** greyed plain card), headshots, **icon dHash**, dim ratio |
@@ -56,8 +64,13 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
 2. Chat dock expanded view not visually checked yet (only the collapsed state was seen live).
 3. Translation only exercised on English lines (detected `en`, no change); a non-English
    lobby will show the first real translations — watch for the endpoint rate-limiting.
-4. Many lobby-created players show grey/"(Black)" until the grid colour-votes settle;
-   consider taking the chat-icon colour on the first read when the card colour is a placeholder.
+4. **Consolidation is new and unwatched live.** Check the newest NDJSON after a game:
+   `rosterSize` should appear in the lobby (source lobby) and at the first meeting (source
+   grid, = card count); `mergePlayers` lines should name OCR variants (why: "name …"),
+   never two people who were on the same grid. If a real player got merged or dropped,
+   the fix is in `sameIdentity` / `playerQuality`, not in the event wiring. The roster
+   header shows `cards/size`.
+   Many lobby-created players still show grey until the grid colour-votes settle.
 5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
    now resume from `avatars_<id>.json`).
 6. Signal helper (ghost image role) and sabotage banner: still no frames.
@@ -70,10 +83,14 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
 windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless
-on the primary monitor; app on the left monitor. Tests: Vitest 53, Rust 28 (OCR against the
+on the primary monitor; app on the left monitor. Tests: Vitest 64, Rust 31 (OCR against the
 20 real frames in `src-tauri/fixtures/`).
 
 ## Open questions for William
+- Did the roster stay at the lobby size through a whole game? Which merges (toast text
+  "merged X → Y") were wrong, if any?
+- Did `npm run tauri build` finish (release exe / installer)? If NSIS download failed, the
+  standalone `target\release\abovethem.exe` is still usable.
 - Stay on the victory/defeat screen a few seconds once so a frame can be captured.
 - Does the copy button paste cleanly into the game chat? (Clipboard via WebView2.)
 - Is the collapsed chat dock the right height (168 px) for the thin window?

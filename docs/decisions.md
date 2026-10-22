@@ -220,3 +220,22 @@ meeting. A quick English-word heuristic keeps most lines local. DeepL / Libre re
 selectable in settings.json (`translate.provider`, `deeplKey`, `libreEndpoint`).
 **Consequences:** the endpoint may change without notice; the UI degrades to the
 original text.
+
+## ADR-022 — The screen sets the roster size; duplicates fold into the best-evidenced card
+**Date:** 2026-10-22 (session 4)
+**Status:** accepted (engine unit-tested; fixture-tested OCR; live behaviour to confirm)
+**Why:** rosters grew to 30–40 cards: every OCR variant of a name ("BigBihgis"), the host
+line's colour suffix ("(Red)"), chat sentences read as senders and UI words all became
+players. Two facts on screen bound the real number: the lobby panel's CAPACITY value
+("9/15", read from `lobby_capacity`, ±1 while people join and leave) and the vote-grid
+card count (exact, trusted once two reads of a meeting agree). `MatchState.rosterSize`
+holds it; `src/engine/rosterConsolidate.ts` ranks cards by evidence (me > on this
+meeting's grid > headshot hash > user-touched > plausible name > referenced by
+observations), merges cards that are the same person (name ≥ 0.6, headshot ≤ 10 bits,
+name fragment, colour placeholder of a named card; never two cards that shared a grid)
+and drops the weakest until the roster fits. `mergePlayers` re-points every observation,
+claim, vote, chat line and ejection to the survivor so no evidence is lost; it is not
+undoable (automatic). Names longer than the game's 12-character cap are junk by
+construction.
+**Consequences:** a wrong merge is recoverable only through Rescan / Reset roster;
+removals still consume an undo slot (`removePlayer` is shared with the user path).
