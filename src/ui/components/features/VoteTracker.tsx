@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import type { PlayerId } from '../../../types/game';
 import { useMatch } from '../../../state/store';
-import { voteMatrix, votedMeetings, meetingVotes, bandwagons, votingPairs, makeVote, type Target } from '../../../engine/features/voteAnalysis';
+import { voteMatrix, votedMeetings, meetingVotes, meetingVoters, bandwagons, votingPairs, makeVote, type Target } from '../../../engine/features/voteAnalysis';
 import { pname } from '../../../engine/features/util';
 import { swatch } from '../../palette';
 
@@ -21,7 +21,9 @@ export function VoteTracker({ open }: { open?: boolean }) {
   if (m.settings.anonymousVotes) {
     return <div className="feat-card feat-sub">🗳 Votes are anonymous in this lobby — only counts are visible, so there is nothing to attribute.</div>;
   }
-  const alive = Object.values(m.players).filter(p => p.status === 'alive');
+  // Alive + this meeting's ejectee (the ejection event usually lands while you are still reading the results).
+  const voters = new Set(meetingVoters(m, meeting));
+  const alive = Object.values(m.players).filter(p => voters.has(p.id));
   const voted = meetingVotes(m, meeting);
   const tap = (voter: PlayerId) => { if (target) dispatch({ kind: 'vote', payload: makeVote(m, meeting, voter, target) }); };
   const label = (t: Target) => (t === 'skip' ? 'Skip' : t === 'none' ? '—' : pname(m, t));

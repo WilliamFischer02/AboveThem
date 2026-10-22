@@ -93,3 +93,22 @@ automatically after the merge.
 ## Next ideas
 - Two-bodies-within-cooldown ⇒ two killers (`double_kill_gap`) once vitals give death times.
 - Per-reason weights learned from post-match role reveals (Phase 5).
+
+## Round 2 (after chat-nlu merged)
+- `chatNluTypes.ts` is now a re-export of chat-nlu's game.ts types. `nlu_integration.test.ts` runs (no longer skipped).
+- **Real-log replay** (`__fixtures__/replayLogs.test.ts`): 77 logs, 3,448 events, `scoreAll` after every one. No throws,
+  no NaN, probabilities in [0, 1], refs everywhere.
+  - Speed: the worst warm call was 213 ms. Cause: every trend snapshot re-parsed its chat (chat-nlu caches by array identity),
+    and the snapshot cache key included names, which OCR rewrites constantly.
+  - Fix: one per-meeting parse cache on my side; snapshots reuse the full state's reading; the key drops names.
+    Worst warm call is now ~38 ms, all of it chat-nlu re-parsing the *current* meeting after a new line or a roster rename
+    (62 lines ≈ 25–40 ms). **For chat-nlu:** an incremental per-line parse would get this under 5 ms.
+  - Nonsense found and fixed: "said nothing while others talked" fired 221 times, and "nobody vouches for them" fired for
+    most of the lobby. OCR misses lines and users log little, so both now need the player to stand out (silence ≤ ⅓ of the
+    lobby, unaccounted ≤ ½).
+  - **Not mine, for bugs-rust / roster:** duplicate cards in real games ("cherry e" ×2, "iesusgoat" ×2 in 07-57-38). They split
+    evidence, and chat gets attributed to the duplicate (the known killer's twin "vouched" for someone).
+- **Stale with-me:** in a 1-impostor lobby the kill-window clear is hard ONLY when the user turned the toggle off after the
+  window and was alive. A toggle still on at the report gives soft −3, labelled "(toggle still on)". `KillClear.openEnded` is new.
+- **Dedupe:** any Claim whose `chatLineId` is a line chat-nlu read (even as a question / superseded) is skipped; hand-typed
+  claims still count. Tested with the real parser.

@@ -35,7 +35,8 @@ export function buildSnapshot(m: MatchState, clock: ClockState, log: MatchEvent[
   const byColor = new Map(Object.values(m.players).map(p => [p.color, p]));
   const name = (id: string) => m.players[id]?.name ?? id;
   const room = (id: string) => m.map.rooms.find(r => r.id === id)?.name ?? id;
-  const scores = scoreAll(m);
+  let scores: ReturnType<typeof scoreAll> = [];
+  try { scores = scoreAll(m); } catch { /* fail soft: the overlay keeps the clock + legend */ }
   const hl = headline(m, scores);
   const recent = effective(log).filter(e => e.kind === 'observation').slice(-3).reverse().map(e => {
     const st = e.kind === 'observation' ? e.payload.stamp : null;

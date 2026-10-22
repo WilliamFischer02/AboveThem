@@ -33,13 +33,17 @@ export function topEvidence(score: SuspectScore | undefined, n = 6): EvidenceIte
   return [...score.evidence].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, n);
 }
 
+/** One glyph per evidence category ('social' = what other players said about them, from chat). */
+export const CATEGORY_ICON: Record<string, string> = { hard: '❗', manual: '✋', movement: '👣', task: '🔧', meeting: '🗳', sabotage: '⚡', structural: '🧩', social: '💬' };
+
 const fmtW = (w: number) => (w >= 99 ? '∞' : w <= -99 ? '−∞' : (w > 0 ? '+' : '') + w.toFixed(1));
 
 export function SusMeter({ score, hasEvidence }: { score?: SuspectScore; hasEvidence: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const v = score?.verdict;
-  const p = score?.probability ?? 0;
+  const raw = score?.probability ?? 0;
+  const p = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0; // NaN / out-of-range must not render "NaN%"
   const trend = trendOf(score);
   let cls = '', label: string, fill: number, color: string;
   if (v === 'certainImpostor') { cls = 'imp'; label = '🔪 IMPOSTOR'; fill = 1; color = '#d8232a'; }
@@ -68,7 +72,7 @@ export function SusMeter({ score, hasEvidence }: { score?: SuspectScore; hasEvid
             {items.map(e => (
               <li key={e.id} className={e.weight > 0 ? 'pos' : 'neg'}>
                 <span className="w">{fmtW(e.weight)}</span>
-                <span className="l">{e.label}{e.shaky ? <span className="muted"> (unverified map)</span> : null}</span>
+                <span className="l"><span className="cat" title={e.category}>{CATEGORY_ICON[e.category] ?? '·'}</span> {e.label}{e.shaky ? <span className="muted"> (unverified map)</span> : null}</span>
               </li>
             ))}
           </ul>

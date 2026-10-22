@@ -91,16 +91,17 @@ const PLAYER_KEYS = new Set(['player', 'killer', 'victim', 'reporter', 'sender',
 const PLAYER_LIST_KEYS = new Set(['withPlayers', 'present', 'fixers', /* features: VitalsReadObs */ 'dead', 'alive', 'dc']);
 
 /** Replace every PlayerId-typed reference to `from` with `into` (deep; returns the same object when nothing changed). */
-export function repoint<T>(obj: T, from: PlayerId, into: PlayerId): T {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+export function repoint<T>(obj: T, from: PlayerId, into: PlayerId, depth = 0): T {
+  // Event payloads are JSON (no cycles), but a cyclic or absurdly deep object must not hang a merge.
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) || depth > 8) return obj;
   const out: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
   let changed = false;
   for (const [k, v] of Object.entries(out)) {
     if (PLAYER_KEYS.has(k) && v === from) { out[k] = into; changed = true; }
     else if (PLAYER_LIST_KEYS.has(k) && Array.isArray(v) && v.includes(from)) { out[k] = v.map(x => (x === from ? into : x)); changed = true; }
-    else if (v && typeof v === 'object' && !Array.isArray(v)) { const r = repoint(v, from, into); if (r !== v) { out[k] = r; changed = true; } }
+    else if (v && typeof v === 'object' && !Array.isArray(v)) { const r = repoint(v, from, into, depth + 1); if (r !== v) { out[k] = r; changed = true; } }
     // features: arrays of objects (DoorLogReadObs.entries[].player) follow merges too.
-    else if (Array.isArray(v) && v.some(x => x && typeof x === 'object')) { const arr = v.map(x => repoint(x, from, into)); if (arr.some((x, i) => x !== v[i])) { out[k] = arr; changed = true; } }
+    else if (Array.isArray(v) && v.some(x => x && typeof x === 'object')) { const arr = v.map(x => repoint(x, from, into, depth + 1)); if (arr.some((x, i) => x !== v[i])) { out[k] = arr; changed = true; } }
   }
   return changed ? (out as T) : obj;
 }

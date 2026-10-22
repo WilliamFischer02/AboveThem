@@ -51,7 +51,7 @@ export function CardMenu({ p, onClose }: { p: Player; onClose: () => void }) {
   const dispatch = useMatch(s => s.dispatch);
   const [mode, setMode] = useState<MenuMode>('main');
   const [alone, setAlone] = useState(false);
-  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
+  const here = myRoomNow(match) ?? 'unknown'; // never invent a room (was rooms[0]); 'unknown' fails soft in the engine
   const done = () => { setMode('main'); onClose(); };
   const others = Object.values(match.players).filter(o => o.id !== p.id && o.status === 'alive');
   const back = <button className="btn xs" onClick={() => setMode('main')}>← back</button>;

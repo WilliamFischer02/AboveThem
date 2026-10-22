@@ -48,34 +48,36 @@ export function GhostPanel() {
   const killObs = [...match.observations].reverse().find(o => o.type === 'sawKill' && o.victim === match.me);
   const killer: Player | undefined = killObs && killObs.type === 'sawKill' ? match.players[killObs.killer] : undefined;
   const alive = slotOrder(match).map(id => match.players[id]).filter(p => p.status === 'alive' && !p.isMe);
-  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
+  const here = myRoomNow(match) ?? 'unknown'; // never invent a room (was rooms[0]); 'unknown' fails soft in the engine
 
   return (
     <section className="panel ghost">
-      <div className="row" style={{ marginBottom: 6 }}>
-        <Crewmate color={me?.color ?? 'unknown'} size={40} state="dead" />
-        <h2 style={{ margin: 0 }}>You're dead.</h2>
-        <button className="btn sm primary right" onClick={notDead} title="The screen read was wrong: mark me alive">I'm not dead</button>
-
+      <div className="ghost-head">
+        <Crewmate color={me?.color ?? 'unknown'} size={30} state="dead" />
+        <div className="grow">
+          <div className="ghost-title">👻 You're a ghost</div>
+          <div className="muted small">Finish your tasks — that still wins it for the crew.</div>
+        </div>
+        <button className="btn xs ghost" onClick={notDead} title="The screen read was wrong: mark me alive">I'm alive</button>
       </div>
       {!killer ? (
         <>
-          <div className="muted small" style={{ marginBottom: 4 }}>Who killed you?</div>
-          <div className="roster">
+          <div className="menu-sec">Who killed you? (one tap — hard evidence)</div>
+          <div className="gone-strip pick">
             {alive.map(p => (
-              <div key={p.id} className="chip" onClick={() => observe({ type: 'sawKill', killer: p.id, victim: match.me, room: here }, `${p.name} killed you in ${roomName(match, here)}`)}>
-                <PlayerIcon id={p.id} color={p.color} size={40} />
-                <div className="name">{p.name}</div>
-              </div>
+              <button key={p.id} className="gone-chip big" onClick={() => observe({ type: 'sawKill', killer: p.id, victim: match.me, room: here }, `${p.name} killed you in ${roomName(match, here)}`)}>
+                <PlayerIcon id={p.id} color={p.color} size={30} />
+                <span className="n">{p.name}</span>
+              </button>
             ))}
           </div>
         </>
       ) : (
         <>
-          <div className="row" style={{ marginBottom: 8 }}>
+          <div className="ghost-killer">
             <span className="badge imp">KILLER</span>
-            <PlayerIcon id={killer.id} color={killer.color} size={44} />
-            <span className="name" style={{ fontSize: 20, fontWeight: 700 }}>{killer.name}</span>
+            <PlayerIcon id={killer.id} color={killer.color} size={36} />
+            <span className="nm">{killer.name}</span>
             <span className="muted small">{PALETTE[killer.color as keyof typeof PALETTE]?.label ?? killer.color}</span>
           </div>
           <SignalHelper killerColor={killer.color} />

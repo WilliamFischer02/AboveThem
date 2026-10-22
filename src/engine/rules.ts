@@ -126,6 +126,15 @@ function chatPlacedInRound(m: MatchState, round: number): Set<PlayerId> {
   return out;
 }
 
+/**
+ * Base-rate gate (found replaying real logs): when most of the lobby is "unaccounted", that says the user
+ * logged little, not that those players are sus. Only flag when it is a minority (≤ half of the alive others).
+ */
+function standsOut(m: MatchState, flagged: number): boolean {
+  const alive = Object.values(m.players).filter(p => !p.isMe && p.status === 'alive').length;
+  return flagged > 0 && flagged <= Math.max(1, Math.floor(alive / 2));
+}
+
 /** Alive, not me, and nothing at all logged about them in a round where someone died. */
 export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
@@ -143,10 +152,9 @@ export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
     for (const c of m.claims) if (c.stamp.round === round) { mentioned.add(c.by); if (c.about) mentioned.add(c.about); }
     for (const p of chatPlacedInRound(m, round)) mentioned.add(p);
     const bodyIds = bodies(m).filter(b => b.stamp.round === round).map(b => b.id);
-    for (const p of Object.values(m.players)) {
-      if (p.isMe || p.status !== 'alive' || mentioned.has(p.id)) continue;
-      out.push(ev(p.id, W.movement.unaccountedWholeRound, 'movement', `Nobody vouches for them in round ${round + 1}`, bodyIds));
-    }
+    const unmentioned = Object.values(m.players).filter(p => !p.isMe && p.status === 'alive' && !mentioned.has(p.id));
+    if (!standsOut(m, unmentioned.length)) continue;
+    for (const p of unmentioned) out.push(ev(p.id, W.movement.unaccountedWholeRound, 'movement', `Nobody vouches for them in round ${round + 1}`, bodyIds));
   }
   return out;
 }
@@ -187,8 +195,9 @@ export function ruleUnaccountedKillWindow(m: MatchState): EvidenceItem[] {
       if ((c.type === 'companion' || c.type === 'sighting') && c.about) placed.add(c.about);
     }
     const roundBodies = bodies(m).filter(x => x.stamp.round === b.stamp.round).map(x => x.id).join(',');
-    for (const p of Object.values(m.players)) {
-      if (p.isMe || p.status !== 'alive' || placed.has(p.id) || p.id === b.victim) continue;
+    const unplaced = Object.values(m.players).filter(p => !p.isMe && p.status === 'alive' && !placed.has(p.id) && p.id !== b.victim);
+    if (!standsOut(m, unplaced.length)) continue;
+    for (const p of unplaced) {
       if (wholeRound.has(`${p.id}|${roundBodies}`)) continue;
       const e = ev(p.id, W.movement.unaccountedKillWindow, 'movement', `Nobody places them during the ${roomName(m, b.room)} kill window (${fmt(w0)}–${fmt(w1)})`, [b.id]);
       e.round = b.stamp.round;

@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../state/store';
 import { isTauri, persist } from '../state/persist';
 import { loadSettings, DEFAULT_APP_SETTINGS, type AppSettings } from '../state/settings';
-import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
+import { loadPresets, DEFAULT_SETTINGS, type LobbyPreset } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
 import { parseChatClaims, toClaims } from '../engine/chatClaims';
@@ -25,7 +25,7 @@ import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type Consolidate
 import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
-import { translationRequest, senderByIconColor, captureVerdict, watcherStalled, type ChatPayload, type CaptureSnap } from './eventHelpers';
+import { translationRequest, senderByIconColor, captureVerdict, watcherStalled, autoMatchSettings, type ChatPayload, type CaptureSnap } from './eventHelpers';
 import { inferMapFromLabels, mapIdFromText } from '../engine/map';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
@@ -149,6 +149,9 @@ export function useGameEvents() {
     persist.readJson<NameBook>('names.json').then(b => { if (b && b.version === 1) bookRef.current = prune(b, Date.now()); }).catch(() => {});
   }, []);
   useEffect(() => { lobbyRef.current = lobbyCode; }, [lobbyCode]);
+  /** Saved setup-screen presets (special roles can't be read from the screen); reloaded per room code. */
+  const presetsRef = useRef<Record<string, LobbyPreset>>({});
+  useEffect(() => { loadPresets().then(p => { presetsRef.current = p; }).catch(() => {}); }, [lobbyCode]);
   /** Latest settings for the event wiring (typing your name must not re-register every listener). */
   const settingsRef = useRef<AppSettings | null>(null);
   settingsRef.current = settings;
@@ -438,7 +441,8 @@ export function useGameEvents() {
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
           // Fail soft: a detected map is used even without room data (room rules stand down); never silently Skeld.
           const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : baseSettings.map;
-          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyRef.current ?? undefined });
+          presetsRef.current = presets;
+          s.newMatch({ settings: autoMatchSettings(baseSettings, pendingSettings, mapId, presets, code), map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyRef.current ?? undefined });
           if (!fromLobby) {
             for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
             useMatch.getState().setPhase('meetingDiscussion', { reason: bannerReason ?? 'body' });
@@ -595,7 +599,7 @@ export function useGameEvents() {
           if (creating || !resumeDone.current) return;
           creating = true;
           const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : DEFAULT_SETTINGS.map;
-          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyRef.current ?? undefined,
+          s.newMatch({ settings: autoMatchSettings(DEFAULT_SETTINGS, pendingSettings, mapId, presetsRef.current, lobbyRef.current), map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyRef.current ?? undefined,
             players: [{ id: 'me', name: settingsRef.current?.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
           creating = false;
           useMatch.getState().showToast('Game in progress detected — roster fills at the next meeting');

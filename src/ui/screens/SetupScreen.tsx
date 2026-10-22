@@ -115,6 +115,7 @@ export function SetupScreen() {
             <label className="field">long<input className="input" type="number" min={0} max={3} style={{ width: 50 }} value={settings.longTasks} onChange={e => set('longTasks', +e.target.value)} /></label>
             <label className="field">short<input className="input" type="number" min={0} max={5} style={{ width: 50 }} value={settings.shortTasks} onChange={e => set('shortTasks', +e.target.value)} /></label>
           </div>
+          <RolesRow settings={settings} onChange={setSettings} />
           <div className="row" style={{ marginTop: 8 }}>
             <button className="btn sm" disabled={!code.trim()} onClick={async () => { await savePreset({ code, savedAt: Date.now(), settings, players, me }); setPresets(await loadPresets()); }}>Save preset for {code ? normalizeCode(code) : 'code'}</button>
             {Object.values(presets).sort((a, b) => b.savedAt - a.savedAt).slice(0, 8).map(p => (
@@ -194,6 +195,35 @@ export function SetupScreen() {
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+
+// MERGE: suspicion-core adds `LobbySettings.roles?: { engineer?, shapeshifter?, scientist?, guardianAngel?, tracker?, noisemaker?, phantom? }`.
+// Until it is on this branch the field is read/written through a local type; once merged, drop the casts.
+type RoleKey = 'engineer' | 'shapeshifter' | 'scientist' | 'guardianAngel' | 'tracker' | 'noisemaker' | 'phantom';
+type WithRoles = LobbySettings & { roles?: Partial<Record<RoleKey, boolean>> };
+const ROLES: { k: RoleKey; label: string; hint: string }[] = [
+  { k: 'engineer', label: '🔧 Engineer', hint: 'Crew can vent: a seen vent is no longer proof' },
+  { k: 'scientist', label: '🧪 Scientist', hint: 'Portable vitals' },
+  { k: 'tracker', label: '📡 Tracker', hint: 'Can track one player on the map' },
+  { k: 'noisemaker', label: '📣 Noisemaker', hint: 'Their death alerts everyone' },
+  { k: 'guardianAngel', label: '😇 Angel', hint: 'Ghost can shield a living player' },
+  { k: 'shapeshifter', label: '🎭 Shapeshifter', hint: 'Impostor can look like someone else: a seen kill’s identity is shaky' },
+  { k: 'phantom', label: '👻 Phantom', hint: 'Impostor can turn invisible' },
+];
+
+/** "Roles on" chips: all off by default; saved with the lobby preset (per lobby code) like the other settings. */
+function RolesRow({ settings, onChange }: { settings: LobbySettings; onChange: (s: LobbySettings) => void }) {
+  const roles = (settings as WithRoles).roles ?? {};
+  const toggle = (k: RoleKey) => onChange({ ...settings, roles: { ...roles, [k]: !roles[k] } } as WithRoles);
+  return (
+    <div className="roles-row">
+      <span className="muted small">Roles on:</span>
+      {ROLES.map(r => (
+        <button key={r.k} type="button" className={`role-chip ${roles[r.k] ? 'on' : ''}`} title={r.hint} aria-pressed={!!roles[r.k]} onClick={() => toggle(r.k)}>{r.label}</button>
+      ))}
     </div>
   );
 }

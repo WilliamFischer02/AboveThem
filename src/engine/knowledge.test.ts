@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { ruleLastSeenWithVictim } from './rules';
 import { ruleTaskClaims, ruleLocationClaims, ruleMonitorReads } from './contradictions';
-import { assertionsToEvidence, chatPlaced, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
+import { assertionsToEvidence, chatAssertions, chatPlaced, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
 import type { ChatAssertion, SpeakerProfile } from './chatNluTypes';
 import { ruleMutualAlibiPair, impostorPairs } from './pairs';
 import { killFeasibility, killWindow, travelLowerBound } from './feasibility';
@@ -172,6 +172,44 @@ describe('roles and per-map visuals change what a sighting proves', () => {
   });
 });
 
+describe('chat-nlu ↔ Claim dedupe (claim.chatLineId === assertion.line)', () => {
+  it('a line both parsed by the NLU and written as a Claim counts once', () => {
+    const line = { id: 'L1', meeting: 0, stamp: st(0, 60), sender: 'blue', original: 'purple sus', source: 'ocr' as const };
+    const claim: Claim = { id: 'c1', meeting: 0, stamp: st(0, 60), by: 'blue', type: 'accusation', about: 'purple', chatLineId: 'L1' };
+    const m: MatchState = { ...fixture3, chat: [line], claims: [claim] };
+    const about = chatAssertions(m).filter(a => a.about.includes('purple') && a.speaker === 'blue');
+    expect(about).toHaveLength(1);
+    expect(about[0].line).toBe('L1');
+    expect(about[0].id).not.toBe('c1'); // the NLU reading won, the Claim was skipped
+    // A claim typed by hand (no chat line) still counts.
+    const manual: MatchState = { ...m, claims: [{ ...claim, id: 'c2', chatLineId: undefined, about: 'white' }] };
+    expect(chatAssertions(manual).some(a => a.id === 'c2')).toBe(true);
+  });
+});
+
+describe('stale "with me" toggles (1-impostor lobby)', () => {
+  // fixture3: 1 impostor; Yellow's body in Storage at 0:55, window [0:10, 0:55].
+  const on: Observation = { id: 'on', type: 'withMe', stamp: st(0, 5), source: 'me', confidence: 0.95, player: 'purple', room: 'cafeteria', on: true };
+  const off: Observation = { id: 'off', type: 'withMe', stamp: st(0, 57), source: 'me', confidence: 0.95, player: 'purple', room: 'cafeteria', on: false };
+  const purple = (m: MatchState) => scoreAll(m).find(s => s.player === 'purple')!;
+  it('toggle explicitly turned off after the window → hard clear', () => {
+    const p = purple({ ...fixture3, observations: [...fixture3.observations, on, off] });
+    expect(p.verdict).toBe('certainCrew');
+    expect(p.evidence[0].refs).toEqual(expect.arrayContaining(['on', 'off']));
+  });
+  it('toggle still on at the report → soft −3, labelled', () => {
+    const p = purple({ ...fixture3, observations: [...fixture3.observations, on] });
+    expect(p.verdict).toBe('hardClear'); // cleared for the only kill, but not certain
+    const e = p.evidence.find(x => x.category === 'hard')!;
+    expect(e.weight).toBe(-3);
+    expect(e.label).toMatch(/\(toggle still on\)$/);
+  });
+  it('I was dead by then → soft even with the toggle closed', () => {
+    const m: MatchState = { ...fixture3, players: { ...fixture3.players, cyan: { ...fixture3.players.cyan, status: 'dead' } }, observations: [...fixture3.observations, on, off] };
+    expect(hardFacts(m).certainCrew.has('purple')).toBe(false);
+  });
+});
+
 describe('vitals_timing', () => {
   it('a vitals read with the victim still OK narrows the kill window, so a later companion clears', () => {
     const withMe: Observation = { id: 'wm', type: 'withMe', stamp: st(0, 35), source: 'me', confidence: 0.95, player: 'purple', room: 'cafeteria', on: true };
@@ -179,7 +217,8 @@ describe('vitals_timing', () => {
     const body = fixture3.observations.find(o => o.type === 'bodyFound') as BodyFoundObs; // Yellow, Storage, 0:55
     expect(scoreAll(before).find(s => s.player === 'purple')!.verdict).not.toBe('certainCrew');
     const vitals = { id: 'vit', type: 'vitalsRead', stamp: st(0, 40), source: 'me', confidence: 1, alive: ['yellow', 'purple'], dead: [] } as unknown as Observation;
-    const after: MatchState = { ...before, observations: [...before.observations, vitals] };
+    const left: Observation = { id: 'wm2', type: 'withMe', stamp: st(0, 58), source: 'me', confidence: 0.95, player: 'purple', room: 'cafeteria', on: false };
+    const after: MatchState = { ...before, observations: [...before.observations, vitals, left] };
     expect(killWindow(after, body)).toEqual([40, 55]);
     const p = scoreAll(after).find(s => s.player === 'purple')!;
     expect(p.verdict).toBe('certainCrew'); // 1-impostor lobby, with me through [0:40, 0:55]
