@@ -22,6 +22,7 @@ import { useAuto } from '../App';
 import { GhostPanel } from '../components/GhostPanel';
 import { ImpostorPanel } from '../components/ImpostorPanel';
 import { usePref } from '../prefs';
+import { useMedia, WIDE } from '../useMedia';
 import { FeatureSlots } from '../components/features/FeatureSlots'; // features
 
 function useNow(ms = 500) {
@@ -37,6 +38,7 @@ export function MatchScreen() {
   const ov = useOverlay(hk.pending);
   const auto = useAuto();
   const [focus, setFocus] = usePref<boolean>('focusMode', false);
+  const wide = useMedia(WIDE);
   useNow();
 
   // Fail soft: an engine exception must never blank the window. Manual logging keeps working.
@@ -110,10 +112,12 @@ export function MatchScreen() {
           {script && !impostor && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
           {script && impostor && !ghost && <details className="fold panel tight"><summary>What the crew engine sees (their likely vote)</summary><MeetingPanel script={script} scores={scores} ghost={true} /></details>}
           {script && manualPhases && <div className="row"><PhaseButtons inMeeting={inMeeting} /></div>}
+          {/* features (wide window): cards live in the right column so the roster column stays clean */}
+          {wide && <FeatureSlots />}
         </div>
         <div className="area-main">
           {!focus && <Tips />}
-          {/* features */}<FeatureSlots />
+          {/* features */}{!wide && <FeatureSlots compact />}
           <Roster scores={scores} />
         </div>
         {!focus && (
