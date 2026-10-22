@@ -597,3 +597,5 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 .tx-badge.gone { opacity: 0.5; text-decoration: line-through; }
 .bubble-row.unreadable .bubble { background: #c9ced6; color: #4f5560; border-style: dashed; }
 .chat-hint { margin-top: 2px; font-size: 11px; color: #a05a00; font-weight: 600; }
+.ov-watch { font-size: 15px; font-weight: 700; border-left: 6px solid #6b7382; }
+.ov-tone-warn { border-left-color: #f5b54b; } .ov-tone-danger { border-left-color: #d8232a; } .ov-tone-calm { border-left-color: #2d6a8c; } .ov-tone-info { border-left-color: #3fe0c0; }
