@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { scoreAll } from './suspicion';
-import { SIM_GAMES } from './__fixtures__/sim';
+import { SIM_GAMES, gameD } from './__fixtures__/sim';
+
+describe('carry-over (game D)', () => {
+  it('the round-1 red herring led then, the repeated pattern leads at the end', () => {
+    const g = gameD();
+    const s = Object.fromEntries(scoreAll(g.state).map(x => [x.player, x]));
+    expect(s.brown.trend![0].probability).toBeGreaterThan(s.lime.trend![0].probability); // after meeting 1, Brown looked worse
+    expect(s.lime.probability).toBeGreaterThan(s.brown.probability);                     // by meeting 4, Lime does
+    expect(s.lime.evidence.some(e => /separate rounds/.test(e.label))).toBe(true);
+    expect(s.brown.evidence.find(e => /Self-reported/.test(e.label))!.decay!).toBeLessThan(1);
+  });
+});
 
 describe('calibration harness (scripted games, answer key never shown to the engine)', () => {
   for (const make of SIM_GAMES) {

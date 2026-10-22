@@ -172,4 +172,43 @@ export function gameC(): SimGame {
   return { name: 'C: fake task + deflection', state: s.build({ meeting: 1, round: 1 }), truth: { impostors: ['purple'] } };
 }
 
-export const SIM_GAMES = [gameA, gameB, gameC];
+// ---------------------------------------------------------------------------
+// Game D — 1 impostor (Lime), 9 players, 4 rounds. Brown (crew) looks terrible in round 1
+// (self-report, two accusations); Lime is a little suspicious in three separate later rounds.
+// Carry-over must let the old, one-off case fade and the repeated pattern win.
+// ---------------------------------------------------------------------------
+export function gameD(): SimGame {
+  const s = new Sim('D', ['cyan', 'lime', 'brown', 'rose', 'banana', 'gray', 'maroon', 'coral', 'tan'], 'cyan', { killCooldownSec: 20 });
+  s.round(0)
+    .myRoom(2, 'cafeteria')
+    .body(40, 'tan', 'electrical', 'brown')
+    .claim(0, 'rose', 'accusation', { about: 'brown', text: 'brown self report [self report]' })
+    .claim(0, 'gray', 'accusation', { about: 'brown' })
+    .claim(0, 'brown', 'location', { room: 'storage' })
+    .vote(0, { rose: 'brown', gray: 'brown', brown: 'skip', lime: 'skip', banana: 'skip', maroon: 'skip', coral: 'skip', cyan: 'skip' })
+    .eject(0, null, null);
+  s.round(1)
+    .myRoom(2, 'admin')
+    .see(18, 'lime', 'storage', { heading: 'communications' })
+    .see(22, 'brown', 'admin', { with: ['banana'] })
+    .body(35, 'coral', 'communications', 'maroon', ['maroon', 'rose'])
+    .claim(1, 'lime', 'location', { room: 'shields' })
+    .vote(1, { lime: 'skip', brown: 'skip', rose: 'skip', banana: 'skip', gray: 'skip', maroon: 'skip', cyan: 'skip' })
+    .eject(1, null, null);
+  s.round(2)
+    .myRoom(2, 'weapons')
+    .see(25, 'lime', 'o2', { heading: 'navigation' })
+    .see(26, 'brown', 'cafeteria', { with: ['gray', 'rose'] })
+    .body(38, 'banana', 'navigation', 'gray', ['gray', 'rose'])
+    .claim(2, 'maroon', 'accusation', { about: 'lime', text: 'lime near nav [near body]' })
+    .vote(2, { maroon: 'lime', lime: 'maroon', brown: 'skip', rose: 'skip', gray: 'skip', cyan: 'skip' })
+    .eject(2, null, null);
+  s.round(3)
+    .myRoom(2, 'medbay')
+    .see(20, 'lime', 'upperEngine', { heading: 'reactor' })
+    .body(36, 'maroon', 'reactor', 'rose', ['rose', 'brown'])
+    .claim(3, 'rose', 'accusation', { about: 'lime' });
+  return { name: 'D: an early red herring fades, the repeated pattern wins', state: s.build({ meeting: 3, round: 3 }), truth: { impostors: ['lime'] } };
+}
+
+export const SIM_GAMES = [gameA, gameB, gameC, gameD];
