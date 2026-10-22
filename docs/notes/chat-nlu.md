@@ -90,3 +90,43 @@ See `scratchpad\relay\from-chat-nlu.md` for the full contract. In short:
 2. suspicion-core: weight = polarity × strength × confidence × credibility(`speakerProfiles`); use
    `voteCalls(...).lateJoiners` as a weak band-wagon signal.
 3. Use the NDJSON chat logs from real games as regression fixtures. Every misread becomes a CASES row.
+
+## Round 2: real chat (2026-10-22)
+I replayed all 77 NDJSON logs (`node scripts/chat-replay.mjs [dir] [--only-hits] [--json out.json]`) through the
+app's reducer and `parseMeetingChat`. The script reads the logs from `%APPDATA%` and commits no data.
+
+| | Lines with a non-noise assertion |
+|---|---|
+| Before the pass | 478 of 1062 (many of them false) |
+| After the pass | 392 of 1062 (293 with something beyond a question) |
+
+Most of the drop is false accusations removed. What I fixed, all general rules with tests:
+- **OCR re-reads:** the same bubble read twice, often with a name label glued on, now counts once. A
+  repeat counts as a re-read when it comes from the same sender, or when 12+ characters match. Short
+  repeats from different players ("skip", "vote red") still count.
+- **Name labels:** a line that is only player names is the OCR picking up a label and is ignored. A name
+  directly in front of another player mention is dropped.
+- **Grey placeholder:** a colour worn by more than two cards (the app's grey "colour unknown" placeholder,
+  or roster bloat) identifies nobody.
+- **Speaker groups:** the speaker is never merged into a group without "and" ("Red I saw", "wtf blue i
+  was in storage").
+- **Unknown or unresolved names** ("Batti is impostor", "sus of black" with no black on the roster) no
+  longer fall back to blaming the previous speaker.
+- **Kills:** the killer must be the player right before the verb ("Shortflux killed bobross" now names
+  nobody).
+- **Votes:** targets come after the verb ("tan vote" tells tan to vote).
+- **Questions:** a question word counts only at the start of a clause or before "?".
+- **Hypotheticals:** "if" / "unless" make the rest of the sentence say nothing; "but" ends that.
+- **Negation** is scoped to the verb it precedes.
+- **"X can clear me"** is read as the speaker's own alibi.
+- **"where body?"** answered with a room gives the body's location.
+- **Truncated last word:** a word cut off at the bubble edge matches a room by unique prefix ("admi").
+- **Hearsay:** "yellow said it was maroon" now produces a `ChatAssertion.hearsayFrom` field (additive in
+  game.ts). The claim is yellow's, `speaker` is only the reporter, and confidence is halved.
+- **Lexicon:** "40 sec" is seconds, not Security; "flower" / "talked" / "getting" no longer fuzzy-match
+  lower / stalked / venting (verbs now get one edit at most); added hc, stroids, "dont like", "no
+  suspect", "any sus", wheres, nan, and others.
+- **Fixtures:** 57 anonymised real lines are in chatNlu.test.ts (`REAL`).
+- **Speed:** each line's tags are cached on the ChatLine object, keyed by a roster/map signature. A
+  62-line meeting re-parse dropped from 14.5 ms to 0.6 ms (62 incremental parses: 438 ms to 56 ms). The
+  context pass still re-runs in full, so the results are identical.

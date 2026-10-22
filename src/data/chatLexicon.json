@@ -127,7 +127,29 @@
     "timed",
     "pinked",
     "cyans",
-    "sussed"
+    "sussed",
+    "comes",
+    "flower",
+    "flowers",
+    "slower",
+    "mower",
+    "lowered",
+    "talked",
+    "talking",
+    "talker",
+    "walked",
+    "waiting",
+    "baiting",
+    "banned",
+    "planned",
+    "vatted",
+    "killa",
+    "filler",
+    "stops",
+    "stores",
+    "cleaned",
+    "leaving",
+    "meaning"
   ],
   "colors": {
     "red": [
@@ -382,7 +404,8 @@
       "lightyellow",
       "cream",
       "банановый",
-      "pisang"
+      "pisang",
+      "nan"
     ],
     "gray": [
       "gray",
@@ -1419,7 +1442,9 @@
         "medbay scan",
         "scanned",
         "scanning",
-        "scan room"
+        "scan room",
+        "scannin",
+        "scaning"
       ]
     },
     {
@@ -1432,7 +1457,10 @@
         "asteroid",
         "astroids",
         "asteroyds",
-        "shooting"
+        "shooting",
+        "stroids",
+        "roids",
+        "astroid"
       ]
     },
     {
@@ -2193,7 +2221,6 @@
       "the killer",
       "sketchy",
       "shady",
-      "weird",
       "acting weird",
       "acting sus",
       "fishy",
@@ -2221,7 +2248,12 @@
       "сас",
       "curiga",
       "предатель",
-      "импостер"
+      "импостер",
+      "dont like",
+      "don t like",
+      "dont trust",
+      "sus of",
+      "sussing on"
     ],
     "vent": [
       "vent",
@@ -2270,8 +2302,6 @@
       "stab",
       "did it",
       "dunnit",
-      "shot",
-      "snapped",
       "mató",
       "mato",
       "matou",
@@ -2280,7 +2310,9 @@
       "pumatay",
       "pinatay",
       "bunuh",
-      "membunuh"
+      "membunuh",
+      "kille",
+      "killedd"
     ],
     "selfReport": [
       "self report",
@@ -2403,7 +2435,15 @@
       "чистый",
       "чистая",
       "aman",
-      "soft clear"
+      "soft clear",
+      "hc",
+      "hardc",
+      "h c",
+      "trustin",
+      "trusting",
+      "i trust",
+      "im trusting",
+      "trusted by"
     ],
     "scan": [
       "scan",
@@ -2412,7 +2452,10 @@
       "medscan",
       "med scan",
       "did scan",
-      "scaned"
+      "scaned",
+      "scannin",
+      "scaning",
+      "scannning"
     ],
     "visual": [
       "visual",
@@ -2624,7 +2667,6 @@
       "got killed",
       "was killed",
       "is dead",
-      "die",
       "got stabbed",
       "was stabbed",
       "got murdered",
@@ -2670,7 +2712,6 @@
     "and": [
       "and",
       "n",
-      "an",
       "nd",
       "&",
       "+",
@@ -2757,7 +2798,15 @@
       "over",
       "standing on",
       "on top of",
-      "nearby"
+      "nearby",
+      "infront",
+      "infront of",
+      "in front of",
+      "outside of",
+      "under",
+      "above",
+      "below",
+      "between"
     ],
     "prepFrom": [
       "from",
@@ -2833,7 +2882,6 @@
       "that one",
       "that dude",
       "this dude",
-      "dude",
       "he s",
       "she s",
       "they themselves",
@@ -2941,7 +2989,44 @@
       "stfu",
       "shut up",
       "dc",
-      "hacker"
+      "hacker",
+      "seconds",
+      "second ago",
+      "secs ago",
+      "ago",
+      "u guys",
+      "you guys",
+      "yall",
+      "y all",
+      "you all",
+      "ya ll",
+      "everyone",
+      "everybody",
+      "chat"
+    ],
+    "cond": [
+      "if",
+      "unless",
+      "ifs",
+      "there is no",
+      "theres no",
+      "there s no",
+      "no such",
+      "imagine",
+      "what if"
+    ],
+    "said": [
+      "said",
+      "says",
+      "saying",
+      "told me",
+      "told us",
+      "claimed",
+      "claims",
+      "sayin",
+      "tells me",
+      "is saying",
+      "was saying"
     ]
   },
   "hedges": {
@@ -2996,7 +3081,11 @@
     "siguro": 0.6,
     "baka": 0.6,
     "mungkin": 0.6,
-    "kayaknya": 0.7
+    "kayaknya": 0.7,
+    "thought": 0.8,
+    "i thought": 0.75,
+    "i believe": 0.8,
+    "believe": 0.85
   },
   "intensifiers": {
     "100": 0.3,
@@ -3078,7 +3167,14 @@
       "nasaan",
       "dimana",
       "di mana",
-      "where u at"
+      "where u at",
+      "wheres",
+      "where s",
+      "whered",
+      "wheres body",
+      "where s body",
+      "where is body",
+      "where is the body"
     ],
     "who": [
       "who",
@@ -3101,7 +3197,18 @@
       "quem",
       "кто",
       "sino",
-      "siapa"
+      "siapa",
+      "any sus",
+      "any suspect",
+      "any suspects",
+      "any suspicions",
+      "any1 sus",
+      "who we voting",
+      "who are we voting",
+      "anyone",
+      "any1",
+      "anybody",
+      "anyone else"
     ],
     "why": [
       "why",
@@ -3120,7 +3227,15 @@
       "whatd",
       "what happened",
       "wha",
-      "wym"
+      "wym",
+      "were you",
+      "were u",
+      "did you",
+      "did u",
+      "r u",
+      "are you",
+      "are u",
+      "r you"
     ],
     "proof": [
       "proof",
@@ -3252,7 +3367,36 @@
     "wkwkwk",
     "anjir",
     "pre",
-    "хз"
+    "хз",
+    "no suspect",
+    "no suspects",
+    "no sus",
+    "no idea",
+    "no clue",
+    "no info",
+    "not enough info",
+    "who knows",
+    "no way",
+    "its fine",
+    "its ok",
+    "its okay",
+    "all good",
+    "nvm",
+    "never mind",
+    "nevermind",
+    "thanks",
+    "thank you",
+    "start",
+    "startt",
+    "wsp",
+    "bet",
+    "fosho",
+    "frr",
+    "ong",
+    "no idea who",
+    "idk who",
+    "dunno who",
+    "not sure who"
   ],
   "expand": {
     "conmigo": [
@@ -3329,5 +3473,57 @@
         "pink"
       ]
     ]
-  }
+  },
+  "social": [
+    "bye",
+    "hi",
+    "hello",
+    "hey",
+    "rip",
+    "gg",
+    "ggs",
+    "ty",
+    "thx",
+    "thanks",
+    "sorry",
+    "sry",
+    "nice",
+    "wtf",
+    "ffs",
+    "love",
+    "ily",
+    "welcome",
+    "wb",
+    "gj",
+    "congrats",
+    "gl",
+    "yo",
+    "sup",
+    "cmon",
+    "bruh",
+    "bro",
+    "dude"
+  ],
+  "ambiguousAliases": [
+    "wht",
+    "ban",
+    "mar",
+    "yell",
+    "brow",
+    "pur",
+    "gra",
+    "nan",
+    "cy",
+    "lim",
+    "rd",
+    "org",
+    "oj",
+    "db",
+    "dg",
+    "lb",
+    "cream",
+    "neon",
+    "aqua",
+    "salmon"
+  ]
 }

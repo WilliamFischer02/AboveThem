@@ -41,11 +41,37 @@ const nameList = (m: MatchState, ids: PlayerId[]) => ids.map(id => m.players[id]
 /** Text the parser reads: the translation when there is one. */
 export const lineText = (l: ChatLine) => (l.translated && l.translated.trim() ? l.translated : l.original);
 
+/**
+ * Tagging is the expensive step and depends only on the text, the sender, the roster and the map,
+ * so each line's units are cached on the ChatLine object (cache entries carry a roster/map signature;
+ * a rename or colour change re-tags). The context pass always re-runs over the whole meeting.
+ * Cached units are never mutated downstream (splitClauses / interpretClause copy before merging).
+ */
+const tagCache = new WeakMap<ChatLine, { text: string; sender: PlayerId; sig: string; units: Unit[] }>();
+const sigCache = new WeakMap<object, string>();
+function rosterSig(m: MatchState): string {
+  const key = m.players as object;
+  const hit = sigCache.get(key);
+  const mapPart = `#${m.map.id}:${m.map.rooms?.length ?? 0}:${m.map.tasks?.length ?? 0}`;
+  if (hit) return hit + mapPart;
+  const s = Object.values(m.players).map(p => `${p.id}:${p.name}:${p.color}`).join('|');
+  sigCache.set(key, s);
+  return s + mapPart;
+}
+function cachedTag(l: ChatLine, text: string, m: MatchState, sig: string): Unit[] {
+  const c = tagCache.get(l);
+  if (c && c.text === text && c.sender === l.sender && c.sig === sig) return c.units;
+  const units = tagLine(text, m, l.sender);
+  tagCache.set(l, { text, sender: l.sender, sig, units });
+  return units;
+}
+
 export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
+  const sig = rosterSig(m);
   const st: LineState[] = lines.map(l => {
     const line = l as ChatLineX;
     const text = lineText(l);
-    const units = line.unreadable ? [] : tagLine(text, m, l.sender);
+    const units = line.unreadable ? [] : cachedTag(l, text, m, sig);
     return { line, text, units, clauses: [], drafts: [] };
   });
   const lastRefBySpeaker = new Map<PlayerId, { ids: PlayerId[]; li: number; lineId: string; bareKey?: string }>();
@@ -57,6 +83,19 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
     const L = S.line;
     const speaker = L.sender;
     if (L.unreadable || !S.units.length) continue;
+    // OCR re-read of an earlier bubble (often with a name label glued on: "liamnotkiTl Theres a cooldown")
+    const key = normKey(S.text);
+    // (same sender + same text, or 12+ characters of identical text from anyone: short "skip" / "where" repeats are real)
+    if (st.slice(Math.max(0, li - 10), li).some(o => {
+      const k = normKey(o.text);
+      if (!k) return false;
+      if (o.line.sender === speaker && (k === key || key.endsWith(' ' + k))) return true;
+      return k.length >= 12 && (k === key || key.endsWith(' ' + k));
+    })) continue;
+    // A line that is only player names is a name label the OCR picked up, not a message
+    if (S.units.every(u => (u.k === 'P' && u.byName) || u.k === 'PUNCT' || u.k === 'W' || u.k === 'noise' || u.k === 'filler') && S.units.some(u => u.k === 'P' && u.byName)) continue;
+    // "Raggedport yellow": a name label right before another player mention
+    if (S.units[0]?.k === 'P' && S.units[0].byName && S.units[1]?.k === 'P') S.units = S.units.slice(1);
 
     const prevOther = (() => { for (let j = li - 1; j >= Math.max(0, li - 3); j--) if (st[j].line.sender !== speaker) return j; return -1; })();
 
@@ -87,7 +126,7 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
     S.clauses.forEach((cl, ci) => {
       if (vocative.has(ci)) { sameLine = { ids: cl.units.flatMap(u => u.ids ?? []) }; return; }
       const ownPrev = lastRefBySpeaker.get(speaker);
-      const ownPrevOk = ownPrev && li - ownPrev.li <= 4;
+      const ownPrevOk = ownPrev && li - ownPrev.li <= 6;
       const otherRef = prevOther >= 0 ? st[prevOther].lastRef : undefined;
       const env: Env = {
         speaker, m, lineId: L.id,
@@ -127,7 +166,7 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
         if (L.xlatGuess) { kd.confidence *= 0.7; kd.why = [...kd.why, 'translation from a guessed language: confidence x0.7']; }
         S.drafts.push(kd);
         draftByKey.set(kd.key, { ...kd, li });
-        if (kd.kind === 'question' && !S.question) S.question = { q: kd.question!, withQ: cl.units.some(u => u.k === 'with'), about: kd.about };
+        if (kd.kind === 'question' && !S.question) S.question = { q: kd.question!, withQ: cl.units.some(u => u.k === 'with'), about: kd.about, body: /\bbod/.test(S.text.toLowerCase()) || undefined };
         // absorbed bare mentions (same speaker) disappear; their line becomes a ref
         for (const key of kd.absorbed ?? []) {
           const b = draftByKey.get(key);
@@ -172,8 +211,12 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
   const out: ChatAssertion[] = [];
   st.forEach(S => {
     let n = 0;
+    const seen = new Set<string>();
     for (const d of S.drafts) {
       if (d.removed) continue;
+      const dk = [d.kind, d.about.join('+'), d.room, d.reason, d.taskId].join('|');
+      if (seen.has(dk)) continue;
+      seen.add(dk);
       if (NEEDS_ABOUT.has(d.kind) && !d.about.length) continue;
       if (d.kind === 'selfReport' && d.about.includes(S.line.sender)) continue;
       const span: [number, number] = [Math.max(0, d.span[0]), Math.min(S.text.length, d.span[1])];
@@ -182,7 +225,7 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
         kind: d.kind, about: d.about, room: d.room, taskId: d.taskId, victim: d.victim, reason: d.reason,
         polarity: d.polarity, strength: round(d.strength), confidence: round(d.confidence), negated: d.negated,
         question: d.question, color: d.color, text: S.text, span, quote: S.text.slice(span[0], span[1]),
-        resolvedVia: d.resolvedVia, refs: [...new Set(d.refs)], why: d.why,
+        resolvedVia: d.resolvedVia, refs: [...new Set(d.refs)], why: d.why, hearsayFrom: d.hearsayFrom,
       });
     }
   });
@@ -194,6 +237,8 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
 }
 
 const round = (x: number) => Math.round(x * 100) / 100;
+/** Comparable form of a chat line for re-read detection. */
+const normKey = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 
 /** Within a meeting, a later assertion by the same speaker with the opposite polarity on a target supersedes the earlier one. */
 export function markSuperseded(list: ChatAssertion[]) {
