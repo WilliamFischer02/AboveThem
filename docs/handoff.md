@@ -16,8 +16,8 @@ the NDJSON log (look for `rosterSize` and `mergePlayers` lines).
 ### Launching
 `npm run tauri dev` from `C:\dev\AboveThem` (hot reload, auto-rebuild). A release build
 (`npm run tauri build`) produces `src-tauri\target\release\abovethem.exe` (standalone) and
-an installer under `src-tauri\target\release\bundle\`; see "Open questions" for whether
-the first release build succeeded.
+an installer at `src-tauri\target\release\bundle\msi\AboveThem_0.1.0_x64_en-US.msi`
+(built 2026-10-22, 2 min, WiX). The release exe runs on its own, no Vite server needed.
 
 ### What runs automatically now (zero clicks)
 | Signal | Source | Event → effect |
@@ -89,8 +89,6 @@ on the primary monitor; app on the left monitor. Tests: Vitest 64, Rust 31 (OCR 
 ## Open questions for William
 - Did the roster stay at the lobby size through a whole game? Which merges (toast text
   "merged X → Y") were wrong, if any?
-- Did `npm run tauri build` finish (release exe / installer)? If NSIS download failed, the
-  standalone `target\release\abovethem.exe` is still usable.
 - Stay on the victory/defeat screen a few seconds once so a frame can be captured.
 - Does the copy button paste cleanly into the game chat? (Clipboard via WebView2.)
 - Is the collapsed chat dock the right height (168 px) for the thin window?

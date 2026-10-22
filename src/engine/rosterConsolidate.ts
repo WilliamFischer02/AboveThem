@@ -86,9 +86,10 @@ export function sameIdentity(a: ConsolidatePlayer, b: ConsolidatePlayer): { same
   // A short OCR fragment of a longer name ("ymidland" / "Raymidland", "tamin m" / "vitamin D").
   const na = norm(a.name), nb = norm(b.name);
   if (na.length >= 4 && nb.length >= 4 && (nb.includes(na.slice(0, 4)) || na.includes(nb.slice(0, 4))) && similarity(na, nb) >= 0.45) return { same: true, why: `fragment ${a.name} ~ ${b.name}` };
-  // A nameless card ("(Black)", "#4") with the same known colour as a named card, never seen on the grid together.
-  const placeholderA = isPlaceholderName(a.name), placeholderB = isPlaceholderName(b.name);
-  if ((placeholderA || placeholderB) && a.color === b.color && a.color !== 'unknown' && a.color !== 'gray' && (a.slot === undefined || b.slot === undefined)) return { same: true, why: `colour ${a.color}` };
+  // Same known colour, never seen on the grid together: the same person when one card is nameless
+  // ("(Black)", "#4"), one name is OCR noise ("eobältfÖ*" for "Gobaltfox"), or the names half-agree.
+  const sameColour = a.color === b.color && a.color !== 'unknown' && a.color !== 'gray' && (a.slot === undefined || b.slot === undefined);
+  if (sameColour && (nameQuality(a.name) < 1 || nameQuality(b.name) < 1 || similarity(na, nb) >= 0.35)) return { same: true, why: `colour ${a.color}` };
   return { same: false, why: '' };
 }
 

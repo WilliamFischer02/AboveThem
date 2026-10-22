@@ -11,6 +11,7 @@ import type {
   LobbySettings, MapId, Player, PlayerId, Role, MyTask,
 } from '../types/game';
 import { MAPS } from '../data/maps';
+import { nameQuality } from '../engine/rosterConsolidate';
 
 export interface InitPayload {
   id: string;
@@ -100,7 +101,6 @@ export function repoint<T>(obj: T, from: PlayerId, into: PlayerId): T {
   return changed ? (out as T) : obj;
 }
 
-const PLACEHOLDER = (n: string) => n.trim().length < 2 || /^(#\d+|slot\d+|you|unknown|\(.*\))$/i.test(n.trim());
 const KNOWN_COLOUR = (c: string) => c !== 'unknown' && c !== 'gray';
 
 function patchPlayer(m: MatchState, id: PlayerId, patch: Partial<Player>): MatchState {
@@ -167,7 +167,7 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       const now = m.phase.meeting ?? 0;
       const merged: Player = {
         ...b,
-        name: PLACEHOLDER(b.name) && !PLACEHOLDER(a.name) ? a.name : b.name,
+        name: nameQuality(a.name) > nameQuality(b.name) ? a.name : b.name,   // the better-spelled name wins
         color: KNOWN_COLOUR(b.color) || !KNOWN_COLOUR(a.color) ? b.color : a.color,
         colorLocked: b.colorLocked || a.colorLocked,
         roleLocked: b.roleLocked || a.roleLocked,

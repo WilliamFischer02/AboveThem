@@ -32,6 +32,11 @@ describe('sameIdentity', () => {
     expect(sameIdentity(P('black', '(Black)', { color: 'black' }), P('slot9', 'straykids', { color: 'black', slot: 9, slotMeeting: 0 })).same).toBe(true);
     expect(sameIdentity(P('a', 'popz'), P('b', 'Kayleyy')).same).toBe(false);
   });
+  it('folds a garbled grid name into the chat card of the same colour (live 2026-10-22)', () => {
+    expect(sameIdentity(P('blue', 'Gobaltfox', { color: 'blue' }), P('slot4', 'eobältfÖ*', { color: 'blue', slot: 4, slotMeeting: 0 })).same).toBe(true);
+    // two clean, different names of the same colour are two people (a colour misread)
+    expect(sameIdentity(P('a', 'popz', { color: 'red' }), P('b', 'Kayleyy', { color: 'red', slot: 3, slotMeeting: 0 })).same).toBe(false);
+  });
 });
 
 describe('consolidate', () => {
