@@ -12,9 +12,10 @@
  * cover hallways (or Polus Outside); whether bodies show on admin is UNVERIFIED. Comms sabotage
  * turns every station off except Fungle's binoculars.
  */
-import type { AdminReadObs, MapId, MatchState, PlayerId, RoomId, SightingObs, VitalsReadObs, Claim } from '../../types/game';
+import type { AdminReadObs, MapId, MatchState, PlayerId, RoomId, SightingObs, VitalsReadObs, DoorLogReadObs, Observation, Claim } from '../../types/game';
 import { fmt } from '../evidence';
 import { pname, roomName, mapInfo } from './util';
+import { monitorContradiction, type MonitorRead, type MonitorClaim, type MonitorCheck } from '../mapChecks';
 
 export interface CamSpot { id: string; label: string; /** nearest real room id on the map (null = map has no such room yet) */ room: RoomId | null; match?: string }
 
@@ -134,6 +135,18 @@ export function securityFor(m: MatchState): SecurityInfo {
   };
 }
 
+/**
+ * Does the Admin map show this room? Research §1.8: no hallways, no Polus Outside. Our map data models
+ * those as rooms (MIRA `hallway`, Polus/Airship rooms aliased "Outside"), so they are excluded here.
+ * UNVERIFIED: Airship Hall of Portraits is treated as covered.
+ */
+export function adminCovers(m: MatchState, room: RoomId): boolean {
+  const r = m.map.rooms.find(x => x.id === room) as (MatchState['map']['rooms'][number] & { aliases?: string[] }) | undefined;
+  if (!r) return false;
+  if (/^outside/i.test(r.id) || r.aliases?.some(a => /outside/i.test(a))) return false;
+  return r.id !== 'hallway';
+}
+
 /** Rooms of the current map (empty for maps whose room data is still missing). */
 export const mapRooms = (m: MatchState) => m.map.rooms.map(r => r.id);
 export const isMapRoom = (m: MatchState, r: RoomId) => m.map.rooms.some(x => x.id === r);
@@ -196,6 +209,7 @@ export function adminChecks(m: MatchState): AdminCheck[] {
     const claims = m.claims.filter((c: Claim) => c.type === 'location' && c.room && c.stamp.round === round && (!c.about || c.about === c.by));
     const rooms = new Set<RoomId>([...Object.keys(r.counts), ...claims.map(c => c.room!)]);
     for (const room of rooms) {
+      if (!adminCovers(m, room)) continue; // admin is blind there: a claim cannot clash with it
       const shown = r.counts[room] ?? 0;
       const placed = new Set<PlayerId>();
       for (const o of m.observations) {
@@ -228,6 +242,91 @@ export function adminChecks(m: MatchState): AdminCheck[] {
       }
       if (verdict === 'ok') continue;
       out.push({ readId: r.id, round, t, room, shown, placed: [...placed], claimants: uniq, verdict, line, refs: [r.id, ...uniq.map(c => c.claimId)] });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Door log (MIRA) + adapters to the maps agent's monitorContradiction (engine/mapChecks.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * One door-log read. The in-game log lists the last entries in order without exact times, so each
+ * entry gets the read time unless the caller knows better; the read covers (previous read this round, now].
+ */
+export function doorLogObservation(m: MatchState, now: { round: number; t: number }, entries: { player: PlayerId; sensor?: string }[]): Pick<DoorLogReadObs, 'type' | 'entries' | 'from' | 'to'> {
+  const prev = m.observations.filter((o): o is DoorLogReadObs => o.type === 'doorLogRead' && o.stamp.round === now.round).pop();
+  return { type: 'doorLogRead', entries: entries.map(e => ({ ...e, t: now.t })), from: prev ? prev.to : 0, to: now.t };
+}
+
+/**
+ * My Admin / Vitals / Doorlog observation → the `read` shape mapChecks.monitorContradiction expects.
+ * Admin reads store only non-zero rooms; with `m`, every room the Admin map covers is filled in as 0
+ * (an empty room on admin IS information), rooms admin cannot show stay absent (no verdict there).
+ */
+export function obsToMonitorRead(o: Observation, m?: MatchState): MonitorRead | null {
+  switch (o.type) {
+    case 'adminRead': {
+      const counts: Record<RoomId, number> = {};
+      if (m) for (const r of m.map.rooms) if (adminCovers(m, r.id)) counts[r.id] = 0;
+      return { kind: 'admin', t: o.stamp.t, counts: { ...counts, ...o.counts } };
+    }
+    case 'vitalsRead': {
+      const status: Record<PlayerId, 'alive' | 'dead' | 'dc'> = {};
+      for (const p of o.alive) status[p] = 'alive';
+      for (const p of o.dc ?? []) status[p] = 'dc';
+      for (const p of o.dead) status[p] = 'dead';
+      return { kind: 'vitals', t: o.stamp.t, status };
+    }
+    case 'doorLogRead': return { kind: 'doorLog', from: o.from, to: o.to, entries: o.entries.map(e => ({ ...e })) };
+    default: return null;
+  }
+}
+
+export interface MonitorFinding { readId: string; claimIds: string[]; player: PlayerId; kind: MonitorRead['kind']; check: MonitorCheck }
+
+/**
+ * Chat claims of the same round tested against my monitor reads:
+ *  - admin: a location claim whose time window covers the read ("I was in elec at 0:40" vs admin empty there);
+ *  - vitals: a sighting claim of someone alive after vitals showed them DED / D/C;
+ *  - doorLog: two consecutive location claims by one player whose walk crosses the Hallway sensors
+ *    inside the read interval, with no door-log entry for them (shaky: vents skip sensors).
+ * Claims without a time window are too vague to test and are skipped (fail soft).
+ */
+export function monitorChecks(m: MatchState): MonitorFinding[] {
+  const out: MonitorFinding[] = [];
+  const reads = m.observations.filter(o => o.type === 'adminRead' || o.type === 'vitalsRead' || o.type === 'doorLogRead');
+  for (const o of reads) {
+    const read = obsToMonitorRead(o, m);
+    if (!read) continue;
+    const round = o.stamp.round;
+    const claims = m.claims.filter(c => c.stamp.round === round && c.timeWindow);
+    const test = (claim: MonitorClaim, ids: string[]) => {
+      const check = monitorContradiction(m.map, read, claim);
+      if (check?.contradiction) out.push({ readId: o.id, claimIds: ids, player: claim.player, kind: read.kind, check });
+    };
+    if (read.kind === 'admin') {
+      for (const c of claims) {
+        if (c.type !== 'location' || !c.room || (c.about && c.about !== c.by)) continue;
+        const [a, b] = c.timeWindow!;
+        if (a <= read.t && read.t <= b) test({ player: c.by, room: c.room, t: read.t }, [c.id]);
+      }
+    } else if (read.kind === 'vitals') {
+      for (const c of claims) {
+        if (c.type !== 'sighting' || !c.about) continue;
+        test({ player: c.by, about: c.about, aboutAlive: true, t: c.timeWindow![1] }, [c.id]);
+      }
+    } else {
+      const byPlayer = new Map<PlayerId, Claim[]>();
+      for (const c of claims) if (c.type === 'location' && c.room && (!c.about || c.about === c.by)) byPlayer.set(c.by, [...(byPlayer.get(c.by) ?? []), c]);
+      for (const [player, list] of byPlayer) {
+        const seq = [...list].sort((x, y) => x.timeWindow![0] - y.timeWindow![0]);
+        for (let i = 1; i < seq.length; i++) {
+          if (seq[i].room === seq[i - 1].room) continue;
+          test({ player, fromRoom: seq[i - 1].room, room: seq[i].room, t: seq[i].timeWindow![0] }, [seq[i - 1].id, seq[i].id]);
+        }
+      }
     }
   }
   return out;

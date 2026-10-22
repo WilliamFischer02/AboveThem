@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, adminChecks, SECURITY_FALLBACK, resolveSpot, commsDown } from './security';
 import { build, o, st } from './__fixtures__/build';
 import { repoint } from '../../state/events';
+import { obsToMonitorRead, monitorChecks, doorLogObservation, adminCovers } from './security';
+import { MAPS } from '../../data/maps';
 
 describe('security availability', () => {
   it('real Skeld map.info: labelled hallway cams that match covered rooms, then the other covered rooms', () => {
@@ -97,6 +99,63 @@ describe('research-driven details', () => {
     expect(commsDown(m, 0)).toBe(true);
     m.observations.push(o(40, { type: 'sabotage', kind: 'comms', phase: 'end' }));
     expect(commsDown(m, 0)).toBe(false);
+  });
+});
+
+describe('monitor adapters (maps agent mapChecks.monitorContradiction)', () => {
+  it('obsToMonitorRead: admin zero-fills covered rooms only; vitals statuses; door log', () => {
+    const m = build();
+    m.map = MAPS.polus;
+    const a = obsToMonitorRead(o(40, { type: 'adminRead', counts: { electrical: 2 } }), m)!;
+    expect(a.kind).toBe('admin');
+    if (a.kind === 'admin') { expect(a.counts.electrical).toBe(2); expect(a.counts.office).toBe(0); expect(a.counts.outsideLeft).toBeUndefined(); }
+    const v = obsToMonitorRead(o(30, { type: 'vitalsRead', dead: ['red'], alive: ['blue'], dc: ['green'] }))!;
+    expect(v).toEqual({ kind: 'vitals', t: 30, status: { blue: 'alive', green: 'dc', red: 'dead' } });
+    const d = obsToMonitorRead(o(50, { type: 'doorLogRead', entries: [{ player: 'red', t: 50 }], from: 0, to: 50 }))!;
+    expect(d).toMatchObject({ kind: 'doorLog', from: 0, to: 50 });
+  });
+  it('admin empty room vs a windowed location claim; Polus Outside is a blind spot (edge)', () => {
+    const m = build({ obs: [o(40, { type: 'adminRead', counts: { storage: 1 } })] });
+    m.claims.push(
+      { id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'electrical', timeWindow: [30, 50] },
+      { id: 'c2', meeting: 0, stamp: st(70), by: 'blue', type: 'location', room: 'electrical' }, // no window: too vague
+    );
+    const f = monitorChecks(m);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ player: 'red', kind: 'admin', claimIds: ['c1'] });
+    const p = build({ obs: [o(40, { type: 'adminRead', counts: {} })] });
+    p.map = MAPS.polus;
+    p.claims.push({ id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'outsideLeft', timeWindow: [30, 50] });
+    expect(monitorChecks(p)).toEqual([]);
+    expect(adminChecks(p)).toEqual([]);
+    expect(adminCovers(p, 'outsideLeft')).toBe(false);
+  });
+  it('vitals: a sighting claim of someone after vitals showed them dead', () => {
+    const m = build({ obs: [o(30, { type: 'vitalsRead', dead: ['yellow'], alive: ['red'] })] });
+    m.claims.push({ id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'sighting', about: 'yellow', timeWindow: [40, 45] });
+    expect(monitorChecks(m)).toEqual([]); // Skeld has no Vitals: maps' check refuses (edge)
+    m.map = MAPS.polus;
+    expect(monitorChecks(m)[0]).toMatchObject({ kind: 'vitals', player: 'red', check: { reason: 'aliveAfterDeath' } });
+  });
+  it('MIRA door log: a claimed walk across the Hallway with no entry (shaky), and the one-tap builder', () => {
+    const m = build();
+    m.map = MAPS.mira;
+    m.observations.push(o(10, { type: 'doorLogRead', entries: [], from: 0, to: 10 }));
+    const d = doorLogObservation(m, { round: 0, t: 60 }, [{ player: 'blue', sensor: 'top' }]);
+    expect(d).toEqual({ type: 'doorLogRead', entries: [{ player: 'blue', sensor: 'top', t: 60 }], from: 10, to: 60 });
+    m.observations.push(o(60, d));
+    m.claims.push(
+      { id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'greenhouse', timeWindow: [15, 25] },
+      { id: 'c2', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'storage', timeWindow: [40, 55] },
+    );
+    const f = monitorChecks(m).filter(x => x.kind === 'doorLog');
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ player: 'red', claimIds: ['c1', 'c2'], check: { reason: 'doorLogMissing', shaky: true } });
+  });
+  it('door-log entries follow player merges', () => {
+    const r = repoint({ type: 'doorLogRead', entries: [{ player: 'slot2', t: 5 }], from: 0, to: 5 }, 'slot2', 'red');
+    expect(r.entries[0].player).toBe('red');
+    expect(r.to).toBe(5);
   });
 });
 

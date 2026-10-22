@@ -1,13 +1,14 @@
 /**
  * Round card: log what the security consoles show, in a tap or two.
  *  Admin  — tap a room to +1 (right-click −1), then "Log admin".
- *  Cams / door log — pick the spot once (sticky), then tap a player: a sighting there.
+ *  Cams — pick the spot once (sticky), then tap a player: a sighting there.
+ *  Door log (MIRA) — tap everyone the log lists (optional sensor), then "Log door log": one doorLogRead.
  *  Vitals — tap who shows dead, then "Log vitals" (also marks them dead in the roster).
  */
 import { useState } from 'react';
 import type { PlayerId, RoomId } from '../../../types/game';
 import { useMatch } from '../../../state/store';
-import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, resolveSpot, commsDown, type CamSpot } from '../../../engine/features/security';
+import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, resolveSpot, commsDown, doorLogObservation, type CamSpot } from '../../../engine/features/security';
 import { roomName, pname } from '../../../engine/features/util';
 import { swatch } from '../../palette';
 
@@ -21,6 +22,9 @@ export function SecurityCard() {
   const [counts, setCounts] = useState<Record<RoomId, number>>({});
   const [spot, setSpot] = useState<string | null>(null);
   const [vit, setVit] = useState<Record<PlayerId, 'ded' | 'dc'>>({});
+  const [sensor, setSensor] = useState<string | null>(null);
+  const [door, setDoor] = useState<{ player: PlayerId; sensor?: string }[]>([]);
+  const stamp = useMatch(s => s.stamp);
   if (!m) return null;
   const sec = securityFor(m);
   const rooms = m.map.rooms;
@@ -43,10 +47,14 @@ export function SecurityCard() {
     observe(adminObservation(counts), `Admin: ${Object.entries(counts).filter(([, n]) => n > 0).map(([r, n]) => `${n} ${roomName(m, r)}`).join(', ') || 'empty'} (${total})`);
     setCounts({});
   };
+  const logDoor = () => {
+    observe(doorLogObservation(m, stamp(), door), `Door log: ${door.map(e => pname(m, e.player)).join(', ') || 'empty'}`);
+    setDoor([]);
+  };
   const logRemote = (p: PlayerId) => {
     if (!curSpot?.room) return;
-    const o = remoteSighting(m, p, curSpot.room, active === 'door' ? 'doorLog' : 'cams', curSpot.label);
-    if (o) observe(o, `${pname(m, p)} on ${active === 'door' ? 'door log' : 'cams'}: ${curSpot.label}`);
+    const o = remoteSighting(m, p, curSpot.room, 'cams', curSpot.label);
+    if (o) observe(o, `${pname(m, p)} on cams: ${curSpot.label}`);
   };
   const logVitals = () => {
     const ded = Object.keys(vit).filter(p => vit[p] === 'ded');
@@ -88,9 +96,31 @@ export function SecurityCard() {
         </>
       ))}
 
-      {(active === 'cams' || active === 'door') && (noRooms ? <div className="feat-sub">No room data for {m.map.name} yet — cams/door-log sightings need real rooms.</div> : (
+      {active === 'door' && (
         <>
-          {active === 'door' && sec.doorSensors?.length ? <div className="feat-sub">Sensors: {sec.doorSensors.join(' · ')} — log the nearest room.</div> : null}
+          <div className="feat-sub" style={{ marginBottom: 3 }}>Sensor (optional, sticky), then tap everyone the log lists. One log = one read; times are the read time.</div>
+          <div className="feat-grid">
+            {(sec.doorSensors?.length ? sec.doorSensors : ['Hallway']).map(s => <div key={s} className={`feat-tap ${sensor === s ? 'on' : ''}`} title={s} onClick={() => setSensor(sensor === s ? null : s)}>{s.replace(/^Hallway \(|\)$/g, '')}</div>)}
+          </div>
+          <div className="feat-grid" style={{ marginTop: 5 }}>
+            {others.map(p => {
+              const on = door.some(e => e.player === p.id);
+              return (
+                <div key={p.id} className={`feat-tap ${on ? 'on' : ''}`} onClick={() => setDoor(d => (on ? d.filter(e => e.player !== p.id) : [...d, { player: p.id, sensor: sensor ?? undefined }]))}>
+                  <span className="feat-dot" style={{ background: swatch(p.color).body }} />{p.name}{on && <span className="n">✓</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="feat-row" style={{ marginTop: 5 }}>
+            <button className="btn sm primary" onClick={logDoor}>Log door log</button>
+            <span className="feat-sub">nobody tapped = "log was empty" (also evidence)</span>
+          </div>
+        </>
+      )}
+
+      {active === 'cams' && (noRooms ? <div className="feat-sub">No room data for {m.map.name} yet — camera sightings need real rooms.</div> : (
+        <>
           <div className="feat-sub" style={{ marginBottom: 3 }}>{curSpot ? <>Spot: <b>{curSpot.label}</b>{curSpot.room && curSpot.room !== curSpot.id ? ` (logged as ${roomName(m, curSpot.room)})` : ''} — now tap who you see</> : 'Pick where you are looking'}</div>
           <div className="feat-grid">
             {spots.map(s => <div key={s.id} className={`feat-tap ${spot === s.id ? 'on' : ''} ${s.room ? '' : 'dim'}`} onClick={() => s.room && setSpot(s.id)}>{s.label}</div>)}

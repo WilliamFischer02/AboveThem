@@ -173,7 +173,7 @@ export type UserMark = 'sus' | 'clear' | 'hardClear';
 export type Observation =
   | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
   | SawKillObs | BodyFoundObs | SabotageObs | ManualMarkObs
-  | AdminReadObs | VitalsReadObs;
+  | AdminReadObs | VitalsReadObs | DoorLogReadObs;
 
 // ---------------------------------------------------------------------------
 // Meeting data — what people SAID (lower trust, checkable)
@@ -477,4 +477,13 @@ export interface VitalsReadObs extends BaseObs {
   alive: PlayerId[];
   /** D/C: no body — killed before the last meeting, ejected, or disconnected. */
   dc?: PlayerId[];
+}
+
+/** MIRA Doorlog read: who the Communications PC listed as crossing the Hallway sensors between `from` and `to` (round s). */
+export interface DoorLogReadObs extends BaseObs {
+  type: 'doorLogRead';
+  /** Entry times are approximate (the log shows order, not exact time): the read time unless the user knows better. */
+  entries: { player: PlayerId; t: number; sensor?: string }[];
+  from: RoundTime;
+  to: RoundTime;
 }
