@@ -111,6 +111,13 @@ export function hardFacts(m: MatchState): HardFacts {
   const anchors = new Set<PlayerId>([m.me, ...crew]);
   const bodies = m.observations.filter((o): o is BodyFoundObs => o.type === 'bodyFound');
   const soloImpostor = m.settings.impostorCount === 1;
+  /** Was I dead by this round? (died that round or earlier; dead with no known time counts as dead: conservative.) */
+  const meDeadBy = (round: number): boolean => {
+    const d = deathOf(m, m.me);
+    if (d.diedRound !== undefined) return d.diedRound <= round;
+    if (d.ejectedMeeting !== undefined) return d.ejectedMeeting < round;
+    return m.players[m.me]?.status !== undefined && m.players[m.me]?.status !== 'alive';
+  };
   for (const b of bodies) {
     const [windowStart, windowEnd] = killWindow(m, b);
     const vitalsRefs = vitalsReads(m).filter(v => v.stamp.round === b.stamp.round && v.stamp.t <= b.stamp.t && (v.alive?.includes(b.victim) || v.dead?.includes(b.victim))).map(v => v.id);
@@ -120,13 +127,16 @@ export function hardFacts(m: MatchState): HardFacts {
       cleared.add(c.player);
       const via = c.via === m.me ? 'me' : pname(c.via);
       // One impostor in the lobby + with me (my own eyes) through the whole window = they did not kill = crew.
-      if (soloImpostor && c.hops === 1 && c.via === m.me && m.myRole !== 'impostor' && !imp.has(c.player)) {
+      // Only when the user CLOSED the with-me stretch after the window (an explicit "left me") and was alive:
+      // a toggle left on may be stale (they wandered off and nobody pressed the key), so that stays soft.
+      if (soloImpostor && c.hops === 1 && c.via === m.me && m.myRole !== 'impostor' && !imp.has(c.player) && !c.openEnded && !meDeadBy(b.stamp.round)) {
         crew.add(c.player);
         evidence.push(ev(c.player, -HARD, 'hard', `With me through the whole kill window for ${pname(b.victim)} (only 1 impostor)`, [...c.refs, b.id, ...vitalsRefs]));
         continue;
       }
       const w = c.hops === 1 ? -3 : -3 * 0.7;
-      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})`, [...c.refs, b.id, ...vitalsRefs]));
+      const stale = c.openEnded && c.via === m.me ? ' (toggle still on)' : c.openEnded ? ' (a with-me toggle still on)' : '';
+      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})${stale}`, [...c.refs, b.id, ...vitalsRefs]));
     }
     clearedForKill.set(b.id, cleared);
   }
