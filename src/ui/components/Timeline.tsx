@@ -9,6 +9,9 @@ function stampOf(e: MatchEvent): string {
   return '';
 }
 
+/** features: Admin / Vitals / Doorlog reads get a monitor marker (their text comes from store.describe). */
+const isMonitor = (e: MatchEvent) => e.kind === 'observation' && (e.payload.type === 'adminRead' || e.payload.type === 'vitalsRead' || e.payload.type === 'doorLogRead');
+
 const isHard = (e: MatchEvent) => e.kind === 'observation' && (e.payload.type === 'sawVent' || e.payload.type === 'sawKill' || e.payload.type === 'bodyFound');
 
 export function Timeline() {
@@ -30,7 +33,7 @@ export function Timeline() {
         {items.map((e, i) => (
           <div key={items.length - i} className={`tl ${isHard(e) ? 'hard' : ''} ${e.kind === 'phase' ? 'phase' : ''}`}>
             <span className="t">{stampOf(e)}</span>
-            <span>{prettify(describe(e), name, room)}</span>
+            <span>{isMonitor(e) ? '🖥 ' : ''}{prettify(describe(e), name, room)}</span>
             <span className="muted small">{e.kind === 'observation' ? e.payload.source : e.kind}</span>
           </div>
         ))}
