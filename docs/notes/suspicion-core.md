@@ -8,7 +8,10 @@ trend/delta, a one-line summary and a sorted "why" list. 118 tests green (72 at 
 `npm run build` OK. The model is documented in `docs/DEDUCTION_ENGINE.md`, with an ADR appended to `docs/decisions.md`.
 
 **Branch base:** my worktree was cut from the stale `origin/main` (71c2c1b). I fast-forwarded it to
-local `main` (7bf75ba) before any work, so my commits sit on top of 7bf75ba.
+local `main` (7bf75ba) before any work. I have since **merged `main` twice** (maps rounds 1+2, ui-streamline,
+bugs-rust; last merge 338b84e). Conflicts resolved: `src/engine/marks.ts` = mine (ui-streamline's was a stub; I added
+their type re-exports and a string-tolerant `reasonInfo`), and ui-streamline's `src/engine/chatNlu.ts` file stub is
+deleted because it shadowed my `src/engine/chatNlu/` folder stub (same `parseMeetingChat` export, which Transcript.tsx uses).
 
 ## What I did
 - **Marks with reasons (b2)**: `src/engine/marks.ts` exports `SUS_REASONS`, `CLEAR_REASONS`, `markObservation`,
@@ -37,18 +40,20 @@ local `main` (7bf75ba) before any work, so my commits sit on top of 7bf75ba.
    profile rules call. Double counting is handled: Claim records whose `chatLineId` the NLU read are skipped.
    **Check after merge:** chat-nlu's `ChatAssertion.about` is an ARRAY. `repoint` in `src/state/events.ts` only repoints
    arrays named withPlayers / present / fixers, but assertions are derived from chat on demand (never stored), so merges are still safe.
-2. **maps**: `src/engine/mapAdapter.ts` holds a local `hasMapData`; after merge, replace its body with
-   `export { hasMapData } from './map';`. I did NOT switch to `couldReach` / `fastestSeconds`: my feasibility needs an
-   interval check over several sightings (not one point-to-point reach), and my `ventAssistedSeconds` duplicates their
-   `fastestSeconds(map, a, b, {vents: true})`. Dedupe later by swapping the inner call (one line in feasibility.ts).
+2. **maps**: DONE on this branch. `mapAdapter.ts` re-exports their `hasMapData`; `ventAssistedSeconds` calls their
+   `fastestSeconds(..., {vents: true})`. Task rules use `claimedTaskExists` (dummy panels, tasks from another map,
+   unknown names fail soft) and `commonTaskMismatch`; `ruleMonitorReads` uses `monitorContradiction` for Admin / Vitals
+   reads vs TIMED location / sighting claims (untimed chat claims are never checked: Admin is a snapshot). I kept my own
+   interval-based feasibility (several sightings bracket a window) rather than `couldReach` (one point-to-point check).
    I did not mark travel evidence `shaky` for unverified durations: the 30 % slack plus margin trust already absorbs
    eyeballed seconds, and halving on top would make real contradictions nearly worthless.
 3. **features**: their `killWindows(m)` (`couldNot` = vent-aware physical clear) overlaps my `killFeasibility`.
    Mine scores (−1.5 × margin trust for "no", +2.0 × trust for vent-only) and is wired into scoreAll; theirs is
    presentation. Do not wire both into the score. Their `voteAnalysis.votingPairs` / `bandwagons` overlap
    `voting.ruleMinorityVoteBloc` and `pairs.impostorPairs`. Mine feed the score; theirs can stay UI-only.
-   Their new `adminRead` / `vitalsRead` observations are ignored safely (no exhaustive switches). **Next idea:** a
-   vitals read showing V alive at t narrows V's kill window to [t, report] (`vitals_timing`).
+   Their `vitalsRead` observations narrow the kill window (`vitals_timing`: victim OK at t ⇒ window starts at t;
+   DED at t ⇒ ends at t), read structurally in `feasibility.vitalsReads` so it compiles before their merge. `adminRead`
+   feeds `ruleMonitorReads`.
 4. **ui-streamline**: contract in `relay/from-suspicion-core.md`. `meetingScript.ts` untouched. All tests pass with it.
 5. `weights.json` was re-serialised (2-space JSON) when I added sections; values of existing keys are unchanged except
    `categoryCap.manual` 2→3 and `sabotage.fixedSabotageWithMe` −0.8→−0.4.
@@ -69,7 +74,13 @@ local `main` (7bf75ba) before any work, so my commits sit on top of 7bf75ba.
 - "Momentum" as an extra weight on a rising score would double-count the same evidence. I implemented it as
   `trend` / `delta` (display), plus a *recurrence* bonus for suspicion in separate rounds (independent signals).
 
+## Verified against chat-nlu's real parser
+I copied chat-nlu's modules into my tree temporarily (not committed) and ran real chat lines through `scoreAll`.
+Shapes match, and it found three gaps that I fixed: own-location lines now count as "placed" for the unaccounted rules;
+"X was near <body room>" becomes a reasoned accusation; "X self-reported" when I logged X finding the body with
+others implicates the speaker. `__fixtures__/nlu_integration.test.ts` skips while the stub is in place and runs
+automatically after the merge.
+
 ## Next ideas
-- vitals / admin reads to narrow kill windows and clear players (features agent's observations).
 - Two-bodies-within-cooldown ⇒ two killers (`double_kill_gap`) once vitals give death times.
 - Per-reason weights learned from post-match role reveals (Phase 5).
