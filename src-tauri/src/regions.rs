@@ -79,6 +79,9 @@ pub struct Regions {
     pub chat_counter: Rect,
     /// Bottom-right action buttons: USE / REPORT for crew, KILL / SABOTAGE (/ VENT) for impostors.
     pub action_buttons: Rect,
+    /// Lobby button at the bottom centre: "WAITING FOR HOST" (guest) / "START" (host). Visible even when
+    /// the room-code panel is closed, so it is the primary lobby marker.
+    pub lobby_button: Rect,
 }
 
 impl Default for Regions {
@@ -106,6 +109,7 @@ impl Default for Regions {
             settings_feed:   Rect::new(0, 840, 900, 200),
             chat_counter:    Rect::new(1370, 750, 140, 50),
             action_buttons:  Rect::new(1380, 960, 540, 115),
+            lobby_button:    Rect::new(700, 860, 520, 105),
         }
     }
 }
@@ -134,6 +138,7 @@ impl Regions {
             settings_feed: self.settings_feed.scaled(sx, sy),
             chat_counter: self.chat_counter.scaled(sx, sy),
             action_buttons: self.action_buttons.scaled(sx, sy),
+            lobby_button: self.lobby_button.scaled(sx, sy),
         }
     }
 
@@ -143,14 +148,14 @@ impl Regions {
             "chat_panel" => self.chat_panel, "chat_input" => self.chat_input, "lobby_settings" => self.lobby_settings,
             "lobby_code" => self.lobby_code, "map_name" => self.map_name, "vote_grid" => self.vote_grid,
             "meeting_header" => self.meeting_header, "eject_text" => self.eject_text, "voting_timer" => self.voting_timer, "sabotage_banner" => self.sabotage_banner,
-            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner, "settings_feed" => self.settings_feed, "chat_counter" => self.chat_counter, "action_buttons" => self.action_buttons,
+            "room_label" => self.room_label, "chat_send" => self.chat_send, "meeting_banner" => self.meeting_banner, "settings_feed" => self.settings_feed, "chat_counter" => self.chat_counter, "action_buttons" => self.action_buttons, "lobby_button" => self.lobby_button,
             _ => return None,
         })
     }
 
     pub const NAMES: &'static [&'static str] = &[
         "task_list", "task_bar", "role_card", "chat_panel", "chat_input", "lobby_settings", "lobby_code", "map_name",
-        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner", "settings_feed", "chat_counter", "action_buttons",
+        "vote_grid", "meeting_header", "eject_text", "voting_timer", "sabotage_banner", "room_label", "chat_send", "meeting_banner", "settings_feed", "chat_counter", "action_buttons", "lobby_button",
     ];
 }
 

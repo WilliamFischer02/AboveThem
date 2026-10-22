@@ -134,7 +134,7 @@ impl Default for WatcherState {
     }
 }
 
-const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons", "voting_timer", "chat_counter"];
+const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "eject_text", "lobby_code", "room_label", "chat_send", "meeting_banner", "task_list", "map_name", "settings_feed", "chat_panel", "action_buttons", "voting_timer", "chat_counter", "lobby_button"];
 
 /// Nothing recognisable for this long (main menu, alt-tabbed, map open for ages) => treat as the lobby.
 const UNKNOWN_TO_LOBBY: Duration = Duration::from_secs(120);
@@ -271,10 +271,17 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         // An open chat panel covers the header: a meeting stays a meeting while chat is open.
         let meeting = meeting_header || voting_timer || me_dead_header || (chat_open && in_meeting_now);
         let eject = parse_eject(&text("eject_text"));
-        // Round: the task bar, or the USE / REPORT / KILL / SABOTAGE / VENT buttons (visible whatever the task-bar setting).
+        // Lobby: the room code panel, or the bottom-centre "WAITING FOR HOST" / "START" button (always there),
+        // and it stays the lobby while the chat panel covers that button.
+        let lobby_code = lobby_code_of(&text("lobby_code"));
+        let lb = text("lobby_button").to_uppercase();
+        let lobby_button = lb.contains("WAITING") || lb.contains("START") || fuzzy_best(lb.trim(), ["WAITING FOR HOST", "START", "STARTING IN"]).map(|b| b.1 > 0.6).unwrap_or(false);
+        let in_lobby = lobby_code.is_some() || lobby_button || (chat_open && detector.current == Some(Phase::Lobby));
+        // Round: the task bar, or the REPORT / KILL / SABOTAGE / VENT buttons (visible whatever the task-bar
+        // setting). USE is not enough: the lobby has one too.
         let ab = text("action_buttons").to_uppercase();
-        let action_words = ab.split_whitespace().any(|w| w.len() >= 3 && fuzzy_best(w, ["USE", "REPORT", "KILL", "SABOTAGE", "VENT"]).map(|b| b.1 > 0.8).unwrap_or(false));
-        let in_round = task_bar || (action_words && !meeting && !chat_open);
+        let action_words = ab.split_whitespace().any(|w| w.len() >= 4 && fuzzy_best(w, ["REPORT", "KILL", "SABOTAGE", "VENT"]).map(|b| b.1 > 0.8).unwrap_or(false));
+        let in_round = task_bar || (action_words && !meeting && !chat_open && !in_lobby);
         let role_text = text("role_card").to_uppercase();
         let role_word = role_text.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphabetic()))
             .find(|w| w.len() >= 6 && fuzzy_best(w, ["CREWMATE", "IMPOSTOR"]).map(|b| b.1 > 0.85).unwrap_or(false))
@@ -293,7 +300,6 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         let game_over = ocr_over || (dark_screen && !ocr_role && in_game && eject.is_none() && accent.dominant().is_some());
         let banner_text = text("meeting_banner").to_uppercase();
         let banner = if banner_text.contains("DEAD") || banner_text.contains("BODY") { Some("body") } else if banner_text.contains("EMERGENCY") { Some("button") } else { None };
-        let lobby_code = lobby_code_of(&text("lobby_code"));
 
         // 3. Role (once per card appearance): the OCR word when read, else the text colour.
         if role_card && !game_over {
@@ -313,7 +319,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             let imp = ab.split_whitespace().any(|w| w.len() >= 4 && fuzzy_best(w, ["KILL", "SABOTAGE"]).map(|b| b.1 > 0.8).unwrap_or(false));
             if imp && !impostor_buttons_seen { impostor_buttons_seen = true; let _ = app.emit(EV_ROLE, "impostor"); }
         }
-        if game_over || role_card || lobby_code.is_some() { impostor_buttons_seen = false; }
+        if game_over || role_card || in_lobby { impostor_buttons_seen = false; }
 
         // 4. Phase with hysteresis. Only positive evidence moves the phase; "nothing recognisable"
         //    (map open, settings, a missed frame) keeps the current one for up to UNKNOWN_TO_LOBBY.
@@ -321,8 +327,8 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             else if eject.is_some() { Some(Phase::Ejection) }
             else if meeting { Some(Phase::MeetingDiscussion) }
             else if role_card { Some(Phase::RoundStart) }
+            else if in_lobby { Some(Phase::Lobby) }
             else if in_round { Some(Phase::Round) }
-            else if lobby_code.is_some() { Some(Phase::Lobby) }
             else { None };
         match next {
             Some(_) => unknown_since = None,
@@ -443,7 +449,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         }
 
         // 7b. Lobby roster from floating names: only on the lobby screen (room code visible), every 5 s, chat closed.
-        if lobby_code.is_some() && !chat_open && matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting
+        if in_lobby && !chat_open && matches!(detector.current, None | Some(Phase::Lobby) | Some(Phase::GameOver)) && !meeting
             && last_lobby_read.elapsed() > Duration::from_secs(5) {
             last_lobby_read = Instant::now();
             if let Ok(r) = read_lobby(&frame) {
@@ -565,6 +571,20 @@ mod tests {
             let a = screen_accent(&load_fixture(name), r.role_card);
             assert!(!a.is_dark_screen(), "{name} must not look like a role/end screen: {a:?}");
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn lobby_button_reads_on_both_lobby_fixtures() {
+        let r = Regions::default();
+        for name in ["lobby", "lobby_v2"] {
+            let f = load_fixture(name);
+            let t = ocr_rect(&f, r.lobby_button, 2).to_uppercase();
+            assert!(t.contains("WAITING") || t.contains("START"), "{name}: {t:?}");
+        }
+        let f = load_fixture("round_cafeteria");
+        let t = ocr_rect(&f, r.lobby_button, 2).to_uppercase();
+        assert!(!(t.contains("WAITING") || t.contains("START")), "round frame must not look like the lobby: {t:?}");
     }
 
     #[test]

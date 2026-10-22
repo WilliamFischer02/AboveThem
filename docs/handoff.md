@@ -18,7 +18,7 @@ logs unless marked UNVERIFIED.
 | Game window | `capture.rs` (Windows Graphics Capture) | auto-start capture + watcher every 8 s |
 | Lobby code, map name, lobby settings | lobby panel + announcements | `game://lobby`, `game://map`, `game://settings` |
 | Lobby roster | floating names (`lobby.rs`) | match created in the lobby (2 consecutive sightings) |
-| Phase | task bar **or** USE/REPORT/KILL/SABOTAGE = round; header **or** voting timer = meeting (sticky under chat); eject text; room code = lobby; VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
+| Phase | task bar **or** REPORT/KILL/SABOTAGE/VENT = round (USE is in the lobby too); header **or** voting timer = meeting (sticky under chat); eject text; "WAITING FOR HOST" / "START" button **or** room code = lobby (sticky under chat); VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
 | Role | CREWMATE/IMPOSTOR word, or teal/red letters on the black role screen; KILL/SABOTAGE buttons; red floating names; "Fake Tasks:" header (round only) | `game://role`; user toggle locks it (`myRoleLocked`) |
 | Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, colours (voted), dead (X **or** greyed plain card), headshots, **icon dHash**, dim ratio |
 | Grid → roster | `src/engine/rosterMatch.ts` | name × icon hash × colour × same-meeting slot; slots re-read every meeting; roster confidence dot |
