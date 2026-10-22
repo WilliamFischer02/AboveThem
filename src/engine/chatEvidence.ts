@@ -24,6 +24,7 @@ import type { Claim, EvidenceItem, MatchState, PlayerId } from '../types/game';
 import type { ChatAssertion, ChatReason, SpeakerProfile } from './chatNluTypes';
 import weightsJson from '../data/tactics/weights.json';
 import { ev } from './evidence';
+import { activeAssertions, parseAllChat } from './chatNlu';
 
 const S = weightsJson.social;
 
@@ -81,9 +82,48 @@ export function claimsToAssertions(m: MatchState, skipLines: ReadonlySet<string>
   return out;
 }
 
+/** Every chat assertion the engine weighs: chat-nlu's reading, plus Claim records for lines it did not read. */
+export function chatAssertions(m: MatchState): ChatAssertion[] {
+  const nlu = activeAssertions(parseAllChat(m));
+  const readLines = new Set(nlu.map(a => a.line));
+  return [...nlu, ...claimsToAssertions(m, readLines)];
+}
+
+/** Players a round's chat places somewhere (own location / task, "with X", "saw X in R"): used by the unaccounted rules. */
+export function chatPlaced(assertions: ChatAssertion[], meeting: number): Set<PlayerId> {
+  const out = new Set<PlayerId>();
+  for (const a of assertions) {
+    if (a.meeting !== meeting) continue;
+    if (a.kind === 'location' || a.kind === 'task') a.about.forEach(p => out.add(p));
+    if (a.kind === 'withMe') { out.add(a.speaker); a.about.forEach(p => out.add(p)); }
+    if (a.kind === 'withOther' || a.kind === 'sighting' || a.kind === 'sawTask') a.about.forEach(p => out.add(p));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Weighting
 // ---------------------------------------------------------------------------
+
+/** Body rooms per round: logged bodies, plus "body in R" said in that round's meeting. */
+function bodyRooms(m: MatchState, assertions: ChatAssertion[], roundOf: (k: number) => number): Map<number, Set<string>> {
+  const out = new Map<number, Set<string>>();
+  const add = (r: number, room?: string) => { if (room) out.set(r, (out.get(r) ?? new Set()).add(room)); };
+  for (const o of m.observations) if (o.type === 'bodyFound') add(o.stamp.round, o.room);
+  for (const a of assertions) if (a.kind === 'bodyLocation') add(roundOf(a.meeting), a.room);
+  return out;
+}
+
+/**
+ * "X was near storage" where Storage is the body room → a reasoned accusation (nearBody).
+ * The speaker's own "X sus" in the same breath merges with it (one speaker counts once).
+ */
+function withDerived(m: MatchState, assertions: ChatAssertion[], roundOf: (k: number) => number): ChatAssertion[] {
+  const rooms = bodyRooms(m, assertions, roundOf);
+  return assertions.map(a => (a.kind === 'sighting' && a.polarity === 0 && a.room && rooms.get(roundOf(a.meeting))?.has(a.room)
+    ? { ...a, polarity: 1 as const, reason: 'nearBody' as const, why: [...a.why, 'sighting in the body room'] }
+    : a));
+}
 
 /**
  * A "visual" clear only counts as one when visuals are ON and the task (if named) is visual on
@@ -108,6 +148,7 @@ function baseWeight(m: MatchState, a: ChatAssertion): number {
     case 'defense': return S.defense;
     case 'withMe': return S.companionUnconfirmed;
     case 'withOther': return S.withOther;
+    case 'sighting': return a.polarity > 0 ? S.accusationWithReason : 0; // derived: seen in the body room
     default: return 0;
   }
 }
@@ -124,6 +165,7 @@ const verb = (a: ChatAssertion): string => {
     case 'defense': return 'defended them';
     case 'withMe': return 'says they were together';
     case 'withOther': return 'says they were with someone';
+    case 'sighting': return 'saw them near the body';
     default: return 'mentioned them';
   }
 };
@@ -137,7 +179,8 @@ interface Contribution { target: PlayerId; speaker: PlayerId; weight: number; a:
 export function assertionsToEvidence(m: MatchState, assertions: ChatAssertion[], ctx: ChatEvidenceContext): EvidenceItem[] {
   const out: EvidenceItem[] = [];
   const roundOf = ctx.roundOfMeeting ?? ((k: number) => k);
-  const active = assertions.filter(a => !a.supersededBy && a.polarity !== 0);
+  const active = withDerived(m, assertions, roundOf).filter(a => !a.supersededBy && a.polarity !== 0);
+  const bodies = m.observations.filter(o => o.type === 'bodyFound');
   const accusersSoFar = new Map<string, Set<PlayerId>>(); // meeting|target → speakers who accused earlier
   const best = new Map<string, Contribution>();             // speaker|target|sign → strongest, latest
 
@@ -158,6 +201,16 @@ export function assertionsToEvidence(m: MatchState, assertions: ChatAssertion[],
       const eyewitness = a.kind === 'sawVent' || a.kind === 'sawKill';
 
       if (a.polarity > 0) {
+        if (a.kind === 'selfReport' || a.reason === 'selfReport') {
+          // "X self-reported" but I logged X finding the body with others around: not a self-report.
+          const b = bodies.find(o => o.type === 'bodyFound' && o.reporter === x && o.stamp.round === roundOf(a.meeting));
+          const others = b && b.type === 'bodyFound' ? (b.present ?? []).filter(p => p !== x && p !== b.victim) : [];
+          if (b && others.length >= 1) {
+            const e = ev(sp, S.falseSelfReportClaim, 'meeting', `Called ${pname(m, x)}'s report a self-report, but ${others.map(p => pname(m, p)).join(' and ')} ${others.length === 1 ? 'was' : 'were'} there`, [...(a.refs.length ? a.refs : [a.id]), b.id]);
+            e.round = roundOf(a.meeting); out.push(e);
+            continue;
+          }
+        }
         if (eyewitness && ctx.certainCrew.has(x)) {
           // Lying eyewitness: the target is confirmed crew, so the SPEAKER is implicated.
           const e = ev(sp, S.falseEyewitness, 'meeting', `Claimed to see ${pname(m, x)} ${a.kind === 'sawVent' ? 'vent' : 'kill'} — ${pname(m, x)} is confirmed crew`, a.refs.length ? a.refs : [a.id], false, 'contradiction',

@@ -9,6 +9,8 @@ import { isDeadEnd } from './map';
 import { killWindow } from './feasibility';
 import { ev, fmt } from './evidence';
 import { markHistory, markLabel, markWeight } from './marks';
+import { chatAssertions, chatPlaced } from './chatEvidence';
+import { roundOfMeeting } from './history';
 
 const W = weightsJson;
 const roomName = (m: MatchState, r: string) => m.map.rooms.find(x => x.id === r)?.name ?? r;
@@ -115,6 +117,15 @@ export function ruleLastSeenWithVictim(m: MatchState): EvidenceItem[] {
   return out;
 }
 
+/** Players the chat of the meeting(s) discussing `round` places somewhere (chat-nlu location / task / with / saw). */
+function chatPlacedInRound(m: MatchState, round: number): Set<PlayerId> {
+  const roundOf = roundOfMeeting(m);
+  const assertions = chatAssertions(m);
+  const out = new Set<PlayerId>();
+  for (const k of new Set(assertions.map(a => a.meeting))) if (roundOf(k) === round) for (const p of chatPlaced(assertions, k)) out.add(p);
+  return out;
+}
+
 /** Alive, not me, and nothing at all logged about them in a round where someone died. */
 export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
@@ -130,6 +141,7 @@ export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
       if (o.type === 'sabotage') o.fixers?.forEach(p => mentioned.add(p));
     }
     for (const c of m.claims) if (c.stamp.round === round) { mentioned.add(c.by); if (c.about) mentioned.add(c.about); }
+    for (const p of chatPlacedInRound(m, round)) mentioned.add(p);
     const bodyIds = bodies(m).filter(b => b.stamp.round === round).map(b => b.id);
     for (const p of Object.values(m.players)) {
       if (p.isMe || p.status !== 'alive' || mentioned.has(p.id)) continue;
@@ -164,6 +176,7 @@ export function ruleUnaccountedKillWindow(m: MatchState): EvidenceItem[] {
       if (o.type === 'sabotage' && overlaps(t, t)) o.fixers?.forEach(p => placed.add(p));
     }
     for (const [p, t0] of open) if (t0 <= w1 + 5) placed.add(p);
+    for (const p of chatPlacedInRound(m, b.stamp.round)) placed.add(p); // chat statements carry no time: whole round
     if (b.reporter) placed.add(b.reporter);
     b.present?.forEach(p => placed.add(p));
     for (const c of m.claims) {

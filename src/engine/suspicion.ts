@@ -24,9 +24,7 @@ import { VOTING_RULES } from './voting';
 import { killWindow, ruleKillFeasibility, travelLowerBound } from './feasibility';
 import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
-import { assertionsToEvidence, claimsToAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
-import type { ChatAssertion } from './chatNluTypes';
-import { parseAllChat, activeAssertions } from './chatNlu';
+import { assertionsToEvidence, chatAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
 import { speakerProfiles } from './chatProfile';
 import { aliveAtMeeting, completedMeetings, currentMeeting, deathOf, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
 import { impostorPairs, ruleMutualAlibiPair, type PairSignal } from './pairs';
@@ -136,12 +134,7 @@ export function hardFacts(m: MatchState): HardFacts {
 
 export const SOFT_RULES = [...OBSERVATION_RULES, ...CLAIM_RULES, ...VOTING_RULES, ruleKillFeasibility, ruleMutualAlibiPair];
 
-/** Every chat assertion the engine weighs: chat-nlu's reading, plus Claim records for lines it did not read. */
-export function chatAssertions(m: MatchState): ChatAssertion[] {
-  const nlu = activeAssertions(parseAllChat(m));
-  const readLines = new Set(nlu.map(a => a.line));
-  return [...nlu, ...claimsToAssertions(m, readLines)];
-}
+export { chatAssertions };
 
 /** Candidate impostor pairs among unresolved players (display: "watch this pair"). */
 export function suspectPairs(m: MatchState): PairSignal[] {

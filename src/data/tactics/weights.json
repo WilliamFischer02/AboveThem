@@ -127,6 +127,7 @@
     "sawTask": -0.6,
     "withOther": -0.2,
     "falseEyewitness": 2.0,
+    "falseSelfReportClaim": 0.3,
     "vouchedByImpostor": 0.8,
     "consistencyFloor": 0.5
   },

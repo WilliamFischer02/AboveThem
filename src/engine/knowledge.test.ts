@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { ruleLastSeenWithVictim } from './rules';
 import { ruleTaskClaims, ruleLocationClaims } from './contradictions';
-import { assertionsToEvidence, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
+import { assertionsToEvidence, chatPlaced, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
 import type { ChatAssertion, SpeakerProfile } from './chatNluTypes';
 import { ruleMutualAlibiPair, impostorPairs } from './pairs';
 import { killFeasibility, travelLowerBound } from './feasibility';
@@ -110,6 +110,29 @@ describe('dead_accuser and chat-nlu profile tells', () => {
     };
     const e = ruleProfileTells(fixture3, { blue: prof, ghost: { ...prof, player: 'ghost' } });
     expect(e.map(x => x.label)).toEqual(['Said Admin, then Electrical in meeting 1', 'Flipped on Green within meeting 1']);
+  });
+});
+
+describe('chat facts checked against what I logged', () => {
+  const ctx = { credibility: () => ({ cred: 1, status: 'normal' as const }), certainCrew: new Set<string>(), unknownImpostorsLeft: 1 };
+  it('"X was near <body room>" is a reasoned accusation, merged with the same speaker\'s "X sus"', () => {
+    const ev = assertionsToEvidence(fixture3, [
+      A('white', 'accuse', ['purple'], { reason: 'sus', strength: 0.5 }),
+      A('white', 'sighting', ['purple'], { polarity: 0, room: 'storage' }), // fixture3 body: Storage
+    ], ctx);
+    expect(ev).toHaveLength(1);
+    expect(ev[0].label).toMatch(/saw them near the body/);
+    expect(ev[0].weight).toBeCloseTo(0.8);
+    expect(assertionsToEvidence(fixture3, [A('white', 'sighting', ['purple'], { polarity: 0, room: 'admin' })], ctx)).toHaveLength(0);
+  });
+  it('calling a group find a "self-report" implicates the caller, not the reporter', () => {
+    const ev = assertionsToEvidence(fixture3, [A('purple', 'selfReport', ['green'], { polarity: 1 })], ctx); // Green found it with Blue and White
+    expect(ev).toHaveLength(1);
+    expect(ev[0].player).toBe('purple');
+    expect(ev[0].label).toMatch(/Blue and White were there/);
+  });
+  it('chat placements count for the unaccounted rules', () => {
+    expect([...chatPlaced([A('purple', 'location', ['purple'], { polarity: 0 }), A('white', 'withMe', ['blue'])], 0)].sort()).toEqual(['blue', 'purple', 'white']);
   });
 });
 
