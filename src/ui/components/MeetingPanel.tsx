@@ -8,6 +8,7 @@ import { PlayerIcon } from './Crewmate';
 import { copyText } from '../clipboard';
 import { headline } from '../../engine/headline';
 import { HeadlineBar } from './HeadlineBar';
+import { PairChip } from './PairChip';
 
 function Why({ ids, evidence, note }: { ids: string[]; evidence: Map<string, EvidenceItem>; note?: string }) {
   const [open, setOpen] = useState(false);
@@ -61,6 +62,7 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
     <section className="panel">
       {/* The vote recommendation lives inside the header (it IS the headline's vote — one source of truth). */}
       <HeadlineBar h={hl} scores={scores} big label={`Meeting ${script.meeting + 1}`} vote={script.vote} />
+      <PairChip />
       <PushTally recommended={target} />
       {!ghost && <div className="col">
         {script.say.length > 0 && <h3>Say</h3>}
