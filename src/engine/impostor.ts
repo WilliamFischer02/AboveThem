@@ -20,7 +20,27 @@ export type AccusationType = keyof typeof ACC;
 export interface Vars { [k: string]: string }
 
 const fill = (tpl: string, v: Vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? `{${k}}`);
-const complete = (tpl: string, v: Vars) => [...tpl.matchAll(/\{(\w+)\}/g)].every(x => x[1] in v);
+const complete = (tpl: string, v: Vars) => [...tpl.matchAll(/\{(\w+)\}/g)].every(x => x[1] in v && v[x[1]] !== '');
+
+/**
+ * Render template lines: a line is used only when every placeholder has a real value (from the ledger);
+ * otherwise it is skipped — a raw "{A}" must never reach the screen, and inventing a room / name would be a lie
+ * built on nothing. Exported for the impostor.json coverage test.
+ */
+export function renderLines(tpls: readonly string[] | undefined, v: Vars): string[] {
+  return (tpls ?? []).filter(t => complete(t, v)).map(t => fill(t, v));
+}
+
+/** One line or null (same rule as renderLines). */
+export function renderLine(tpl: string | undefined, v: Vars): string | null {
+  return tpl && complete(tpl, v) ? fill(tpl, v) : null;
+}
+
+/** Used when no template of an accusation type can be filled from what was logged (no placeholders). */
+export const GENERIC_DEFENSE = [
+  'What exactly did you see, and when? Walk me through it.',
+  'I was doing my tasks — ask me anything about my route.',
+];
 
 export function impostorVars(m: MatchState, meeting: number): Vars {
   const v: Vars = {};
@@ -127,8 +147,10 @@ export function impostorAdvice(m: MatchState, scores: SuspectScore[], meeting: n
     const entry = ACC[type];
     const vars = { ...v, ...(accuser ? { A: accuser } : {}) };
     const pool = entry.best ?? [...(entry.uncleared_accuser ?? []), ...(entry.cleared_accuser ?? [])];
-    const lines = pool.filter(l => complete(l, vars)).map(l => fill(l, vars));
-    defenses.push({ type, accuser, lines: lines.length ? lines : pool.map(l => fill(l, vars)), avoid: entry.avoid, followup: fill(entry.followup, vars) });
+    // {A} is only the addressee, not a fact: with no accuser yet, address the room. Facts (R, W, TASK…) are never softened.
+    const soft = accuser ? vars : { A: 'everyone', ...vars };
+    const lines = renderLines(pool, vars).length ? renderLines(pool, vars) : renderLines(pool, soft);
+    defenses.push({ type, accuser, lines: lines.length ? lines : [...GENERIC_DEFENSE], avoid: renderLines(entry.avoid, soft), followup: renderLine(entry.followup, vars) ?? renderLine(entry.followup, soft) ?? '' });
   }
 
   // Partner being pushed?
@@ -137,10 +159,11 @@ export function impostorAdvice(m: MatchState, scores: SuspectScore[], meeting: n
     const pt = pushTally(m, meeting).find(t => t.target === partner.id);
     if (pt && pt.accusers.length) {
       const vars = { ...v, P2: partner.name, P: push ? pname(push.target) : (v.X ?? 'someone else'), R: v.R ?? 'the other side' };
-      partnerWarning = (ACC.partner_being_voted.best ?? []).map(l => fill(l, vars)).concat([ACC.partner_being_voted.followup]);
+      const fu = renderLine(ACC.partner_being_voted.followup, vars);
+      partnerWarning = renderLines(ACC.partner_being_voted.best, vars).concat(fu ? [fu] : []);
     }
   }
 
-  const rules = [...DECEPTION.alibi_rules.slice(0, 2), DECEPTION.kill_rules[0]];
+  const rules = renderLines([...DECEPTION.alibi_rules.slice(0, 2), DECEPTION.kill_rules[0]].filter(Boolean), v);
   return { alibis, push, defenses, partnerWarning, rules, vars: v };
 }

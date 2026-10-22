@@ -1,5 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { looksEnglish, translationRequest, unreadableHint, senderByIconColor, captureVerdict, watcherStalled } from './eventHelpers';
+import { looksEnglish, translationRequest, unreadableHint, senderByIconColor, captureVerdict, watcherStalled, autoMatchSettings } from './eventHelpers';
+import { DEFAULT_SETTINGS } from '../state/presets';
+import { reduce, initState } from '../state/events';
+
+describe('special roles in auto-created matches', () => {
+  const presets = {
+    ABCDEF: { savedAt: 10, settings: { ...DEFAULT_SETTINGS, roles: { engineer: true } } },
+    ZZZZZZ: { savedAt: 20, settings: { ...DEFAULT_SETTINGS, roles: { shapeshifter: true, scientist: true } } },
+  };
+  it("uses this lobby code's preset roles, else the newest preset with roles", () => {
+    expect(autoMatchSettings(DEFAULT_SETTINGS, {}, 'polus', presets, 'ABCDEF').roles).toEqual({ engineer: true });
+    expect(autoMatchSettings(DEFAULT_SETTINGS, {}, 'polus', presets, 'NEWONE').roles).toEqual({ shapeshifter: true, scientist: true });
+    expect(autoMatchSettings(DEFAULT_SETTINGS, {}, 'polus', {}, null).roles).toBeUndefined();
+  });
+  it('screen-read settings override the base but never the roles; the map is the detected one', () => {
+    const s = autoMatchSettings(DEFAULT_SETTINGS, { impostorCount: 3, roles: undefined }, 'mira', presets, 'ABCDEF');
+    expect(s.impostorCount).toBe(3);
+    expect(s.map).toBe('mira');
+    expect(s.roles).toEqual({ engineer: true });
+  });
+  it('a later game://settings patch keeps the roles', () => {
+    const m0 = initState({ id: 'x', startedAt: 0, settings: autoMatchSettings(DEFAULT_SETTINGS, {}, 'skeld', presets, 'ABCDEF'), map: 'skeld', me: 'me', myRole: 'crew', players: [{ id: 'me', name: 'me', color: 'cyan', isMe: true, status: 'alive', knownRole: 'crew' }] });
+    const m1 = reduce(m0, { kind: 'settings', wall: 1, payload: { killCooldownSec: 20 } });
+    expect(m1.settings.roles).toEqual({ engineer: true });
+    expect(m1.settings.killCooldownSec).toBe(20);
+  });
+});
 
 describe('capture / watcher health', () => {
   const now = 1_000_000;
