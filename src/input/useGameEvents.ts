@@ -21,7 +21,8 @@ import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
 import { parseChatClaims, toClaims } from '../engine/chatClaims';
 import { matchGrid, rosterConfidence, norm, similarity, nameScore, type GridEntry, type RosterPlayer } from '../engine/rosterMatch';
-import { consolidate, NAME_MAX, type ConsolidatePlayer } from '../engine/rosterConsolidate';
+import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type ConsolidatePlayer } from '../engine/rosterConsolidate';
+import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
@@ -91,6 +92,19 @@ export function useGameEvents() {
   /** The resume-from-disk attempt has finished: only then may a screen read create a new match
    *  (a reload mid-game otherwise races the resume and starts a fresh match with everyone alive). */
   const resumeDone = useRef(!isTauri());
+  /** What the app has learned about names across games (`names.json`); every user fix feeds it. */
+  const bookRef = useRef<NameBook>(emptyBook());
+  const lobbyRef = useRef<string | null>(null);
+  const bookSave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const learn = (fn: (b: NameBook) => NameBook) => {
+    bookRef.current = fn(bookRef.current);
+    if (bookSave.current) clearTimeout(bookSave.current);
+    bookSave.current = setTimeout(() => { persist.writeJson('names.json', bookRef.current).catch(() => {}); }, 1500);
+  };
+  useEffect(() => {
+    persist.readJson<NameBook>('names.json').then(b => { if (b && b.version === 1) bookRef.current = prune(b, Date.now()); }).catch(() => {});
+  }, []);
+  useEffect(() => { lobbyRef.current = lobbyCode; }, [lobbyCode]);
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
 
@@ -115,7 +129,8 @@ export function useGameEvents() {
     let last = '';
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsub = useMatch.subscribe(st => {
-      const names = st.match ? Object.values(st.match.players).map(p => p.name).filter(n => n && !n.startsWith('#')) : [];
+      const roster = st.match ? Object.values(st.match.players).map(p => p.name).filter(n => n && !n.startsWith('#')) : [];
+      const names = snapList(bookRef.current, roster, lobbyRef.current);
       const key = names.join('|');
       if (key === last) return;
       last = key;
@@ -162,6 +177,8 @@ export function useGameEvents() {
     /** Vote-grid colour votes per player: three agreeing reads change an unlocked colour. */
     const colorVotes = new Map<string, { color: string; n: number }>();
     const translated = new Map<string, { text: string; lang: string | null }>();
+    /** Grid readings of each card's name this match (spelling votes). */
+    const nameVotes = new Map<string, Record<string, number>>();
 
     /** The role card read for *this* game (a card older than 30 s belongs to the previous one). */
     const freshRole = (): Role => (role && Date.now() - roleAt < 30_000 ? role : 'crew');
@@ -224,11 +241,17 @@ export function useGameEvents() {
           if (!live.bodySamples[a.into] && live.bodySamples[a.from]) live.setBodySample(a.into, live.bodySamples[a.from]);
           live.dispatch({ kind: 'mergePlayers', payload: { from: a.from, into: a.into, why: a.why } });
           merged.push(`${from.name} → ${into.name}`);
+          // The misread spelling becomes an alias of the surviving one.
+          const keep = nameQuality(into.name) >= nameQuality(from.name) ? into.name : from.name;
+          const lost = keep === into.name ? from.name : into.name;
+          if (!isPlaceholderName(lost) && !isPlaceholderName(keep)) learn(b => learnAlias(b, lost, keep, Date.now(), 'merge'));
         } else {
           const p = live.match.players[a.id];
           if (!p || p.isMe) continue;
           live.dispatch({ kind: 'removePlayer', payload: { id: a.id } });
           dropped.push(p.name);
+          // A card that never reached the vote grid and got dropped is probably not a name at all.
+          if (p.slot === undefined && !isPlaceholderName(p.name)) learn(b => learnJunk(b, p.name, Date.now(), false));
         }
       }
       if (merged.length || dropped.length) useMatch.getState().showToast(`${why}: ${[merged.length ? `merged ${merged.join(', ')}` : '', dropped.length ? `dropped ${dropped.join(', ')}` : ''].filter(Boolean).join('; ')}`);
@@ -304,6 +327,9 @@ export function useGameEvents() {
         }
         const fromLobby = source === 'lobby';
         const meetingNow = s.match?.phase.meeting ?? 0;
+        // Known spellings win over the raw read ("BigBihgis" → "BigBingus"); learned junk never becomes a card.
+        entries = entries.map(en => en.name.startsWith('#') ? en : { ...en, name: resolve(bookRef.current, en.name).name })
+          .filter(en => !isJunk(bookRef.current, en.name) || !fromLobby);
         if (!s.match) {
           if (creating || !resumeDone.current) return;
           creating = true;
@@ -346,7 +372,7 @@ export function useGameEvents() {
           for (const k of [...lobbySeen.keys()]) if (!now.has(k)) lobbySeen.delete(k);
           for (const k of now) lobbySeen.set(k, (lobbySeen.get(k) ?? 0) + 1);
           for (const en of entries) {
-            if (!plausibleName(en.name) || (lobbySeen.get(norm(en.name)) ?? 0) < 2) continue;
+            if (!plausibleName(en.name) || isJunk(bookRef.current, en.name) || (lobbySeen.get(norm(en.name)) ?? 0) < 2) continue;
             let p = fuzzyFind(en.name, existing);
             if (!p && existing.length >= entries.length) {
               // Lobby is full: never invent a player, take the closest unmatched name.
@@ -400,6 +426,16 @@ export function useGameEvents() {
           if (p.slot !== en.index + 1 || p.slotMeeting !== meetingNow) s.dispatch({ kind: 'player', payload: { id: p.id, slot: en.index + 1, slotMeeting: meetingNow } });
           // A placeholder / slot-named card takes its readable name.
           if (!en.name.startsWith('#') && (p.name.startsWith('#') || /^slot\d+$/.test(p.name) || p.name === 'You') && en.name_confidence >= 0.4) s.dispatch({ kind: 'player', payload: { id: p.id, name: en.name } });
+          // Repeated readings vote on the spelling: a better reading seen twice replaces a first misread,
+          // and a settled spelling is learned for the next game (the user's typed name always stands).
+          else if (!en.name.startsWith('#') && en.name_confidence >= 0.4 && !p.nameLocked) {
+            const v = nameVotes.get(p.id) ?? {};
+            v[en.name] = (v[en.name] ?? 0) + 1;
+            nameVotes.set(p.id, v);
+            const best = bestReading(v, p.name, p.nameLocked);
+            if (best !== p.name) { s.dispatch({ kind: 'player', payload: { id: p.id, name: best } }); learn(b => learnAlias(b, p.name, best, Date.now(), 'grid')); }
+            else if (v[en.name] >= 2 && en.name === p.name) learn(b => learnName(b, p.name, 'grid', Date.now(), lobbyCode ?? undefined));
+          }
           // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
           if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
             s.dispatch({ kind: 'player', payload: { id: p.id, color: en.color as PlayerColor } });
@@ -540,6 +576,7 @@ export function useGameEvents() {
           const others = Object.values(m.players).filter(p => !p.isMe);
           // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
           if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;
+          if (msg.sender && !msg.mine) msg.sender = resolve(bookRef.current, msg.sender).name;
           let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
             const byColor = others.filter(p => p.color === msg.color);
@@ -563,7 +600,7 @@ export function useGameEvents() {
           const slotted = Object.values(m.players).filter(p => p.slot !== undefined).length;
           // Once the vote grid has established the roster, unknown chat senders are OCR misses, not new players.
           const roomFor = !m.rosterSize || Object.values(m.players).filter(p => p.status !== 'disconnected').length < m.rosterSize + (m.rosterSizeSource === 'grid' ? 0 : 1);
-          if (sender === 'unknown' && slotted < 8 && roomFor && msg.sender && msg.sender !== '?' && plausibleName(msg.sender)) {
+          if (sender === 'unknown' && slotted < 8 && roomFor && msg.sender && msg.sender !== '?' && plausibleName(msg.sender) && !isJunk(bookRef.current, msg.sender)) {
             // Chat bubbles are a roster source too: a new name with a readable icon becomes a player.
             const color = (COLOR_IDS as string[]).includes(msg.color) && !others.some(p => p.color === msg.color) ? (msg.color as PlayerColor) : 'gray';
             const id = color !== 'gray' && !m.players[color] ? color : `chat_${Date.now().toString(36)}`;
@@ -743,5 +780,11 @@ export function useGameEvents() {
   /** Start over with only me in the roster (wrong people carried over from another lobby). */
   const resetRoster = () => resetRosterRef.current();
 
-  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster };
+  /** The user corrected a card's name: the typed spelling is truth, the old reading its alias. */
+  const learnRename = (oldName: string, newName: string) => learn(b => learnAlias(b, oldName, newName, Date.now(), 'user'));
+  /** The user removed a card: that string is never a player. */
+  const learnRemoved = (name: string) => learn(b => learnJunk(b, name, Date.now(), true));
+  const nameBook = () => bookRef.current;
+
+  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster, learnRename, learnRemoved, nameBook };
 }

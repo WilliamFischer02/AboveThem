@@ -95,11 +95,19 @@ export function matchGrid(players: RosterPlayer[], entries: GridEntry[], meeting
     usedP.add(x.p.id); usedE.add(x.e.index);
     out.set(x.e.index, { index: x.e.index, playerId: x.p.id, score: x.score, reasons: x.reasons });
   }
-  // A full roster with one leftover each side: pair them (OCR mangled the name, cosmetics changed).
-  const freeP = players.filter(p => !usedP.has(p.id) && !p.isMe);
+  // Elimination: once most cards are matched and the roster is at least as big as the grid, every
+  // leftover card is one of the leftover players (OCR mangled the name, cosmetics changed, a fresh
+  // X on the icon). Pair them best-first; never invent a player for a card. A card of a disconnected
+  // player cannot exist, so those never take part.
+  const freeP = players.filter(p => !usedP.has(p.id) && !p.isMe && p.status !== 'disconnected');
   const freeE = entries.filter(e => !usedE.has(e.index));
-  if (out.size >= 3 && freeP.length === 1 && freeE.length === 1 && players.length >= entries.length) {
-    out.set(freeE[0].index, { index: freeE[0].index, playerId: freeP[0].id, score: 1, reasons: ['leftover'] });
+  if (out.size >= 3 && freeE.length > 0 && freeP.length >= freeE.length && players.length >= entries.length) {
+    const rest = pairs.filter(x => !usedP.has(x.p.id) && !usedE.has(x.e.index) && !x.p.isMe && x.p.status !== 'disconnected');
+    for (const x of rest) {
+      if (usedP.has(x.p.id) || usedE.has(x.e.index)) continue;
+      usedP.add(x.p.id); usedE.add(x.e.index);
+      out.set(x.e.index, { index: x.e.index, playerId: x.p.id, score: Math.max(0.5, x.score), reasons: [...x.reasons, 'elimination'] });
+    }
   }
   return entries.map(e => out.get(e.index) ?? { index: e.index, playerId: null, score: 0, reasons: [] });
 }

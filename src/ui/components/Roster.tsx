@@ -180,6 +180,7 @@ function ColorPicker({ p, onDone }: { p: Player; onDone: () => void }) {
 
 function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
   const match = useMatch(s => s.match)!;
+  const auto = useAuto();
   const observe = useMatch(s => s.observe);
   const dispatch = useMatch(s => s.dispatch);
   const [mode, setMode] = useState<MenuMode>('main');
@@ -239,7 +240,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
             {p.status !== 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'alive' } }); done(); }}>Mark alive</button>}
             <button className="btn sm ghost" onClick={() => setMode('color')}><Crewmate color={p.color} size={16} /> colour…</button>
             <button className="btn sm ghost" onClick={() => setMode('rename')}>✎ rename</button>
-            <button className="btn sm ghost" title="Not a real player (OCR junk)" onClick={() => { dispatch({ kind: 'removePlayer', payload: { id: p.id } }); done(); }}>✕ remove</button>
+            <button className="btn sm ghost" title="Not a real player (OCR junk): never add this name again" onClick={() => { auto?.learnRemoved(p.name); dispatch({ kind: 'removePlayer', payload: { id: p.id } }); done(); }}>✕ remove</button>
           </div>
           <div className="row">
             <span className="muted small">Chord: prefix + <span className="key">{PALETTE[p.color as keyof typeof PALETTE]?.key}</span> then room</span>
@@ -264,7 +265,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
         </>
       )}
       {mode === 'rename' && (
-        <form className="row" onSubmit={e => { e.preventDefault(); const v = (new FormData(e.currentTarget).get('n') as string).trim(); if (v) dispatch({ kind: 'player', payload: { id: p.id, name: v } }); done(); }}>
+        <form className="row" onSubmit={e => { e.preventDefault(); const v = (new FormData(e.currentTarget).get('n') as string).trim(); if (v && v !== p.name) { dispatch({ kind: 'player', payload: { id: p.id, name: v, nameLocked: true } }); auto?.learnRename(p.name, v); } done(); }}>
           <input className="input" name="n" defaultValue={p.name} autoFocus />
           <button className="btn sm primary" type="submit">Save</button>
           <button className="btn xs" type="button" onClick={() => setMode('main')}>back</button>

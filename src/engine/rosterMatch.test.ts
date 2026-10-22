@@ -37,6 +37,17 @@ describe('rosterMatch', () => {
     expect(a[0].playerId).toBeNull();
   });
 
+  it('elimination: with a settled roster, leftover cards go to leftover players instead of new ones', () => {
+    const players = [P('red', 'Alkylraven', 'red'), P('blue', 'SHUSH', 'blue'), P('green', 'Bonsainew', 'green'), P('pink', 'Waxscarce', 'pink'), P('lime', 'Gone', 'lime', { status: 'disconnected' })];
+    const entries = [E(0, 'Alkylraven', 'red'), E(1, 'SHUSH', 'blue'), E(2, 'Bonsainew', 'green'), E(3, 'W@x$c', 'unknown', { dead: true })];
+    const a = matchGrid(players, entries, 1);
+    expect(a[3].playerId).toBe('pink');
+    expect(a[3].reasons).toContain('elimination');
+    // a card has no owner left: still a candidate, never a disconnected player
+    const b = matchGrid(players.filter(p => p.id !== 'pink'), entries, 1);
+    expect(b[3].playerId).toBeNull();
+  });
+
   it('a dead player cannot be matched to an alive card when a better alive candidate exists', () => {
     const players = [P('red', 'Sam', 'red', { status: 'dead' }), P('blue', 'Sam', 'blue')];
     const a = matchGrid(players, [E(0, 'Sam', 'unknown')], 2);

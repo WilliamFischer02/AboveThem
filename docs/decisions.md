@@ -239,3 +239,22 @@ undoable (automatic). Names longer than the game's 12-character cap are junk by
 construction.
 **Consequences:** a wrong merge is recoverable only through Rescan / Reset roster;
 removals still consume an undo slot (`removePlayer` is shared with the user path).
+
+## ADR-023 — Every user fix trains the name reader; the roster freezes after the first full grid
+**Date:** 2026-10-22 (session 4)
+**Status:** accepted (engine unit-tested; live behaviour to confirm)
+**Why:** William wants corrections to make detection better, and the roster to stay the
+same from meeting to meeting apart from spelling / headshot fixes and new dead X marks.
+`src/engine/nameBook.ts` keeps `names.json` (app data): confirmed spellings (user-typed
+weigh 3, grid 1), OCR aliases (recorded on every user rename and every automatic merge),
+and junk strings (one user "✕ remove" is final; automatic drops need two strikes). It
+feeds back three ways: the Rust snap list is the roster + this lobby's known names + their
+aliases (so the raw read is already right), every grid / chat / lobby reading is resolved
+through the book before matching, and junk never becomes a card again. Within a match,
+repeated grid readings vote on a card's spelling (`bestReading`): a better reading seen
+twice replaces a first misread unless the user typed the name (`Player.nameLocked`).
+Consistency: once a full grid has set `rosterSize`, nothing can add a player, and
+`matchGrid` assigns leftover cards to leftover (non-disconnected) players by elimination
+instead of creating candidates.
+**Consequences:** a wrong user rename is also learned (fix it by renaming again: the
+latest typed spelling wins); the book forgets automatic names after 30 days.

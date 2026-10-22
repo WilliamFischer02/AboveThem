@@ -38,6 +38,8 @@ export interface Player {
   slot?: number;
   /** Colour was set by the user; automatic reads must not change it. */
   colorLocked?: boolean;
+  /** Name was typed by the user; repeated OCR readings must not change it. */
+  nameLocked?: boolean;
   /** Meeting index the slot was read in (slots re-sort every meeting: alive first, dead last). */
   slotMeeting?: number;
   /** User said "not dead" during this meeting: automatic death reads are ignored until the next one. */

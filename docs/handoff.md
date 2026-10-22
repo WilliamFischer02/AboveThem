@@ -29,7 +29,8 @@ an installer at `src-tauri\target\release\bundle\msi\AboveThem_0.1.0_x64_en-US.m
 | Phase | task bar **or** REPORT/KILL/SABOTAGE/VENT = round (USE is in the lobby too); header **or** voting timer = meeting (sticky under chat); eject text; "WAITING FOR HOST" / "START" button **or** room code = lobby (sticky under chat); VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
 | Role | CREWMATE/IMPOSTOR word, or teal/red letters on the black role screen; KILL/SABOTAGE buttons; red floating names; "Fake Tasks:" header (round only) | `game://role`; user toggle locks it (`myRoleLocked`) |
 | Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, colours (voted), dead (X **or** greyed plain card), headshots, **icon dHash**, dim ratio |
-| Grid → roster | `src/engine/rosterMatch.ts` | name × icon hash × colour × same-meeting slot; slots re-read every meeting; roster confidence dot |
+| Grid → roster | `src/engine/rosterMatch.ts` | name × icon hash × colour × same-meeting slot; leftovers paired by elimination once ≥ 3 cards matched; slots re-read every meeting; roster confidence dot |
+| Name learning | `src/engine/nameBook.ts` → `names.json` | user rename = spelling + alias, "✕ remove" = junk forever, merges = alias, two agreeing grid reads = confirmed; readings resolved through the book; snap list = roster + lobby's names + aliases |
 | "DEAD" header, room popup, nearby names, my task list, chat → claims | as before | task list not read under meetings / chat |
 | Chat translation | `translate/google.rs` (keyless) after an English-word heuristic | `chatPatch {translated, lang}` under the bubble |
 | New game | role card after a played match, or the lobby | roll-over keeps names/colours/headshots, wipes the slate |
@@ -71,6 +72,14 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
    the fix is in `sameIdentity` / `playerQuality`, not in the event wiring. The roster
    header shows `cards/size`.
    Many lobby-created players still show grey until the grid colour-votes settle.
+   The name book (ADR-023) is equally new: after a few games `%APPDATA%\AboveThem\names.json`
+   should hold BigBingus with its misreads as aliases and the host-line colours as junk.
+9. **Next consistency idea (not built):** Among Us orders the vote grid by player index with
+   the dead moved to the end, so the relative order of alive cards is the same every meeting.
+   Remember each player's first-meeting index (`gridOrder`) and give `pairScore` a bonus when
+   a card's rank among alive cards equals the player's rank among alive `gridOrder`s. That is
+   a second slot-like signal that survives re-sorting; with it, name and icon only have to
+   break ties.
 5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
    now resume from `avatars_<id>.json`).
 6. Signal helper (ghost image role) and sabotage banner: still no frames.
@@ -84,7 +93,7 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
 windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless
-on the primary monitor; app on the left monitor. Tests: Vitest 64, Rust 31 (OCR against the
+on the primary monitor; app on the left monitor. Tests: Vitest 72, Rust 31 (OCR against the
 20 real frames in `src-tauri/fixtures/`).
 
 ## Open questions for William
