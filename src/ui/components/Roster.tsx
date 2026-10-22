@@ -62,7 +62,7 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
   const openStrip = useCallback((player: PlayerId, mode: StripMode, plain: boolean) => {
     const cur = stripRef.current;
     if (cur && cur.player === player && cur.mode === mode) { settle(true); return; } // same button again = plain mark
-    if (cur) settle(true); // a different card/button: the previous pending mark still counts
+    if (cur) settle(cur.player !== player); // another card: the pending mark counts; same card, other button: it was a misclick
     const next = { player, mode, plain, seq: ++seq.current };
     stripRef.current = next;
     setStrip(next);
@@ -153,7 +153,7 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
                 const already = mode === 'sus' ? cur === 'sus' : cur === 'clear' || cur === 'hardClear';
                 openStrip(p.id, mode, !already);
               }}
-              onReason={(r) => { const s = stripRef.current; stripRef.current = null; setStrip(null); if (s) logMark(s.player, s.mode, r); }}
+              onReason={(r) => { const s = stripRef.current; stripRef.current = null; setStrip(null); if (s) logMark(s.player, s.mode === 'clear' && mk?.mark === 'hardClear' ? 'hardClear' : s.mode, r); }}
               onHard={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'hardClear'); }}
               onUnmark={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'neutral'); }}
             />
