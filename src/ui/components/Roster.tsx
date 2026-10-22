@@ -245,7 +245,7 @@ function Card({ p, score, mark, reason, open, onToggle, onClose, prime, flashKey
           <button className="act" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first: click your own card'} disabled={!here}
             onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁</button>
           <button className={`act ${withMe ? 'on-with' : ''}`} title={withMe ? 'With me — click when they leave' : 'With me'}
-            onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0]?.id ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>👥</button>
+            onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>👥</button>
         </div>
       )}
       {strip && <ReasonStrip key={strip.seq} strip={strip} mark={mark} onReason={onReason} onHard={onHard} onUnmark={onUnmark} />}

@@ -3,9 +3,16 @@
  */
 import type { MapData, MapId, RoomId } from '../types/game';
 
-/** Shortest walking time between rooms (seconds, speed 1.0). Dijkstra over adjacency. */
+/**
+ * Shortest walking time between rooms (seconds, speed 1.0). Dijkstra over adjacency.
+ * A room the map does not know ('unknown', a stub map, a typo) returns 0 = "could be anywhere": callers
+ * compare this against a time gap to accuse, so missing data must never look like "too far" (fail soft).
+ * It used to throw for an unknown `from` and return Infinity (= contradiction) for an unknown `to`.
+ */
 export function walkSeconds(map: MapData, from: RoomId, to: RoomId, speed = 1): number {
   if (from === to) return 0;
+  if (!map.rooms.some(r => r.id === from) || !map.rooms.some(r => r.id === to)) return 0;
+  if (!(speed > 0) || !Number.isFinite(speed)) speed = 1;
   const dist = new Map<RoomId, number>();
   const done = new Set<RoomId>();
   for (const r of map.rooms) dist.set(r.id, Infinity);
@@ -17,7 +24,8 @@ export function walkSeconds(map: MapData, from: RoomId, to: RoomId, speed = 1): 
     if (cur === null || best === Infinity) break;
     done.add(cur);
     if (cur === to) break;
-    const room = map.rooms.find(r => r.id === cur)!;
+    const room = map.rooms.find(r => r.id === cur);
+    if (!room) continue;
     for (const adj of room.adjacent) {
       const nd = best + adj.sec / speed;
       if (nd < (dist.get(adj.room) ?? Infinity)) dist.set(adj.room, nd);
@@ -150,6 +158,7 @@ export function fastestSeconds(map: MapData, from: RoomId, to: RoomId, opts: { s
  */
 export function couldReach(map: MapData, from: RoomId, to: RoomId, seconds: number, opts: { speed?: number; vents?: boolean; ventHopSec?: number; slackSec?: number } = {}): boolean {
   if (!hasMapData(map)) return true;
+  if (Number.isNaN(seconds)) return true; // unknown time gap: never "couldn't have got there"
   const t = fastestSeconds(map, from, to, opts);
   if (t === Infinity) return !(from in travelMatrix(map, opts).index && to in travelMatrix(map, opts).index);
   return t <= Math.max(0, seconds) + (opts.slackSec ?? 0);

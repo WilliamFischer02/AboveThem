@@ -48,7 +48,7 @@ export function GhostPanel() {
   const killObs = [...match.observations].reverse().find(o => o.type === 'sawKill' && o.victim === match.me);
   const killer: Player | undefined = killObs && killObs.type === 'sawKill' ? match.players[killObs.killer] : undefined;
   const alive = slotOrder(match).map(id => match.players[id]).filter(p => p.status === 'alive' && !p.isMe);
-  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
+  const here = myRoomNow(match) ?? 'unknown'; // never invent a room (was rooms[0]); 'unknown' fails soft in the engine
 
   return (
     <section className="panel ghost">

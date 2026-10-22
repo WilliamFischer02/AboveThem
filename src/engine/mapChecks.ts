@@ -132,7 +132,9 @@ export type MonitorObsLike =
 /** Convert a logged monitor observation into the `read` shape `monitorContradiction` takes (null for anything else). */
 export function monitorReadFromObs(o: { type: string } & Record<string, unknown>): MonitorRead | null {
   const ob = o as MonitorObsLike;
-  const t = typeof ob.stamp?.t === 'number' ? ob.stamp.t : 0;
+  // No round time = we can't line the read up with any claim (a 0 fallback compared it with the round start).
+  const t = typeof ob.stamp?.t === 'number' && Number.isFinite(ob.stamp.t) ? ob.stamp.t : NaN;
+  if (Number.isNaN(t) && (ob.type === 'adminRead' || ob.type === 'vitalsRead')) return null;
   if (ob.type === 'adminRead') return { kind: 'admin', t, counts: { ...(ob.counts ?? {}) } };
   if (ob.type === 'vitalsRead') {
     const status: Partial<Record<PlayerId, 'alive' | 'dead' | 'dc'>> = {};
@@ -150,6 +152,9 @@ export const MONITOR_WINDOW_SEC = 4;
 
 export function monitorContradiction(map: MapData, read: MonitorRead, claim: MonitorClaim): MonitorCheck | null {
   if (!hasMapData(map)) return null;
+  // NaN times slip through every window comparison (NaN > x is false) and would end in a contradiction.
+  if (!Number.isFinite(claim.t)) return null;
+  if (read.kind === 'doorLog' ? !(Number.isFinite(read.from) && Number.isFinite(read.to)) : !Number.isFinite(read.t)) return null;
   const info = map.info;
   if (read.kind === 'admin') {
     if (info && info.admin.length === 0) return { contradiction: false, reason: 'noAdminOnMap', text: `${map.name} has no Admin table — an "admin" read is not possible`, shaky: false };

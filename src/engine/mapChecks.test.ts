@@ -77,9 +77,9 @@ describe('monitorReadFromObs (features agent observation shapes)', () => {
     const read = monitorReadFromObs({ type: 'doorLogRead', stamp, from: 10, to: 40, entries: [{ player: 'red', t: 20 }] });
     expect(read).toEqual({ kind: 'doorLog', from: 10, to: 40, entries: [{ player: 'red', t: 20 }] });
   });
-  it('other observations → null; missing stamp → t = 0', () => {
+  it('other observations → null; missing stamp → null (no time = cannot line up with a claim; bugs-rust review)', () => {
     expect(monitorReadFromObs({ type: 'sighting', player: 'red', room: 'admin' })).toBeNull();
-    expect(monitorReadFromObs({ type: 'adminRead', counts: {} })).toEqual({ kind: 'admin', t: 0, counts: {} });
+    expect(monitorReadFromObs({ type: 'adminRead', counts: {} })).toBeNull();
   });
 });
 
