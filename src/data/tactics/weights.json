@@ -6,7 +6,8 @@
     "meeting": 3.0,
     "sabotage": 2.0,
     "structural": 2.5,
-    "manual": 2.0
+    "manual": 3.0,
+    "social": 2.5
   },
   "movement": {
     "headingToBodyRoomInWindowAlone": 1.2,
@@ -15,16 +16,23 @@
     "selfReportDeadEndBonus": 0.4,
     "reportedInRoomWithNoTaskReason": 0.6,
     "stackingNearVictim": 0.7,
+    "aloneWithVictimInWindow": 1.6,
     "roamingNoTaskStops": 0.6,
     "taskDurationMismatch": 0.5,
     "unaccountedWholeRound": 0.4,
     "peeledOffFromGroup": 0.4,
-    "ventOnlyReachable": 2.0
+    "ventOnlyReachable": 2.0,
+    "unaccountedKillWindow": 0.3,
+    "couldNotReachBody": -1.5,
+    "presentAtBodySmallGroup": 0.3,
+    "sawVentEngineersOn": 2.5
   },
   "task": {
     "taskNotAtClaimedLocation": 2.0,
     "claimedCommonTaskIDontHave": 2.5,
     "taskLogicImpossible": 2.0,
+    "taskNotOnMap": 1.6,
+    "sawNonVisualTask": -0.3,
     "taskBarDidNotMove": 1.0,
     "taskBarMoved": -1.0,
     "visualWithoutAnimation": 3.0
@@ -42,22 +50,51 @@
     "preciseUndisputedAlibi": -0.5,
     "confirmedCompanionAlibi": -1.0,
     "silentNearBody": 0.5,
-    "skipOnCriticalVote": 0.4
+    "skipOnCriticalVote": 0.4,
+    "votedOffCrew": 0.5,
+    "silentInMeeting": 0.25,
+    "skipWhenImpostorFound": 0.4,
+    "witnessContradiction": 1.5,
+    "monitorContradiction": 1.5,
+    "unreliableContradiction": 0.4
   },
   "sabotage": {
     "oddArrivalAfterLights": 0.6,
     "ignoredCriticalSabotage": 0.5,
     "commsAfterVisualAnnounced": 0.4,
-    "fixedSabotageWithMe": -0.8
+    "fixedSabotageWithMe": -0.4
   },
   "structural": {
     "neverVoteEachOther": 0.4,
     "hardDefendedConfirmedImpostor": 1.2,
-    "impostorAlibiNamedThem": 1.5
+    "impostorAlibiNamedThem": 1.5,
+    "repeatedCrewEjections": 0.5,
+    "minorityVoteBloc": 0.35,
+    "recurrence": 0.3,
+    "mutualVouchPair": 0.3,
+    "deadAccuser": 0.25,
+    "storyFlipNlu": 0.9,
+    "stanceFlipWhenCountered": 0.2
   },
   "manual": {
     "sus": 0.8,
-    "clear": -0.8
+    "clear": -0.8,
+    "reasons": {
+      "_doc": "Weight per reason the user picks when marking (engine/marks.ts). Positive = sus. 'sus' with no reason uses manual.sus.",
+      "proximityToBody": 1.0,
+      "unaccountedFor": 0.5,
+      "strangeBehavior": 0.6,
+      "followedMe": 0.7,
+      "fakeTasking": 1.6,
+      "ventSound": 1.2,
+      "lyingInChat": 1.2,
+      "selfReport": 0.8,
+      "other": 0.8,
+      "withMeWholeRound": -1.6,
+      "sawVisualTask": -2.5,
+      "taskBarMoved": -1.3,
+      "otherClear": -0.8
+    }
   },
   "sourceTrust": {
     "me": 0.95,
@@ -73,5 +110,41 @@
   "vote": {
     "threshold": 0.6,
     "marginToSecond": 0.15
+  },
+  "social": {
+    "_doc": "What OTHER players say about a player (chat accusations / clears), scaled by the speaker's credibility. Independent speakers stack with diminishing returns (each next one counts `stackDecay` times the previous).",
+    "accusation": 0.5,
+    "accusationWithReason": 0.8,
+    "bandwagonFactor": 0.5,
+    "clear": -0.6,
+    "defense": -0.3,
+    "companionUnconfirmed": -0.3,
+    "stackDecay": 0.7,
+    "credibilityHardCleared": 1.5,
+    "credibilityFloor": 0.15,
+    "impostorAccusesThem": -0.3,
+    "clearFromSuspect": 0.25,
+    "voteCall": 0.4,
+    "eyewitness": 1.5,
+    "clearVisual": -1.0,
+    "sawTask": -0.6,
+    "withOther": -0.2,
+    "falseEyewitness": 2.0,
+    "falseSelfReportClaim": 0.3,
+    "vouchedByImpostor": 0.8,
+    "consistencyFloor": 0.5
+  },
+  "decay": {
+    "_doc": "Soft evidence loses weight with age: weight x max(floor, 0.5^(rounds old / halfLife)). Hard facts never decay; a 0 half-life means never decays.",
+    "floor": 0.25,
+    "halfLifeRounds": {
+      "movement": 2,
+      "task": 5,
+      "meeting": 4,
+      "social": 2,
+      "sabotage": 2,
+      "structural": 0,
+      "manual": 3
+    }
   }
 }

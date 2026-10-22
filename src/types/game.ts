@@ -69,6 +69,11 @@ export interface LobbySettings {
   commonTasks: number;
   longTasks: number;
   shortTasks: number;
+  /**
+   * Special roles enabled in the lobby (all default off). They change what a sighting proves:
+   * Engineers (crew) can vent; a Shapeshifter can kill wearing someone else's look.
+   */
+  roles?: { engineer?: boolean; shapeshifter?: boolean; scientist?: boolean; guardianAngel?: boolean; tracker?: boolean; noisemaker?: boolean; phantom?: boolean };
 }
 
 // ---------------------------------------------------------------------------
@@ -168,9 +173,21 @@ export interface ManualMarkObs extends BaseObs {
   /** sus = soft suspicion; clear = round clear (soft); hardClear = you are certain (visual task, kill-window); neutral = unmark. */
   mark: 'sus' | 'clear' | 'hardClear' | 'neutral';
   weight?: number;
+  /** Why the user marked them (picked from SUS_REASONS / CLEAR_REASONS in engine/marks.ts). Each reason has its own weight. */
+  reason?: MarkReason;
 }
 
 export type UserMark = 'sus' | 'clear' | 'hardClear';
+
+/** Why a player is sus, as picked by the user in one click (labels + weights: engine/marks.ts, data/tactics/weights.json). */
+export type SusReason =
+  | 'proximityToBody' | 'unaccountedFor' | 'strangeBehavior' | 'followedMe' | 'fakeTasking'
+  | 'ventSound' | 'lyingInChat' | 'selfReport' | 'other';
+
+/** Why a player is (soft) clear, as picked by the user. */
+export type ClearReason = 'withMeWholeRound' | 'sawVisualTask' | 'taskBarMoved' | 'otherClear';
+
+export type MarkReason = SusReason | ClearReason;
 
 export type Observation =
   | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
@@ -345,7 +362,7 @@ export interface EvidenceItem {
   id: string;
   player: PlayerId;
   weight: number;           // log-odds contribution (+ = sus)
-  category: 'movement' | 'task' | 'meeting' | 'sabotage' | 'structural' | 'manual' | 'hard';
+  category: 'movement' | 'task' | 'meeting' | 'sabotage' | 'structural' | 'manual' | 'hard' | 'social';
   label: string;            // short human line
   refs: string[];           // observation/claim ids
   /** true if the rule depends on unverified map data */
@@ -354,6 +371,12 @@ export interface EvidenceItem {
   kind?: string;
   /** Template variables for that situation: P, R, T, W, V, TASK, P2, R2... */
   vars?: Record<string, string>;
+  /** Round this evidence is about (drives time decay). Derived from refs when the rule does not set it. */
+  round?: number;
+  /** Weight before time decay / shaky halving (set by scoreAll; `weight` is what was actually applied). */
+  baseWeight?: number;
+  /** 0..1 multiplier applied for age (1 = fresh; hard facts never decay). */
+  decay?: number;
 }
 
 export interface SuspectScore {
@@ -365,6 +388,14 @@ export interface SuspectScore {
   evidence: EvidenceItem[];
   /** Per-kill clears, for multi-impostor lobbies */
   clearedForKills: string[]; // bodyFound observation ids
+  /** Probability at the end of each completed meeting (oldest first), then `now`. For arrows / sparklines. */
+  trend?: { meeting: number; probability: number }[];
+  /** probability now − probability at the end of the last completed meeting (0 when there is none). */
+  delta?: number;
+  /** One line for the card: "2 accusations · alone near the Electrical body". */
+  summary?: string;
+  /** Where the score starts before evidence: impostors remaining among unresolved players. */
+  baseline?: { logOdds: number; label: string };
 }
 
 export interface MeetingQuestion {

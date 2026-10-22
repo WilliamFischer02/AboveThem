@@ -258,3 +258,23 @@ Consistency: once a full grid has set `rosterSize`, nothing can add a player, an
 instead of creating candidates.
 **Consequences:** a wrong user rename is also learned (fix it by renaming again: the
 latest typed spelling wins); the book forgets automatic names after 30 days.
+
+## ADR-0xx-suspicion-core — Suspicion is a whole-game, count-normalised, credibility-weighted score
+**Date:** 2026-10-22 (overnight session)
+**Status:** accepted (unit + calibration tested; not yet tuned on real match logs)
+**Why:** the old score reset its meaning every meeting, treated every chat accusation the same
+whoever said it, and showed probabilities that did not add up to anything. William wants a
+meter that is "intelligent and dynamic" and still explains every number.
+**Decision:** (1) two passes: pass 1 scores everything but chat; each player's pass-1
+probability becomes their credibility as a speaker; pass 2 adds social evidence
+(`chatEvidence.ts`, consuming chat-nlu's `ChatAssertion`) with diminishing returns across
+independent speakers. (2) Soft evidence decays per category (half-lives in `weights.json`;
+hard facts and structural patterns never). (3) A shared offset makes the probabilities of
+unresolved players sum to the impostors still at large (equals the classic prior when
+there is no evidence). (4) `SuspectScore` gains `trend` / `delta` (re-scoring the match as
+known at the end of each meeting, memoised), `summary`, `baseline`. (5) Impossible-travel
+verdicts use `travelLowerBound` (30 % / 3 s slack) and scale with the margin they miss by.
+**Consequences:** probabilities move when *other* players are cleared (correct, but the UI
+should show `baseline.label` so it is not surprising); a player's score can change when a
+speaker's credibility changes; snapshots make `scoreAll` ~10 ms warm / ~75 ms cold on a
+heavy 15-player game.
