@@ -5,14 +5,18 @@
  * icon counts per room), security cameras, vitals (who is dead), Mira's door log. The helper turns
  * one tap into a structured observation and cross-checks admin reads against chat location claims.
  *
- * Which map has what: SECURITY_FALLBACK below, all `_verified: false`. If the maps agent adds
- * `map.info.security` with the same shape, `securityFor` prefers it.
+ * Which map has what: SECURITY_FALLBACK below (stations sourced from the wiki via
+ * relay/game-knowledge.md §1.8; camera → nearest-room mapping is ours, so `_verified: false`).
+ * If the maps agent adds `map.info.security` with the same shape, `securityFor` prefers it.
+ * Facts that shape the UI: admin icons are anonymous, include players inside vents, and do NOT
+ * cover hallways (or Polus Outside); whether bodies show on admin is UNVERIFIED. Comms sabotage
+ * turns every station off except Fungle's binoculars.
  */
 import type { AdminReadObs, MapId, MatchState, PlayerId, RoomId, SightingObs, VitalsReadObs, Claim } from '../../types/game';
 import { fmt } from '../evidence';
 import { pname, roomName } from './util';
 
-export interface CamSpot { id: string; label: string; /** nearest real room id on the map (null = map has no such room yet) */ room: RoomId | null }
+export interface CamSpot { id: string; label: string; /** nearest real room id on the map (null = map has no such room yet) */ room: RoomId | null; match?: string }
 
 export interface SecurityInfo {
   admin: boolean;
@@ -24,23 +28,79 @@ export interface SecurityInfo {
   _note: string;
 }
 
+/**
+ * Station availability + camera spots from relay/game-knowledge.md §1.8 (wiki: Admin, Security, Camera,
+ * Vitals, Doorlog, Binoculars). Which station exists where is sourced; the mapping of each hallway
+ * camera to the NEAREST room id is ours (hallways are not rooms in the map JSON) — hence _verified false.
+ * `room` is a preferred room id; `match` is a name fragment used when the id is not on the map.
+ */
 export const SECURITY_FALLBACK: Record<MapId, SecurityInfo> = {
   skeld: {
     admin: true, vitals: false, doorLog: false,
     cams: [
-      { id: 'nav', label: 'Navigation hallway', room: 'navigation' },
-      { id: 'sec', label: 'Security hallway', room: 'security' },
-      { id: 'admin', label: 'Admin / Storage corridor', room: 'admin' },
-      { id: 'medbay', label: 'Upper Engine / MedBay hallway', room: 'medbay' },
+      { id: 'nav', label: 'Weapons↔Shields hall (by Nav/O2)', room: 'navigation' },
+      { id: 'admin', label: 'Admin/Cafe/Storage hall', room: 'admin' },
+      { id: 'medbay', label: 'MedBay/Cafe/Upper Engine hall', room: 'medbay' },
+      { id: 'sec', label: 'Security↔Reactor hall', room: 'security' },
     ],
     _verified: false,
-    _note: 'Four cams per the owner brief; each mapped to the NEAREST room because hallways are not rooms in skeld.json. UNVERIFIED in-game.',
+    _note: 'Admin + 4 cams on one screen (wiki). Hallway → nearest-room mapping is ours. No vitals (Scientist only).',
   },
-  mira: { admin: true, cams: false, vitals: false, doorLog: true, _verified: false, _note: 'Mira: admin table + door log, no cams/vitals (as remembered). Door-log sensor positions not in data: pick the nearest room.' },
-  polus: { admin: true, cams: 'anyRoom', vitals: true, doorLog: false, _verified: false, _note: 'Polus: admin, cams, vitals (as remembered). Camera spots not in data yet.' },
-  airship: { admin: true, cams: 'anyRoom', vitals: true, doorLog: false, _verified: false, _note: 'Airship: admin, cams, vitals (as remembered). Camera spots not in data yet.' },
-  fungle: { admin: false, cams: false, vitals: true, doorLog: false, _verified: false, _note: 'Fungle: vitals, no admin table or cams (binoculars instead) — as remembered, UNVERIFIED.' },
+  mira: { admin: true, cams: false, vitals: false, doorLog: true, _verified: false, _note: 'Admin + Doorlog (Communications PC: sensors at the north / south-west / south-east ends of the central Hallway). No cams, no vitals.' },
+  polus: {
+    admin: true, vitals: true, doorLog: false,
+    cams: [
+      { id: 'east', label: 'East (outside Office)', room: 'office' },
+      { id: 'central', label: 'Central (Comms panel)', room: 'communications' },
+      { id: 'ne', label: 'North-east (outside Lab)', room: 'laboratory' },
+      { id: 'south', label: 'South (Office/Admin SW door)', room: 'admin' },
+      { id: 'sw', label: 'South-west (outside O2)', room: 'o2' },
+      { id: 'nw', label: 'North-west (outside Electrical)', room: 'electrical' },
+    ],
+    _verified: false,
+    _note: 'Admin (does not cover Outside/hallways), 6 cams one at a time, Vitals in Office (wiki). Nearest-room mapping is ours.',
+  },
+  airship: {
+    admin: true, vitals: true, doorLog: false,
+    cams: [
+      { id: 'engine', label: 'Engine Room (left entrance)', room: 'engineRoom', match: 'engine' },
+      { id: 'vault', label: 'Vault (right entrance)', room: 'vault', match: 'vault' },
+      { id: 'records', label: 'Records', room: 'records', match: 'records' },
+      { id: 'security', label: 'Security (left entrance)', room: 'security', match: 'security' },
+      { id: 'cargo', label: 'Cargo Bay (left entrance)', room: 'cargoBay', match: 'cargo' },
+      { id: 'meeting', label: 'Meeting Room (above ladder)', room: 'meetingRoom', match: 'meeting' },
+    ],
+    _verified: false,
+    _note: 'Admin tables in Cockpit + Records, 6 cam views, Vitals in Medical (wiki). Room ids resolved by name until airship.json has rooms.',
+  },
+  fungle: {
+    admin: false, vitals: true, doorLog: false,
+    cams: [
+      { id: 'beach', label: 'Binoculars: Beach', room: 'beach', match: 'beach' },
+      { id: 'jungle', label: 'Binoculars: Jungle', room: 'jungle', match: 'jungle' },
+    ],
+    _verified: false,
+    _note: 'No admin, no cams: Binoculars in Lookout (Beach + Jungle, not The Cliffs; NOT disabled by Comms). Vitals in Laboratory.',
+  },
 };
+
+/** Map-real room for a spot: its id if the map has it, else the first room whose name contains `match`. */
+export function resolveSpot(m: MatchState, s: CamSpot): RoomId | null {
+  if (s.room && isMapRoom(m, s.room)) return s.room;
+  const key = (s.match ?? '').toLowerCase();
+  if (!key) return null;
+  return m.map.rooms.find(r => r.name.toLowerCase().includes(key) || r.id.toLowerCase().includes(key))?.id ?? null;
+}
+
+/**
+ * Comms sabotage running right now (a 'sabotage start' with no matching 'end' this round): Admin,
+ * Cams, Vitals and Doorlog are all OFF (Fungle binoculars excepted) — game-knowledge §1.6.
+ */
+export function commsDown(m: MatchState, round: number): boolean {
+  let down = false;
+  for (const o of m.observations) if (o.type === 'sabotage' && o.kind === 'comms' && o.stamp.round === round) down = o.phase === 'start';
+  return down;
+}
 
 export function securityFor(m: MatchState): SecurityInfo {
   const info = (m.map as unknown as { info?: { security?: Partial<SecurityInfo> } }).info?.security;
@@ -69,10 +129,12 @@ export function remoteSighting(m: MatchState, player: PlayerId, room: RoomId, vi
   return { type: 'sighting', player, room, note: `${via === 'cams' ? 'cams' : 'door log'}${label ? ': ' + label : ''}` };
 }
 
-export function vitalsObservation(m: MatchState, dead: PlayerId[]): Pick<VitalsReadObs, 'type' | 'dead' | 'alive'> {
+/** DED = killed since the last meeting (body on the map); D/C = no body (earlier death, ejected, left). */
+export function vitalsObservation(m: MatchState, dead: PlayerId[], dc: PlayerId[] = []): Pick<VitalsReadObs, 'type' | 'dead' | 'alive' | 'dc'> {
   const deadSet = new Set(dead);
-  const alive = Object.values(m.players).filter(p => !deadSet.has(p.id) && p.status === 'alive').map(p => p.id);
-  return { type: 'vitalsRead', dead: [...deadSet], alive };
+  const dcSet = new Set(dc.filter(p => !deadSet.has(p)));
+  const alive = Object.values(m.players).filter(p => !deadSet.has(p.id) && !dcSet.has(p.id) && p.status === 'alive').map(p => p.id);
+  return dcSet.size ? { type: 'vitalsRead', dead: [...deadSet], alive, dc: [...dcSet] } : { type: 'vitalsRead', dead: [...deadSet], alive };
 }
 
 /** Players a vitals read shows dead whom the roster still has alive (the UI patches their status). */

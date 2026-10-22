@@ -1,7 +1,7 @@
 /** Meeting card: for each body this round, who could / could not have been at the body in the kill window. */
 import { useMemo } from 'react';
 import { useMatch } from '../../../state/store';
-import { killWindows } from '../../../engine/features/killWindow';
+import { killWindows, doubleKills } from '../../../engine/features/killWindow';
 import { fmt } from '../../../engine/evidence';
 import { roomName } from '../../../engine/features/util';
 import { Who } from './shared';
@@ -9,9 +9,11 @@ import { Who } from './shared';
 export function KillWindowCard() {
   const m = useMatch(s => s.match);
   const windows = useMemo(() => (m ? killWindows(m, m.phase.round) : []), [m]);
+  const doubles = useMemo(() => (m ? doubleKills(m, windows) : []), [m, windows]);
   if (!m || windows.length === 0) return null;
   return (
     <>
+      {doubles.map(d => <div key={d.a + d.b} className="feat-card feat-line feat-bad" title={`refs: ${d.refs.join(', ')}`}>⚔ {d.line}</div>)}
       {windows.map(w => (
         <details key={w.bodyId} className="feat-card" open>
           <summary>

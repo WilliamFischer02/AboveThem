@@ -1,16 +1,16 @@
 /**
  * Player counter + vote arithmetic for meetings (features #2).
  *
- * Game rules encoded here (Among Us wiki, Meeting / Voting / Impostor pages, as remembered —
- * cross-check with relay/game-knowledge.md):
+ * Game rules encoded here (Among Us wiki Meeting / Ejection / Guide:Crewmate, confirmed by the
+ * research agent in relay/game-knowledge.md §1.1 and §1.4):
  *  - Impostors WIN as soon as alive impostors ≥ alive crewmates (checked after every kill and
  *    every ejection). So the crew can lose `crew − impostors` more crewmates (kills or wrong
  *    ejections) before the game ends; the last of those ends it.
  *  - Crew WIN when every impostor is ejected (or tasks complete).
  *  - Voting is PLURALITY, not majority: the player with the most votes is ejected. If two or more
  *    players tie for the most votes, or Skip has at least as many votes as the top player, nobody
- *    is ejected. Players who never vote are not counted. UNVERIFIED: the "skip ties the top player
- *    ⇒ no ejection" edge, believed correct.
+ *    is ejected (wiki: "skip-plurality, ties (incl. tie with skip) or no votes ⇒ nobody ejected").
+ *    Players who never vote are not counted.
  *  - A strict majority (⌊alive/2⌋ + 1) on one name therefore GUARANTEES the ejection.
  *  - Ghosts cannot vote.
  *

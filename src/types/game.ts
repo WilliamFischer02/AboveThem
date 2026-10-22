@@ -431,6 +431,9 @@ export interface AdminReadObs extends BaseObs {
 /** Vitals read: who showed as dead / alive at that moment (pins kill windows). */
 export interface VitalsReadObs extends BaseObs {
   type: 'vitalsRead';
+  /** DED: killed since the last meeting, body still on the map. */
   dead: PlayerId[];
   alive: PlayerId[];
+  /** D/C: no body — killed before the last meeting, ejected, or disconnected. */
+  dc?: PlayerId[];
 }

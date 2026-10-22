@@ -4,8 +4,12 @@
  * Game facts used (all visible to every player, none hidden):
  *  - Impostors cannot kill until their kill cooldown has elapsed. The cooldown restarts at the
  *    start of every round (after each meeting) and after each kill.
- *  - At the very start of a game the first cooldown is short (FIRST_ROUND_COOLDOWN_SEC).
- *    UNVERIFIED: 10 s per the wiki as remembered; confirm in-game / against relay/game-knowledge.md.
+ *  - The first cooldown of the match is 10 s regardless of settings (wiki: Kill, Guide:Crewmate,
+ *    via relay/game-knowledge.md §1.2).
+ *  - The cooldown PAUSES while the impostor is in a vent or on cameras, so "next kill at" for a
+ *    killer I saw is a lower bound, never an exact time.
+ *  - One impostor cannot kill twice inside one cooldown ⇒ two bodies whose times of death are
+ *    necessarily closer than the cooldown need two killers (doubleKills()).
  *
  * Kill window for a body = [lo, hi]:
  *  - hi = when the body was reported (the bodyFound stamp; the round clock freezes at the meeting),
@@ -21,7 +25,7 @@ import type { MatchState, PlayerId, RoomId, Stamp, BodyFoundObs } from '../../ty
 import { fmt } from '../evidence';
 import { impostorTravelSec, subtract, totalLength, type Interval, pname, roomName } from './util';
 
-/** UNVERIFIED (see header). */
+/** Sourced (see header). */
 export const FIRST_ROUND_COOLDOWN_SEC = 10;
 
 export function cooldownForRound(m: MatchState, round: number): number {
@@ -192,6 +196,35 @@ export function killWindows(m: MatchState, round?: number): KillWindow[] {
   const bodies = m.observations.filter((o): o is BodyFoundObs => o.type === 'bodyFound');
   const r = round ?? Math.max(-1, ...bodies.map(b => b.stamp.round));
   return bodies.filter(b => b.stamp.round === r).map(b => killWindowFor(m, b));
+}
+
+export interface DoubleKill {
+  a: string; // bodyFound ids
+  b: string;
+  /** Largest possible gap between the two deaths (s). */
+  maxGap: number;
+  cooldownSec: number;
+  line: string;
+  refs: string[];
+}
+
+/**
+ * Pairs of bodies in the same round whose deaths are certainly closer than one kill cooldown:
+ * one impostor could not have done both ⇒ two killers (and a player who could not have done one
+ * of them is still live for the other).
+ */
+export function doubleKills(m: MatchState, windows: KillWindow[]): DoubleKill[] {
+  const out: DoubleKill[] = [];
+  for (let i = 0; i < windows.length; i++) for (let j = i + 1; j < windows.length; j++) {
+    const a = windows[i], b = windows[j];
+    if (a.round !== b.round) continue;
+    const cd = m.settings.killCooldownSec;
+    const maxGap = Math.max(b.hi - a.lo, a.hi - b.lo);
+    if (maxGap >= cd) continue;
+    out.push({ a: a.bodyId, b: b.bodyId, maxGap, cooldownSec: cd, refs: [a.bodyId, b.bodyId, ...(a.lowerRef ? [a.lowerRef] : []), ...(b.lowerRef ? [b.lowerRef] : [])],
+      line: `${pname(m, a.victim)} and ${pname(m, b.victim)} died at most ${Math.round(maxGap)} s apart (< ${cd} s cooldown) ⇒ two different killers` });
+  }
+  return out;
 }
 
 /** "could have killed: X, Y; could not: Z (with me 0:40–1:10)" */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { killClock, killWindows, summarizeKillWindow, cooldownForRound, FIRST_ROUND_COOLDOWN_SEC } from './killWindow';
+import { killClock, killWindows, summarizeKillWindow, cooldownForRound, FIRST_ROUND_COOLDOWN_SEC, doubleKills } from './killWindow';
 import { impostorTravelSec, subtract } from './util';
 import { fixture } from '../__fixtures__/skeld_match_01';
 import { build, o, st } from './__fixtures__/build';
@@ -31,6 +31,32 @@ describe('kill clock', () => {
     const c = killClock(m, st(50, 2));
     expect(c.seenKillers).toHaveLength(1);
     expect(c.seenKillers[0].nextAt).toBe(70);
+  });
+});
+
+describe('double kills', () => {
+  it('two deaths certainly closer than the cooldown need two killers', () => {
+    const m = build({
+      obs: [
+        o(32, { type: 'sighting', player: 'yellow', room: 'storage' }, 1),
+        o(40, { type: 'sighting', player: 'orange', room: 'admin' }, 1),
+        o(45, { type: 'bodyFound', victim: 'yellow', room: 'electrical' }, 1),
+        o(45, { type: 'bodyFound', victim: 'orange', room: 'admin' }, 1),
+      ],
+    });
+    const d = doubleKills(m, killWindows(m, 1));
+    expect(d).toHaveLength(1);
+    expect(d[0].maxGap).toBe(13);
+    expect(d[0].line).toMatch(/two different killers/);
+  });
+  it('wide windows prove nothing (edge)', () => {
+    const m = build({
+      obs: [
+        o(80, { type: 'bodyFound', victim: 'yellow', room: 'electrical' }, 1),
+        o(80, { type: 'bodyFound', victim: 'orange', room: 'admin' }, 1),
+      ],
+    });
+    expect(doubleKills(m, killWindows(m, 1))).toEqual([]);
   });
 });
 

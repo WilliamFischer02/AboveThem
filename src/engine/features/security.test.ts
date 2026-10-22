@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, adminChecks, SECURITY_FALLBACK } from './security';
+import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, adminChecks, SECURITY_FALLBACK, resolveSpot, commsDown } from './security';
 import { build, o, st } from './__fixtures__/build';
 import { repoint } from '../../state/events';
 
@@ -60,6 +60,27 @@ describe('admin vs claims', () => {
     const m = build({ obs: [o(40, { type: 'adminRead', counts: {} })] });
     m.claims.push({ id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'electrical', timeWindow: [50, 60] });
     expect(adminChecks(m)).toEqual([]);
+  });
+});
+
+describe('research-driven details', () => {
+  it('vitals keeps D/C apart from DED', () => {
+    const m = build({ players: 5 });
+    const v = vitalsObservation(m, ['red'], ['blue', 'red']);
+    expect(v).toMatchObject({ dead: ['red'], dc: ['blue'] });
+    expect(v.alive.sort()).toEqual(['cyan', 'green', 'purple']);
+  });
+  it('resolves camera spots to real rooms, by id or by name (edge: missing room)', () => {
+    const m = build();
+    expect(resolveSpot(m, { id: 'x', label: 'x', room: 'medbay' })).toBe('medbay');
+    expect(resolveSpot(m, { id: 'x', label: 'x', room: 'engineRoom', match: 'upper engine' })).toBe('upperEngine');
+    expect(resolveSpot(m, { id: 'x', label: 'x', room: 'vault', match: 'vault' })).toBeNull();
+  });
+  it('comms sabotage switches the stations off until it ends', () => {
+    const m = build({ obs: [o(20, { type: 'sabotage', kind: 'comms', phase: 'start' })] });
+    expect(commsDown(m, 0)).toBe(true);
+    m.observations.push(o(40, { type: 'sabotage', kind: 'comms', phase: 'end' }));
+    expect(commsDown(m, 0)).toBe(false);
   });
 });
 
