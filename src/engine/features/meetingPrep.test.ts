@@ -20,8 +20,14 @@ describe('meeting timer', () => {
 });
 
 describe('prep checklist', () => {
-  it('fixture: location, vouch, kill-window clears, ordered by priority, all traceable', () => {
-    const items = prepChecklist(fixture);
+  it('default: only what the meeting script does not already say', () => {
+    const ids = prepChecklist(fixture).map(i => i.id);
+    expect(ids).toContain('kw_o6');
+    expect(ids).not.toContain('where');
+    expect(ids).not.toContain('vis_o3');
+  });
+  it('full: location, vouch, kill-window clears, ordered by priority, all traceable', () => {
+    const items = prepChecklist(fixture, { full: true });
     const ids = items.map(i => i.id);
     expect(ids).toContain('where');
     expect(ids).toContain('vis_o3');

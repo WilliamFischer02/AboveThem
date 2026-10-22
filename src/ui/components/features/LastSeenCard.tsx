@@ -1,6 +1,6 @@
 /** "Where was everyone": last room + time + company per player, with staleness and their claim. */
 import { useMatch } from '../../../state/store';
-import { lastSeenBoard, unplacedThisRound, type LastSeen } from '../../../engine/features/lastSeen';
+import { lastSeenBoard, unplacedThisRound, byRoom, type LastSeen } from '../../../engine/features/lastSeen';
 import { fmt } from '../../../engine/evidence';
 import { roomName, pname } from '../../../engine/features/util';
 import { useTick, Who } from './shared';
@@ -17,12 +17,15 @@ export function LastSeenCard({ open }: { open?: boolean }) {
   const now = stamp();
   const board = lastSeenBoard(m, now);
   const unplaced = unplacedThisRound(board, now.round);
-  const placed = board.filter(e => e.status === 'alive' && e.round === now.round).length;
+  const rooms = byRoom(board, now.round);
   return (
     <details className="feat-card" open={open}>
       <summary>
         <span className="feat-title">👁 Last seen</span>
-        <span className="feat-sub">{placed} placed this round{unplaced.length ? ` · ${unplaced.length} unplaced` : ''}</span>
+        <span className="feat-sub" title="where I placed everyone this round (tap for times, company, claims)">
+          {rooms.length ? rooms.map(r => `${roomName(m, r.room)}: ${r.players.map(p => pname(m, p)).join(', ')}`).join(' · ') : 'nobody placed this round'}
+          {unplaced.length ? ` · ?: ${unplaced.map(p => pname(m, p)).join(', ')}` : ''}
+        </span>
       </summary>
       <table className="feat-table">
         <tbody>

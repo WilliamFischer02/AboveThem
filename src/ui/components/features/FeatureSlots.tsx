@@ -37,7 +37,7 @@ export function FeatureSlots() {
       {meeting && <KillWindowCard />}
       {meeting && <AdminCheckCard />}
       {meeting && <TaskClaimsCard />}
-      {(meeting || round) && <LastSeenCard open={meeting} />}
+      {(meeting || round) && <LastSeenCard />}
       {(meeting || phase === 'ejection') && <VoteTracker open={phase === 'meetingVoting' || phase === 'ejection'} />}
     </div>
   );

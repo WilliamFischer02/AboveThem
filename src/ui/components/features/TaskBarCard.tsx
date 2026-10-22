@@ -28,7 +28,7 @@ export function TaskBarCard() {
     setPick(null);
   };
   return (
-    <div className="feat-card">
+    <div className="feat-card" title="Multi-stage tasks only move the bar on their last stage; two people finishing at once muddies it.">
       <div className="feat-row">
         <span className="feat-title">▮ Task bar</span>
         <span className="feat-line" onClick={() => setChoosing(c => !c)} style={{ cursor: 'pointer' }} title="tap to pick who you are watching">
@@ -48,7 +48,6 @@ export function TaskBarCard() {
           ))}
         </div>
       )}
-      <div className="feat-sub">Multi-stage tasks only move the bar on their last stage; two people finishing at once muddies it.</div>
     </div>
   );
 }

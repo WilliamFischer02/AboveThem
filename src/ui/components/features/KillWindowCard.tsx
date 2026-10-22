@@ -30,7 +30,7 @@ export function KillWindowCard() {
             {w.could.length === 0 ? 'nobody I can place' : w.could.map((p, i) => (
               <span key={p.player} title={p.reasons.map(r => `${r.label} [${r.refs.join(', ')}]`).join('\n') || 'nothing logged rules them out'}>
                 {i > 0 && ', '}<Who m={m} id={p.player} />
-                {p.openFraction < 0.999 && <span className="feat-sub"> ({p.feasible.map(([a, b]) => `${fmt(a)}–${fmt(b)}`).join(', ')})</span>}
+                {p.openFraction < 0.5 && <span className="feat-sub"> ({p.feasible.map(([a, b]) => `${fmt(a)}–${fmt(b)}`).join(', ')})</span>}
               </span>
             ))}
           </div>

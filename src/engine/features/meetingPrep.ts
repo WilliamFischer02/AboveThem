@@ -47,7 +47,11 @@ export interface PrepItem {
   say?: string;
 }
 
-export function prepChecklist(m: MatchState): PrepItem[] {
+/**
+ * `full`: also include what the crew meeting script (MeetingPanel SAY/ASK) already says — my location
+ * line, visual-task vouches, fake task claims. Off by default so the two panels do not repeat each other.
+ */
+export function prepChecklist(m: MatchState, opts: { full?: boolean } = {}): PrepItem[] {
   const items: PrepItem[] = [];
   const round = Math.max(0, m.phase.round);
   const meeting = m.phase.meeting ?? 0;
@@ -59,7 +63,7 @@ export function prepChecklist(m: MatchState): PrepItem[] {
   if (math.danger === 'critical') items.push({ id: 'critical', priority: 0, text: `CRITICAL vote: ${math.lines[1] ?? 'a wrong vote loses'} — no guessing, no lazy skip`, refs: [] });
 
   // 1. My own location + companion (pre-empts being accused). Crew only: impostors use the ledger.
-  if (crew) {
+  if (crew && opts.full) {
     const obs = m.observations.filter(o => o.stamp.round === round);
     const rooms = obs.filter(o => o.type === 'myRoom');
     const last = rooms[rooms.length - 1];
@@ -77,7 +81,7 @@ export function prepChecklist(m: MatchState): PrepItem[] {
 
   // 2. Hard information I hold: visual tasks I saw, kill-window "could not".
   const visuals = m.observations.filter(o => o.type === 'sawTask' && o.visualConfirmed && o.stamp.round === round && m.settings.visualTasksOn);
-  for (const v of visuals) if (v.type === 'sawTask') items.push({ id: `vis_${v.id}`, priority: 1, text: `Vouch: you saw ${pname(m, v.player)} do a visual task in ${roomName(m, v.room)}`, refs: [v.id], say: `${pname(m, v.player)} did visual in ${roomName(m, v.room)}, clear`.slice(0, 70) });
+  if (opts.full) for (const v of visuals) if (v.type === 'sawTask') items.push({ id: `vis_${v.id}`, priority: 1, text: `Vouch: you saw ${pname(m, v.player)} do a visual task in ${roomName(m, v.room)}`, refs: [v.id], say: `${pname(m, v.player)} did visual in ${roomName(m, v.room)}, clear`.slice(0, 70) });
   for (const w of killWindows(m, round)) {
     if (w.couldNot.length) {
       const names = w.couldNot.map(p => pname(m, p.player));
@@ -92,7 +96,7 @@ export function prepChecklist(m: MatchState): PrepItem[] {
   if (unplaced.length) items.push({ id: 'unplaced', priority: 3, text: `Ask first (nobody placed them): ${unplaced.map(p => pname(m, p)).join(', ')}`, refs: [], say: `${unplaced.slice(0, 3).map(p => pname(m, p)).join(' ')} where were u`.slice(0, 70) });
 
   // 4. Task claims that do not add up this meeting.
-  for (const c of taskClaimChecks(m)) {
+  if (opts.full) for (const c of taskClaimChecks(m)) {
     const cl = m.claims.find(x => x.id === c.claimId);
     if (cl?.meeting !== meeting || (c.verdict !== 'fake' && c.verdict !== 'clearInvalid')) continue;
     items.push({ id: `task_${c.claimId}`, priority: 1, text: c.line, refs: c.refs, say: c.ask });
