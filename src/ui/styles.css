@@ -599,3 +599,20 @@ details.fold.panel.tight > summary { padding: 2px 0; }
 .chat-hint { margin-top: 2px; font-size: 11px; color: #a05a00; font-weight: 600; }
 .ov-watch { font-size: 15px; font-weight: 700; border-left: 6px solid #6b7382; }
 .ov-tone-warn { border-left-color: #f5b54b; } .ov-tone-danger { border-left-color: #d8232a; } .ov-tone-calm { border-left-color: #2d6a8c; } .ov-tone-info { border-left-color: #3fe0c0; }
+
+/* ===================== ui-streamline: ghost + impostor density pass ===================== */
+.ghost-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ghost-title { font-size: 17px; font-weight: 800; color: #fff; }
+.ghost-killer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.ghost-killer .nm { font-size: 18px; font-weight: 800; color: #fff; }
+.gone-strip.pick { gap: 6px; }
+.imp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.imp-title { font-weight: 800; letter-spacing: 1px; color: #ff5c5c; font-size: 15px; }
+.imp-partner { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #ffb3b3; }
+.imp-mode { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 2px solid #1a1d23; background: #5e0f17; color: #fff; }
+.imp-warn { padding: 6px 8px; border-radius: 10px; border: 2px solid #ffd166; background: #3a2a10; font-size: 13px; margin-bottom: 6px; }
+.imp-push { margin-bottom: 6px; padding: 8px; }
+.imp-push-t { font-weight: 800; font-size: 18px; }
+.imp-def { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.impostor-panel .menu-sec { margin: 6px 0 3px; }
+.impostor-panel details.fold { margin-top: 4px; }
