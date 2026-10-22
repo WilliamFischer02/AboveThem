@@ -174,7 +174,8 @@ export type UserMark = 'sus' | 'clear' | 'hardClear';
 
 export type Observation =
   | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
-  | SawKillObs | BodyFoundObs | SabotageObs | ManualMarkObs;
+  | SawKillObs | BodyFoundObs | SabotageObs | ManualMarkObs
+  | AdminReadObs | VitalsReadObs | DoorLogReadObs;
 
 // ---------------------------------------------------------------------------
 // Meeting data — what people SAID (lower trust, checkable)
@@ -465,4 +466,36 @@ export interface MyTask {
   room?: RoomId;
   progress?: string;
   matched: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Security-room reads (features agent): what the local player saw on Admin / Vitals.
+// Both are on-screen information every crewmate can open; nothing hidden.
+// ---------------------------------------------------------------------------
+
+/** Admin table read: how many crewmate icons were in each room (icons are anonymous). */
+export interface AdminReadObs extends BaseObs {
+  type: 'adminRead';
+  counts: Record<RoomId, number>;
+  /** Rooms the user believes hold a body (UNVERIFIED whether the admin map shows bodies distinctly). */
+  bodies?: RoomId[];
+}
+
+/** Vitals read: who showed as dead / alive at that moment (pins kill windows). */
+export interface VitalsReadObs extends BaseObs {
+  type: 'vitalsRead';
+  /** DED: killed since the last meeting, body still on the map. */
+  dead: PlayerId[];
+  alive: PlayerId[];
+  /** D/C: no body — killed before the last meeting, ejected, or disconnected. */
+  dc?: PlayerId[];
+}
+
+/** MIRA Doorlog read: who the Communications PC listed as crossing the Hallway sensors between `from` and `to` (round s). */
+export interface DoorLogReadObs extends BaseObs {
+  type: 'doorLogRead';
+  /** Entry times are approximate (the log shows order, not exact time): the read time unless the user knows better. */
+  entries: { player: PlayerId; t: number; sensor?: string }[];
+  from: RoundTime;
+  to: RoundTime;
 }
