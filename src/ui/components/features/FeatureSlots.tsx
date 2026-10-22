@@ -12,6 +12,8 @@ import { LastSeenCard } from './LastSeenCard';
 import { SecurityCard } from './SecurityCard';
 import { AdminCheckCard } from './AdminCheckCard';
 import { VoteTracker } from './VoteTracker';
+import { TaskBarCard } from './TaskBarCard';
+import { TaskClaimsCard } from './TaskClaimsCard';
 import './shared';
 
 export function FeatureSlots() {
@@ -25,10 +27,12 @@ export function FeatureSlots() {
   return (
     <div className="feat">
       {round && !ghost && <KillClock />}
+      {round && !ghost && <TaskBarCard />}
       {round && <SecurityCard />}
       {meeting && <MeetingMathCard />}
       {meeting && <KillWindowCard />}
       {meeting && <AdminCheckCard />}
+      {meeting && <TaskClaimsCard />}
       {(meeting || round) && <LastSeenCard open={meeting} />}
       {(meeting || phase === 'ejection') && <VoteTracker open={phase === 'meetingVoting' || phase === 'ejection'} />}
     </div>
