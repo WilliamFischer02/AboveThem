@@ -61,7 +61,10 @@ the bar = shrink. Ghost and impostor panels unchanged apart from removed explain
 5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
    now resume from `avatars_<id>.json`).
 6. Signal helper (ghost image role) and sabotage banner: still no frames.
-7. "I'm not dead" (ghost panel) marks me alive and ignores death reads for the rest of that
+7. Round after an ejection was missed once (18:39, ejection → next meeting with no round in
+   between; the clock then under-counts rounds). Check whether the task bar / REPORT button is
+   readable while dead, and consider "ejection text gone + no meeting for 5 s ⇒ round".
+8. "I'm not dead" (ghost panel) marks me alive and ignores death reads for the rest of that
    meeting (`Player.aliveLockMeeting`); the DEAD header now needs a still frame with no banner.
    William was falsely read dead once tonight — if it recurs, log which signal fired.
 
