@@ -108,6 +108,7 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
           if (kind === 'lying' && prevOther >= 0 && st[prevOther].line.sender !== 'unknown') { const by = st[prevOther].line.sender; return { ids: [by], via: 'reply', refs: [st[prevOther].line.id], conf: 0.7, label: nameList(m, [by]) + ' (previous speaker)' }; }
           if (ownPrev && li - ownPrev.li <= 2 && ownPrev.ids.length) return { ids: ownPrev.ids, via: 'context', refs: [ownPrev.lineId], conf: 0.75, label: nameList(m, ownPrev.ids) + ' (own previous line)', absorbs: ownPrev.bareKey };
           if (otherRef?.ids.length && prevOther === li - 1) return { ids: otherRef.ids, via: 'reply', refs: [st[prevOther].line.id], conf: 0.55, label: nameList(m, otherRef.ids) + ' (line replied to)' };
+          if (kind === 'accuse' && prevOther >= 0 && prevOther === li - 1 && st[prevOther].line.sender !== 'unknown') { const by = st[prevOther].line.sender; return { ids: [by], via: 'reply', refs: [st[prevOther].line.id], conf: 0.5, label: nameList(m, [by]) + ' (previous speaker)' }; }
           return undefined;
         },
         reporter: () => reporterFor(m, L),

@@ -256,6 +256,11 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
     const solo = u.length === 1 && u[0].w === 'self';
     if (negLeft) { if (freeOthers.length) emit({ kind: 'defense', about: freeOthers, polarity: -1, reason: 'notSus', base: BASE.notSus }); return out; }
     if (freeOthers.length) { emit({ kind: 'selfReport', about: freeOthers, polarity: 1, reason: 'selfReport', base: BASE.selfReport, conf: solo ? 0.7 : 0.9 }); return out; }
+    const lineRef = !freeSelf ? env.zero('accuse', 'line') : undefined;
+    if (lineRef?.ids.length) {
+      emit({ kind: 'selfReport', about: lineRef.ids.filter(id => id !== speaker), polarity: 1, reason: 'selfReport', base: BASE.selfReport, conf: 0.8, via: 'context', extraWhy: [`subject = ${lineRef.label}`] });
+      return out;
+    }
     if (!freeSelf) {
       const rep = env.reporter();
       if (rep && rep !== speaker) emit({ kind: 'selfReport', about: [rep], polarity: 1, reason: 'selfReport', base: BASE.selfReport, conf: solo ? 0.55 : 0.65, via: 'implicit', extraWhy: [`reporter = ${m.players[rep]?.name ?? rep}`] });
@@ -396,6 +401,10 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
     if (subjOthers.length && !negLeft) {
       const reason: ChatReason = has('scan') ? 'scan' : visual ? 'visual' : 'task';
       emit({ kind: 'sawTask', about: subjOthers, taskId, room, polarity: -1, reason, base: visual ? BASE.visual : BASE.sawTask, conf: seeIdx >= 0 ? 0.9 : 0.75 });
+      if (seeIdx < 0 && subjP.some(x => x.self)) {
+        if (taskId) emit({ kind: 'task', about: [speaker], taskId, room, polarity: 0, base: 0.5, conf: 0.85 });
+        emit({ kind: 'withMe', about: subjOthers, polarity: -1, reason: 'withThem', base: BASE.withMe, conf: 0.8 });
+      }
       return out;
     }
     if (subjOthers.length && negLeft) { emit({ kind: 'accuse', about: subjOthers, polarity: 1, reason: 'fakeTask', base: 0.4, conf: 0.7 }); return out; }
@@ -477,7 +486,7 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
   if (bareOnly && freeOthers.length && !negLeft) {
     const rq = env.replyQ();
     if (rq?.q === 'who' && !rq.withQ) { emit({ kind: 'accuse', about: freeOthers, polarity: 1, reason: 'bare', base: 0.55, conf: 0.7, via: 'reply', extraRefs: [rq.line], extraWhy: [`answers "who" from ${m.players[rq.by]?.name ?? rq.by}`] }); return out; }
-    if (rq && (rq.withQ || rq.q === 'where')) { emit({ kind: 'withMe', about: freeOthers, polarity: -1, reason: 'withThem', base: BASE.withMe, conf: 0.5, via: 'reply', extraRefs: [rq.line], extraWhy: [`answers "${rq.q}" from ${m.players[rq.by]?.name ?? rq.by}`] }); return out; }
+    if (rq && (rq.withQ || rq.q === 'where')) { emit({ kind: 'withMe', about: freeOthers, polarity: -1, reason: 'withThem', base: BASE.withMe, conf: 0.5, via: 'reply', bare: true, extraRefs: [rq.line], extraWhy: [`answers "${rq.q}" from ${m.players[rq.by]?.name ?? rq.by}`] }); return out; }
     emit({ kind: 'accuse', about: freeOthers, polarity: 1, reason: 'bare', base: BASE.bare, conf: 0.45, bare: true, extraWhy: ['bare mention: read as an accusation until the speaker says more'] });
     return out;
   }

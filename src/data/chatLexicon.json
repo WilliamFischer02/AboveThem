@@ -2766,7 +2766,6 @@
       "you",
       "ur",
       "youre",
-      "ya",
       "urself",
       "yourself",
       "your",
@@ -3080,7 +3079,12 @@
       "evidence",
       "prove",
       "prove it",
-      "any proof"
+      "any proof",
+      "u sure",
+      "you sure",
+      "r u sure",
+      "are you sure",
+      "u sure about that"
     ],
     "how": [
       "how",

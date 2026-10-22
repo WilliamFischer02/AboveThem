@@ -320,6 +320,30 @@ describe('chat NLU: conversation context', () => {
     expect(guess.why.join(' ')).toContain('guessed');
   });
 
+  it('a realistic meeting reads end to end', () => {
+    const ls = ([
+      ['blue', 'where was everyone'], ['yellow', 'reac'], ['yellow', 'w purple'], ['purple', 'yeah with yellow'], ['green', 'black'],
+      ['green', 'he vented'], ['black', 'what'], ['black', 'i was in elec'], ['black', 'doing wires'], ['green', 'liar'],
+      ['white', 'black u sure?'], ['blue', 'white where were u'], ['white', 'cafe'], ['white', 'with nobody'], ['blue', 'sus'],
+      ['green', 'trust me black vented'], ['black', 'green is the imp, self report'], ['purple', 'blue and i did wires'], ['blue', 'ya i was w white'],
+    ] as [string, string][]).map(([s, t]) => line(s, t));
+    const out = meet(...ls);
+    const at = (i: number) => out.filter(a => a.line === ls[i].id).map(sig);
+    expect(at(1)).toEqual(['location:yellow@reactor']);
+    expect(at(2)).toEqual(['withMe:purple']);
+    expect(at(4)).toEqual([]);                       // bare "black" absorbed by "he vented"
+    expect(at(5)).toEqual(['sawVent:black']);
+    expect(at(6)).toEqual(['question']);
+    expect(at(8)).toEqual(['task:black#fixWiring']);
+    expect(at(9)).toEqual(['accuse:black']);         // "liar" → previous speaker
+    expect(at(10)).toEqual(['question:black']);      // "u sure?" is a challenge, not an accusation
+    expect(at(12)).toEqual(['location:white@cafeteria']);
+    expect(at(14)).toEqual(['accuse:white']);        // lone "sus" right after white's alibi
+    expect(at(16)).toEqual(['accuse:green', 'selfReport:green']);
+    expect(at(17)).toEqual(['sawTask:blue#fixWiring', 'task:purple#fixWiring', 'withMe:blue']);
+    expect(at(18)).toEqual(['withMe:white']);        // "ya" = yeah, not "you"
+  });
+
   it('lines from other meetings are not mixed in', () => {
     const mm = withChat(line('green', 'white'), { ...line('green', 'saw them do wires'), meeting: 2 });
     expect(sigs(parseMeetingChat(mm, 1))).toEqual(['green>accuse:white']);
