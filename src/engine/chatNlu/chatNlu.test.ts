@@ -12,7 +12,19 @@ const players: Record<string, Player> = { ...fixture2.players };
 for (const c of extra) players[c] = { id: c, name: c[0].toUpperCase() + c.slice(1), color: c, isMe: false, status: 'alive', knownRole: 'unknown' };
 const m: MatchState = { ...fixture2, players, chat: [], phase: { ...fixture2.phase, meeting: 1, calledBy: 'white', reason: 'body' } };
 const onPolus: MatchState = { ...m, map: polus as unknown as MapData };
-const onMira: MatchState = { ...m, map: mira as unknown as MapData };
+// Explicit stub (rooms empty) so the fallback is tested whatever mira.json holds after the merge.
+const onMira: MatchState = { ...m, map: { ...(mira as unknown as MapData), id: 'mira', rooms: [], tasks: [] } };
+// Map rooms the way the maps agent writes them: own ids, "The …" names, MapRoom.aliases.
+const fungleLike = {
+  id: 'fungle', name: 'The Fungle', vents: [], tasks: [], _verified: { rooms: true, vents: false, tasks: false, durations: false },
+  rooms: [
+    { id: 'dorm', name: 'The Dorm', key: 'd', deadEnd: false, adjacent: [], aliases: ['Dorm'] },
+    { id: 'cliffs', name: 'The Cliffs', key: 'c', deadEnd: false, adjacent: [], aliases: ['Cliffs'] },
+    { id: 'lookout', name: 'Lookout', key: 'l', deadEnd: true, adjacent: [] },
+    { id: 'zz9', name: 'Splash Zone', key: 's', deadEnd: false, adjacent: [] },
+  ],
+} as unknown as MapData;
+const onFungleLike: MatchState = { ...m, map: fungleLike };
 
 /** Compact signature: kind:about(+)@room#task */
 const sig = (a: ChatAssertion) => `${a.kind}${a.about.length ? ':' + a.about.join('+') : ''}${a.room ? '@' + a.room : ''}${a.taskId ? '#' + a.taskId : ''}`;
@@ -237,6 +249,13 @@ describe('chat NLU: other maps', () => {
     expect(p('saw blue in green house', 'white', onMira)).toEqual(['sighting:blue@greenhouse']);
     expect(p('red in balc', 'white', onMira)).toEqual(['sighting:red@balcony']);
     expect(p('lockers', 'white', onMira)).toEqual(['location:white@lockerRoom']);
+  });
+  it('full map data: rooms match by id, by "The …" name, by MapRoom.aliases, and lexicon aliases follow the name', () => {
+    expect(p('i was in dorm', 'white', onFungleLike)).toEqual(['location:white@dorm']);
+    expect(p('red at the cliffs', 'white', onFungleLike)).toEqual(['sighting:red@cliffs']);
+    expect(p('binos', 'white', onFungleLike)).toEqual(['location:white@lookout']);
+    expect(p('i was at splash', 'white', onFungleLike)).toEqual(['location:white@zz9']); // id unknown to the lexicon, name known
+    expect(p('i was in elec', 'white', onFungleLike)).toEqual([]);                       // not a Fungle room
   });
   it('Skeld-only aliases do not leak: "specimen" means nothing on Skeld', () => {
     expect(p('i was in specimen', 'white', m)).toEqual([]);

@@ -875,8 +875,7 @@
       "maps": [
         "mira"
       ],
-      "_verified": false,
-      "_note": "Mira ids guessed; matched by name when the map file uses another id."
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "lockerRoom",
@@ -892,7 +891,7 @@
       "maps": [
         "mira"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "decontamination",
@@ -906,7 +905,7 @@
       "maps": [
         "mira"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "greenhouse",
@@ -923,7 +922,7 @@
         "mira",
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "balcony",
@@ -938,7 +937,7 @@
       "maps": [
         "mira"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "hallway",
@@ -955,7 +954,7 @@
       "maps": [
         "mira"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "cockpit",
@@ -970,8 +969,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false,
-      "_note": "Airship ids guessed; matched by name when the map file uses another id."
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "armory",
@@ -986,7 +984,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "viewingDeck",
@@ -1002,7 +1000,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "engineRoom",
@@ -1019,7 +1017,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "kitchen",
@@ -1035,7 +1033,7 @@
         "airship",
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "mainHall",
@@ -1050,7 +1048,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "brig",
@@ -1064,7 +1062,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "vault",
@@ -1079,7 +1077,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "gapRoom",
@@ -1094,7 +1092,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "meetingRoom",
@@ -1111,7 +1109,7 @@
         "airship",
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "medical",
@@ -1128,7 +1126,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "records",
@@ -1143,7 +1141,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "lounge",
@@ -1159,7 +1157,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "showers",
@@ -1172,7 +1170,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "cargoBay",
@@ -1186,7 +1184,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "ventilation",
@@ -1201,7 +1199,7 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "beach",
@@ -1217,8 +1215,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false,
-      "_note": "Fungle ids guessed; matched by name when the map file uses another id."
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "splashZone",
@@ -1232,7 +1229,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "lookout",
@@ -1247,7 +1244,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "miningPit",
@@ -1262,7 +1259,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "jungle",
@@ -1276,7 +1273,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "dock",
@@ -1290,7 +1287,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "hallOfPortraits",
@@ -1305,27 +1302,14 @@
       "maps": [
         "airship"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
-      "id": "outside",
+      "id": "dorm",
       "names": [
-        "outside"
-      ],
-      "aliases": [
-        "outside",
-        "out side"
-      ],
-      "maps": [
-        "airship"
-      ],
-      "_verified": false
-    },
-    {
-      "id": "dormitory",
-      "names": [
-        "dormitory",
-        "dorm"
+        "the dorm",
+        "dorm",
+        "dormitory"
       ],
       "aliases": [
         "dorm",
@@ -1335,7 +1319,7 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
     },
     {
       "id": "cliffs",
@@ -1350,7 +1334,36 @@
       "maps": [
         "fungle"
       ],
-      "_verified": false
+      "_note": "id matches the maps agent's map JSON (session 5)"
+    },
+    {
+      "id": "outsideViewing",
+      "names": [
+        "outside viewing deck"
+      ],
+      "aliases": [
+        "outside deck",
+        "outside viewing",
+        "outside"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_note": "id matches the maps agent's map JSON (session 5)"
+    },
+    {
+      "id": "outsideSecurity",
+      "names": [
+        "outside security"
+      ],
+      "aliases": [
+        "outside sec",
+        "outside security"
+      ],
+      "maps": [
+        "airship"
+      ],
+      "_note": "id matches the maps agent's map JSON (session 5)"
     }
   ],
   "tasks": [
@@ -1778,8 +1791,7 @@
       ],
       "aliases": [
         "ruby",
-        "polish",
-        "gem"
+        "polish"
       ],
       "_verified": false
     },
@@ -2121,6 +2133,36 @@
         "veggies"
       ],
       "_verified": false
+    },
+    {
+      "id": "collectSamples",
+      "names": [
+        "collect samples"
+      ],
+      "aliases": [
+        "collect samples"
+      ]
+    },
+    {
+      "id": "playVideoGame",
+      "names": [
+        "play video game"
+      ],
+      "aliases": [
+        "video game",
+        "videogame",
+        "play video game"
+      ]
+    },
+    {
+      "id": "polishGem",
+      "names": [
+        "polish gem"
+      ],
+      "aliases": [
+        "gem",
+        "polish gem"
+      ]
     }
   ],
   "words": {

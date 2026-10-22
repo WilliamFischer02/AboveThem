@@ -149,6 +149,9 @@ export function mapIndex(map: MapData): MapIndex {
     for (const r of mapRooms) {
       const rn = normPhrase(r.name);
       put(rooms, r.name, r.id); put(rooms, splitCamel(r.id), r.id);
+      put(rooms, rn.replace(/^the /, ''), r.id); // "The Dorm" → "dorm"
+      // MapRoom.aliases (maps agent, additive field): read defensively
+      for (const a of (r as { aliases?: string[] }).aliases ?? []) put(rooms, a, r.id);
       // "Lower Decontamination" → "lower decontamination", "Specimen Room" → also "specimen"
       put(rooms, rn.replace(/\broom\b/, '').trim(), r.id);
       put(rooms, rn.replace(/[()]/g, ''), r.id);
@@ -156,7 +159,7 @@ export function mapIndex(map: MapData): MapIndex {
     for (const r of mapRooms) {
       const rn = normPhrase(r.name);
       for (const e of LEX.rooms) {
-        if (e.id !== r.id && !e.names.map(normPhrase).includes(rn)) continue;
+        if (e.id !== r.id && !e.names.map(normPhrase).includes(rn) && !e.names.map(normPhrase).includes(rn.replace(/^the /, ''))) continue;
         for (const a of [...e.names, ...e.aliases]) put(rooms, a, r.id);
       }
     }
