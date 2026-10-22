@@ -10,6 +10,8 @@ import { walkSeconds, taskExistsInRoom } from './map';
 import { buildAlibiGraph, ROUND_END } from './alibi';
 import { fmt, ev } from './evidence';
 import { travelLowerBound } from './feasibility';
+import { claimedTaskExists, commonTaskMismatch, monitorContradiction, monitorReadFromObs } from './mapChecks';
+import { MAPS } from '../data/maps';
 
 const W = weightsJson;
 
@@ -87,17 +89,21 @@ export function ruleCompanionClaims(m: MatchState): EvidenceItem[] {
 /** Task claims against the map's task table. */
 export function ruleTaskClaims(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
+  const others = Object.values(MAPS);
   for (const c of m.claims) {
     if (c.type !== 'task' || !c.taskId) continue;
-    const task = m.map.tasks.find(t => t.id === c.taskId);
+    // maps agent's checker: unknown map / unrecognised task => ok (never accuse on missing data).
+    const chk = claimedTaskExists(m.map, c.taskId, c.room ?? null, others);
+    const task = chk.task;
     const taskName = task?.name ?? c.taskId;
-    if (!task && m.map.tasks.length > 0) {
-      // game-knowledge `task_not_on_map` (high, not hard: alias / name errors).
-      out.push(ev(c.by, W.task.taskNotOnMap, 'task', `Claims ${taskName} — there is no such task on ${m.map.name}`, [c.id], !m.map._verified.tasks, 'task_not_in_room',
-        { P: pname(m, c.by), R: c.room ? roomName(m, c.room) : m.map.name, TASK: taskName }));
-    } else if (c.room && !taskExistsInRoom(m.map, c.taskId, c.room)) {
-      out.push(ev(c.by, W.task.taskNotAtClaimedLocation, 'task', `${taskName} does not exist in ${roomName(m, c.room)}`, [c.id], !m.map._verified.tasks, 'task_not_in_room',
-        { P: pname(m, c.by), R: roomName(m, c.room), TASK: taskName }));
+    const vars = { P: pname(m, c.by), R: c.room ? roomName(m, c.room) : m.map.name, TASK: taskName };
+    if (chk.reason === 'dummyPanel') {
+      // game-knowledge `dummy_panel`: that panel cannot be done by anyone.
+      out.push(ev(c.by, W.task.taskLogicImpossible, 'task', chk.text, [c.id], chk.shaky, 'task_not_in_room', vars));
+    } else if (chk.reason === 'notOnMap') {
+      out.push(ev(c.by, W.task.taskNotOnMap, 'task', `Claims ${chk.text}`, [c.id], chk.shaky, 'task_not_in_room', vars));
+    } else if (chk.reason === 'notInRoom') {
+      out.push(ev(c.by, W.task.taskNotAtClaimedLocation, 'task', `${taskName} does not exist in ${roomName(m, c.room!)}`, [c.id], chk.shaky, 'task_not_in_room', vars));
     } else if (task?.visual && m.settings.visualTasksOn) {
       const seen = m.observations.some(o => o.type === 'sawTask' && o.player === c.by && o.visualConfirmed && o.stamp.round === c.stamp.round);
       if (!seen) out.push(ev(c.by, 0.1, 'task', `Claims visual task ${taskName} — nobody confirmed the animation`, [c.id], false, 'visual_task_check', { P: pname(m, c.by), TASK: taskName }));
@@ -108,19 +114,42 @@ export function ruleTaskClaims(m: MatchState): EvidenceItem[] {
 
 /** Claims a COMMON task I don't have: common tasks are identical for every crewmate (near-hard). */
 export function ruleCommonTaskClaims(m: MatchState): EvidenceItem[] {
-    const out: EvidenceItem[] = [];
-    if (!m.myTasks || m.myTasks.length === 0) return out;
-    const mine = new Set(m.myTasks.filter(t => t.matched).map(t => t.id));
-    const myCommons = m.map.tasks.filter(t => t.kind === 'common' && mine.has(t.id));
-    if (myCommons.length === 0 && m.settings.commonTasks > 0) return out; // my list didn't read well enough to trust
-    for (const c of m.claims) {
-        if (c.type !== 'task' || !c.taskId) continue;
-        const task = m.map.tasks.find(t => t.id === c.taskId);
-        if (!task || task.kind !== 'common' || mine.has(task.id)) continue;
-        out.push(ev(c.by, W.task.claimedCommonTaskIDontHave, 'task', `Claims ${task.name} — a common task I don't have`, [c.id], !m.map._verified.tasks, 'common_task_claim',
-            { P: pname(m, c.by), TASK: task.name, R: c.room ? roomName(m, c.room) : task.rooms.map(r => roomName(m, r)).join('/') }));
+  const out: EvidenceItem[] = [];
+  if (!m.myTasks || m.myTasks.length === 0) return out;
+  const mine = new Set(m.myTasks.filter(t => t.matched).map(t => t.id));
+  const myCommons = m.map.tasks.filter(t => t.kind === 'common' && mine.has(t.id));
+  if (myCommons.length === 0 && m.settings.commonTasks > 0) return out; // my list didn't read well enough to trust
+  for (const c of m.claims) {
+    if (c.type !== 'task' || !c.taskId) continue;
+    const chk = commonTaskMismatch(m.map, m.myTasks, c.taskId); // null when it can't judge (unread lines etc.)
+    if (!chk?.mismatch) continue;
+    out.push(ev(c.by, W.task.claimedCommonTaskIDontHave, 'task', `Claims ${chk.task.name} — a common task I don't have`, [c.id], chk.shaky, 'common_task_claim',
+      { P: pname(m, c.by), TASK: chk.task.name, R: c.room ? roomName(m, c.room) : chk.task.rooms.map(r => roomName(m, r)).join('/') }));
+  }
+  return out;
+}
+
+/**
+ * My own Admin / Vitals reads against timed claims (maps agent's monitorContradiction):
+ * "I was in R at t" while Admin showed R empty at t; "saw X at t" while Vitals showed X dead before t.
+ * Untimed chat claims are never checked (Admin is a snapshot).
+ */
+export function ruleMonitorReads(m: MatchState): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const reads = m.observations.map(o => ({ o, r: monitorReadFromObs(o as unknown as { type: string } & Record<string, unknown>) })).filter(x => x.r && x.r.kind !== 'doorLog');
+  if (!reads.length) return out;
+  for (const c of m.claims) {
+    if (!c.timeWindow || (c.type !== 'location' && c.type !== 'sighting')) continue;
+    const [t0, t1] = c.timeWindow;
+    for (const { o, r } of reads) {
+      if (o.stamp.round !== c.stamp.round || !r || r.kind === 'doorLog' || r.t < t0 || r.t > t1) continue;
+      const claim = c.type === 'location' ? { player: c.by, room: c.room, t: r.t } : { player: c.by, about: c.about, aboutAlive: true, t: r.t };
+      const chk = monitorContradiction(m.map, r, claim);
+      if (!chk?.contradiction) continue;
+      out.push(ev(c.by, W.meeting.monitorContradiction, 'meeting', `${c.type === 'location' ? `Claimed ${roomName(m, c.room ?? '')}` : `Claimed to see ${pname(m, c.about ?? '')}`} — ${chk.text}`, [c.id, o.id], chk.shaky));
     }
-    return out;
+  }
+  return out;
 }
 
 /** Accusations with nothing behind them; bandwagoning. */
@@ -217,7 +246,7 @@ export function verifyClaims(m: MatchState): Map<string, Verdict> {
 }
 
 export const CLAIM_RULES: Array<(m: MatchState) => EvidenceItem[]> = [
-  ruleLocationClaims, ruleStoryChanged, ruleCompanionClaims, ruleTaskClaims, ruleCommonTaskClaims, ruleAccusations, ruleEjectionFeedback, ruleSilentNearBody,
+  ruleLocationClaims, ruleStoryChanged, ruleCompanionClaims, ruleTaskClaims, ruleCommonTaskClaims, ruleMonitorReads, ruleAccusations, ruleEjectionFeedback, ruleSilentNearBody,
 ];
 
 export type { PlayerId };

@@ -1,7 +1,7 @@
 /** Rules encoded from relay/game-knowledge.md §1.2 and the lie catalogue (§2). */
 import { describe, it, expect } from 'vitest';
 import { ruleLastSeenWithVictim } from './rules';
-import { ruleTaskClaims, ruleLocationClaims } from './contradictions';
+import { ruleTaskClaims, ruleLocationClaims, ruleMonitorReads } from './contradictions';
 import { assertionsToEvidence, chatPlaced, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
 import type { ChatAssertion, SpeakerProfile } from './chatNluTypes';
 import { ruleMutualAlibiPair, impostorPairs } from './pairs';
@@ -51,8 +51,35 @@ describe('task_not_on_map', () => {
     const m: MatchState = { ...fixture3, claims: [{ id: 'tc', meeting: 0, stamp: st(0, 55), by: 'blue', type: 'task', taskId: 'repairDrill' }] };
     const e = ruleTaskClaims(m);
     expect(e).toHaveLength(1);
-    expect(e[0].label).toMatch(/no such task/);
+    expect(e[0].label).toMatch(/Repair Drill" is not a task on The Skeld|not a task on/);
     expect(e[0].weight).toBeLessThan(2);
+  });
+  it('an unrecognised task name never accuses (fail soft)', () => {
+    const m: MatchState = { ...fixture3, claims: [{ id: 'tc', meeting: 0, stamp: st(0, 55), by: 'blue', type: 'task', taskId: 'zzzqqq' }] };
+    expect(ruleTaskClaims(m)).toHaveLength(0);
+  });
+  it('dummy_panel: "did divert power in Reactor" on Skeld is impossible', () => {
+    const m: MatchState = { ...fixture3, claims: [{ id: 'tc', meeting: 0, stamp: st(0, 55), by: 'blue', type: 'task', taskId: 'divertPower', room: 'reactor' }] };
+    const e = ruleTaskClaims(m);
+    expect(e).toHaveLength(1);
+    expect(e[0].label).toMatch(/dummy/);
+    expect(e[0].weight).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('monitor reads vs timed claims (maps agent mapChecks)', () => {
+  it('Admin showed the claimed room empty at that moment', () => {
+    const admin = { id: 'adm', type: 'adminRead', stamp: st(0, 30), source: 'me', confidence: 1, counts: { electrical: 0, storage: 2 } } as unknown as Observation;
+    const m: MatchState = { ...fixture3, observations: [...fixture3.observations, admin],
+      claims: [{ id: 'lc', meeting: 0, stamp: st(0, 55), by: 'purple', type: 'location', room: 'electrical', timeWindow: [20, 40] }] };
+    const e = ruleMonitorReads(m);
+    expect(e).toHaveLength(1);
+    expect(e[0].player).toBe('purple');
+    expect(e[0].refs).toEqual(['lc', 'adm']);
+    expect(e[0].label).toMatch(/Admin showed nobody in Electrical/);
+    // Untimed claim, or a read outside the window: no verdict.
+    expect(ruleMonitorReads({ ...m, claims: [{ ...m.claims[0], timeWindow: undefined }] })).toHaveLength(0);
+    expect(ruleMonitorReads({ ...m, claims: [{ ...m.claims[0], timeWindow: [41, 50] }] })).toHaveLength(0);
   });
 });
 

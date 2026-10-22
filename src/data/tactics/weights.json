@@ -53,6 +53,7 @@
     "silentInMeeting": 0.25,
     "skipWhenImpostorFound": 0.4,
     "witnessContradiction": 1.5,
+    "monitorContradiction": 1.5,
     "unreliableContradiction": 0.4
   },
   "sabotage": {
