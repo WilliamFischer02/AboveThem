@@ -197,9 +197,12 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
   // Negation right before a player: "not red", "wasnt me", "its not blue" → defense; those players are used up.
   const negUsed = new Set<number>();
   for (let i = 0; i < u.length - 1; i++) {
-    if (u[i].k !== 'neg' || u[i + 1].k !== 'P') continue;
-    const p = u[i + 1];
-    negUsed.add(i); negUsed.add(i + 1);
+    if (u[i].k !== 'neg') continue;
+    // "not red", "wasnt me", "não fui eu" (one be-word may sit between)
+    const j = u[i + 1].k === 'P' ? i + 1 : u[i + 1].k === 'be' && u[i + 2]?.k === 'P' ? i + 2 : -1;
+    if (j < 0) continue;
+    const p = u[j];
+    negUsed.add(i); negUsed.add(j);
     if (p.self) emit({ kind: 'defense', about: [speaker], polarity: -1, base: BASE.didnt, reason: 'didnt' });
     const o = othersOf(p);
     if (o.length) emit({ kind: 'defense', about: o, polarity: -1, base: BASE.notSus, reason: 'notSus' });

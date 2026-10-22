@@ -8,7 +8,7 @@
  */
 import type { MatchState, PlayerColor, PlayerId, RoomId } from '../../types/game';
 import {
-  MAX_PHRASE_WORDS, colorOf, fuzzyColor, fuzzyStatic, mapIndex, nameMatch, ocrFix, playerIndex, squash1, squash2,
+  LEX, MAX_PHRASE_WORDS, colorOf, fuzzyColor, fuzzyStatic, mapIndex, nameMatch, ocrFix, playerIndex, squash1, squash2,
   staticLookup, fuzzyBest, type QuestionType, type StaticEntry, type WordClass,
 } from './lexicon';
 
@@ -35,7 +35,9 @@ export function rawTokens(text: string): RawTok[] {
     out.push({ w: tok.toLowerCase().replace(/['’]/g, ''), s, e: s + tok.length, caps });
   }
   // "w/" (with) is written with a slash: the slash is dropped above, "w" stays.
-  return out;
+  // Expansions ("conmigo" → with me, "wya" → where you) keep the original span on every part.
+  const exp = LEX.expand ?? {};
+  return out.flatMap(t => (!t.punct && exp[t.w] ? exp[t.w].map(w => ({ ...t, w })) : [t]));
 }
 
 export type UnitKind =

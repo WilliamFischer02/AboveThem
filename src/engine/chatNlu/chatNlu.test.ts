@@ -188,6 +188,22 @@ describe('chat NLU: player names and OCR noise (roster = snap list)', () => {
   });
 });
 
+describe('chat NLU: untranslated non-English lines (colours, sus/vent, not-me)', () => {
+  it('reads the common words even when translation did not run', () => {
+    expect(p('rojo sus', 'white')).toEqual(['accuse:red']);
+    expect(p('azul ventou', 'white')).toEqual(['sawVent:blue']);
+    expect(p('красный вентанул', 'white')).toEqual(['sawVent:red']);
+    expect(p('не я', 'white')).toEqual(['defense:white']);
+    expect(p('não fui eu', 'white')).toEqual(['defense:white']);
+    expect(p('verde conmigo', 'white')).toEqual(['withMe:green']);
+    expect(p('kkkk', 'white')).toEqual([]);
+    expect(p('wya purple', 'white')).toEqual(['question:purple']);
+  });
+  it('"com" still means comms, not "with"', () => {
+    expect(p('i was in com', 'white')).toEqual(['location:white@communications']);
+  });
+});
+
 describe('chat NLU: other maps', () => {
   it('Polus rooms', () => {
     expect(p('i was in specimen', 'white', onPolus)).toEqual(['location:white@specimen']);

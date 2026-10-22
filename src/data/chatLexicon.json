@@ -135,7 +135,16 @@
       "rd",
       "redd",
       "reddy",
-      "redy"
+      "redy",
+      "rojo",
+      "roja",
+      "vermelho",
+      "vermelha",
+      "красный",
+      "красная",
+      "красн",
+      "merah",
+      "pula"
     ],
     "blue": [
       "blue",
@@ -146,7 +155,12 @@
       "blou",
       "dark blue",
       "darkblue",
-      "db"
+      "db",
+      "azul",
+      "синий",
+      "синяя",
+      "biru",
+      "asul"
     ],
     "green": [
       "green",
@@ -156,7 +170,14 @@
       "greem",
       "grren",
       "dark green",
-      "dg"
+      "dg",
+      "verde",
+      "зелёный",
+      "зеленый",
+      "зеленая",
+      "hijau",
+      "ijo",
+      "berde"
     ],
     "pink": [
       "pink",
@@ -164,7 +185,12 @@
       "pinky",
       "pinkk",
       "pnik",
-      "hot pink"
+      "hot pink",
+      "rosado",
+      "rosada",
+      "розовый",
+      "розовая",
+      "rosas"
     ],
     "orange": [
       "orange",
@@ -177,7 +203,14 @@
       "orage",
       "oj",
       "orangee",
-      "orang3"
+      "orang3",
+      "naranja",
+      "laranja",
+      "оранжевый",
+      "оранжевая",
+      "оранж",
+      "oranye",
+      "kahel"
     ],
     "yellow": [
       "yellow",
@@ -191,7 +224,17 @@
       "yelow",
       "ylo",
       "yllow",
-      "yelloe"
+      "yelloe",
+      "amarillo",
+      "amarilla",
+      "amarelo",
+      "amarela",
+      "жёлтый",
+      "желтый",
+      "желтая",
+      "жёлтая",
+      "kuning",
+      "dilaw"
     ],
     "black": [
       "black",
@@ -201,7 +244,17 @@
       "blac",
       "blacc",
       "blaq",
-      "blek"
+      "blek",
+      "negro",
+      "negra",
+      "preto",
+      "preta",
+      "чёрный",
+      "черный",
+      "черная",
+      "чёрная",
+      "hitam",
+      "itim"
     ],
     "white": [
       "white",
@@ -213,7 +266,15 @@
       "whitey",
       "whi",
       "wyt",
-      "whyte"
+      "whyte",
+      "blanco",
+      "blanca",
+      "branco",
+      "branca",
+      "белый",
+      "белая",
+      "putih",
+      "puti"
     ],
     "purple": [
       "purple",
@@ -226,7 +287,16 @@
       "purps",
       "purpul",
       "violet",
-      "pruple"
+      "pruple",
+      "morado",
+      "morada",
+      "violeta",
+      "roxo",
+      "roxa",
+      "фиолетовый",
+      "фиолетовая",
+      "фиол",
+      "ungu"
     ],
     "brown": [
       "brown",
@@ -235,7 +305,12 @@
       "brow",
       "browm",
       "brownie",
-      "broun"
+      "broun",
+      "marrom",
+      "коричневый",
+      "коричневая",
+      "coklat",
+      "cokelat"
     ],
     "cyan": [
       "cyan",
@@ -248,7 +323,12 @@
       "lblue",
       "lb",
       "teal",
-      "aqua"
+      "aqua",
+      "celeste",
+      "ciano",
+      "голубой",
+      "голубая",
+      "бирюзовый"
     ],
     "lime": [
       "lime",
@@ -258,7 +338,11 @@
       "lightgreen",
       "lgreen",
       "lime green",
-      "neon"
+      "neon",
+      "verde lima",
+      "лаймовый",
+      "салатовый",
+      "лайм"
     ],
     "maroon": [
       "maroon",
@@ -269,7 +353,15 @@
       "maroom",
       "dark red",
       "darkred",
-      "burgundy"
+      "burgundy",
+      "granate",
+      "bordô",
+      "bordo",
+      "vinho",
+      "бордовый",
+      "бордовая",
+      "бордо",
+      "marun"
     ],
     "rose": [
       "rose",
@@ -277,7 +369,6 @@
       "light pink",
       "lightpink",
       "lpink",
-      "rosa",
       "rosy pink"
     ],
     "banana": [
@@ -289,7 +380,9 @@
       "bannana",
       "light yellow",
       "lightyellow",
-      "cream"
+      "cream",
+      "банановый",
+      "pisang"
     ],
     "gray": [
       "gray",
@@ -298,20 +391,30 @@
       "gra",
       "grai",
       "grae",
-      "gery"
+      "gery",
+      "gris",
+      "cinza",
+      "серый",
+      "серая",
+      "abu"
     ],
     "tan": [
       "tan",
       "beige",
       "tann",
-      "khaki"
+      "khaki",
+      "bege",
+      "бежевый",
+      "бежевая"
     ],
     "coral": [
       "coral",
       "crl",
       "corl",
       "corall",
-      "salmon"
+      "salmon",
+      "коралловый",
+      "koral"
     ]
   },
   "rooms": [
@@ -350,7 +453,8 @@
         "weapon",
         "weaps",
         "wepons",
-        "guns"
+        "guns",
+        "asteroids"
       ],
       "maps": [
         "skeld",
@@ -419,7 +523,11 @@
         "comm",
         "communication",
         "comunications",
-        "commz"
+        "commz",
+        "wifi",
+        "doorlog",
+        "logs",
+        "door log"
       ],
       "maps": [
         "skeld",
@@ -481,7 +589,8 @@
         "eletrical",
         "elecc",
         "lights",
-        "elec room"
+        "elec room",
+        "maze"
       ],
       "maps": [
         "skeld",
@@ -677,7 +786,8 @@
         "offic",
         "ofice",
         "offce",
-        "vitals"
+        "vitals",
+        "vit"
       ],
       "maps": [
         "mira",
@@ -740,7 +850,8 @@
         "lab",
         "labs",
         "labratory",
-        "laboratoy"
+        "laboratoy",
+        "vitals"
       ],
       "maps": [
         "mira",
@@ -917,7 +1028,8 @@
       ],
       "aliases": [
         "kitch",
-        "kitchn"
+        "kitchn",
+        "burger"
       ],
       "maps": [
         "airship",
@@ -961,7 +1073,8 @@
       ],
       "aliases": [
         "valt",
-        "safe room"
+        "safe room",
+        "ruby"
       ],
       "maps": [
         "airship"
@@ -991,7 +1104,8 @@
       "aliases": [
         "meeting",
         "meeting room",
-        "button"
+        "button",
+        "shell"
       ],
       "maps": [
         "airship",
@@ -1008,7 +1122,8 @@
         "med",
         "medbay",
         "medic",
-        "vitals"
+        "vitals",
+        "vit"
       ],
       "maps": [
         "airship"
@@ -1080,7 +1195,8 @@
       ],
       "aliases": [
         "ventilation room",
-        "vent room"
+        "vent room",
+        "fans"
       ],
       "maps": [
         "airship"
@@ -1093,7 +1209,10 @@
         "beach"
       ],
       "aliases": [
-        "beech"
+        "beech",
+        "campfire",
+        "camp fire",
+        "camp"
       ],
       "maps": [
         "fungle"
@@ -1167,20 +1286,6 @@
       "aliases": [
         "docks",
         "pier"
-      ],
-      "maps": [
-        "fungle"
-      ],
-      "_verified": false
-    },
-    {
-      "id": "campfire",
-      "names": [
-        "campfire"
-      ],
-      "aliases": [
-        "camp fire",
-        "camp"
       ],
       "maps": [
         "fungle"
@@ -1831,6 +1936,191 @@
         "lifting"
       ],
       "_verified": false
+    },
+    {
+      "id": "processData",
+      "names": [
+        "process data"
+      ],
+      "aliases": [
+        "process data",
+        "process"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "startFans",
+      "names": [
+        "start fans"
+      ],
+      "aliases": [
+        "start fans"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "decontaminate",
+      "names": [
+        "decontaminate"
+      ],
+      "aliases": [
+        "decontaminate"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "cleanToilet",
+      "names": [
+        "clean toilet"
+      ],
+      "aliases": [
+        "clean toilet"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "fixShower",
+      "names": [
+        "fix shower"
+      ],
+      "aliases": [
+        "fix shower"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "putAwayPistols",
+      "names": [
+        "put away pistols"
+      ],
+      "aliases": [
+        "pistols"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "putAwayRifles",
+      "names": [
+        "put away rifles"
+      ],
+      "aliases": [
+        "rifles"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "replaceParts",
+      "names": [
+        "replace parts"
+      ],
+      "aliases": [
+        "parts",
+        "replace parts"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "findSignal",
+      "names": [
+        "find signal"
+      ],
+      "aliases": [
+        "signal"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "fixAntenna",
+      "names": [
+        "fix antenna"
+      ],
+      "aliases": [
+        "antenna"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "monitorMushroom",
+      "names": [
+        "monitor mushroom"
+      ],
+      "aliases": [
+        "mushroom"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "buildSandcastle",
+      "names": [
+        "build sandcastle"
+      ],
+      "aliases": [
+        "sandcastle",
+        "sand castle"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "throwFrisbee",
+      "names": [
+        "throw frisbee"
+      ],
+      "aliases": [
+        "frisbee"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "cookFish",
+      "names": [
+        "cook fish"
+      ],
+      "aliases": [
+        "cook fish"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "extractFuel",
+      "names": [
+        "extract fuel"
+      ],
+      "aliases": [
+        "extract fuel"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "helpCritter",
+      "names": [
+        "help critter"
+      ],
+      "aliases": [
+        "critter"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "hoistSupplies",
+      "names": [
+        "hoist supplies"
+      ],
+      "aliases": [
+        "supplies",
+        "hoist"
+      ],
+      "_verified": false
+    },
+    {
+      "id": "collectVegetables",
+      "names": [
+        "collect vegetables"
+      ],
+      "aliases": [
+        "vegetables",
+        "veggies"
+      ],
+      "_verified": false
     }
   ],
   "words": {
@@ -1878,7 +2168,18 @@
       "mad sus",
       "very sus",
       "super sus",
-      "sussy af"
+      "sussy af",
+      "sospechoso",
+      "sospechosa",
+      "suspeito",
+      "suspeita",
+      "подозрительно",
+      "подозрительный",
+      "сус",
+      "сас",
+      "curiga",
+      "предатель",
+      "импостер"
     ],
     "vent": [
       "vent",
@@ -1898,7 +2199,20 @@
       "out of vent",
       "in a vent",
       "into vent",
-      "vent hopping"
+      "vent hopping",
+      "venteo",
+      "venteó",
+      "ventilo",
+      "ventiló",
+      "ventou",
+      "вент",
+      "вентанул",
+      "вентанулся",
+      "в венте",
+      "из вента",
+      "ngevent",
+      "nagvent",
+      "nag vent"
     ],
     "kill": [
       "kill",
@@ -1915,7 +2229,16 @@
       "did it",
       "dunnit",
       "shot",
-      "snapped"
+      "snapped",
+      "mató",
+      "mato",
+      "matou",
+      "убил",
+      "убила",
+      "pumatay",
+      "pinatay",
+      "bunuh",
+      "membunuh"
     ],
     "selfReport": [
       "self report",
@@ -1934,7 +2257,10 @@
       "3rd report",
       "reported twice",
       "reports twice",
-      "double report"
+      "double report",
+      "селф",
+      "селф репорт",
+      "autoreporte"
     ],
     "followed": [
       "followed",
@@ -1979,7 +2305,19 @@
       "capping",
       "making it up",
       "lyin",
-      "lyer"
+      "lyer",
+      "mentira",
+      "mentiroso",
+      "mentirosa",
+      "miente",
+      "врёт",
+      "врет",
+      "врун",
+      "лжёт",
+      "bohong",
+      "boong",
+      "sinungaling",
+      "thats cap"
     ],
     "stack": [
       "stack",
@@ -2014,7 +2352,16 @@
       "vouch",
       "vouched",
       "i vouch",
-      "vouching"
+      "vouching",
+      "limpio",
+      "limpia",
+      "limpo",
+      "limpa",
+      "чист",
+      "чистый",
+      "чистая",
+      "aman",
+      "soft clear"
     ],
     "scan": [
       "scan",
@@ -2092,7 +2439,17 @@
       "vote for",
       "voting for",
       "im voting",
-      "i vote"
+      "i vote",
+      "voten",
+      "votar",
+      "vota",
+      "votem",
+      "голосуем",
+      "голосуйте",
+      "кикаем",
+      "кик",
+      "iboto",
+      "pilih"
     ],
     "out": [
       "out",
@@ -2105,7 +2462,18 @@
       "skipped",
       "skiping",
       "skip vote",
-      "sk1p"
+      "sk1p",
+      "saltar",
+      "salten",
+      "pular",
+      "pula skip",
+      "skipa",
+      "скип",
+      "скипаем",
+      "пропуск",
+      "skipp",
+      "just skip",
+      "skip it"
     ],
     "with": [
       "with",
@@ -2113,7 +2481,12 @@
       "wit",
       "wth",
       "wif",
-      "along with"
+      "along with",
+      "con",
+      "со",
+      "kasama",
+      "sama",
+      "bareng"
     ],
     "together": [
       "together",
@@ -2122,7 +2495,9 @@
       "toghether",
       "togehter",
       "as a pair",
-      "paired"
+      "paired",
+      "juntos",
+      "вместе"
     ],
     "be": [
       "was",
@@ -2144,7 +2519,12 @@
       "stay",
       "was at",
       "has been",
-      "have been"
+      "have been",
+      "fui",
+      "foi",
+      "era",
+      "был",
+      "была"
     ],
     "move": [
       "went",
@@ -2187,7 +2567,13 @@
       "the body",
       "bodies",
       "a body",
-      "boddy"
+      "boddy",
+      "cuerpo",
+      "corpo",
+      "тело",
+      "труп",
+      "mayat",
+      "bangkay"
     ],
     "dead": [
       "dead",
@@ -2199,7 +2585,13 @@
       "die",
       "got stabbed",
       "was stabbed",
-      "got murdered"
+      "got murdered",
+      "muerto",
+      "morto",
+      "мертв",
+      "мёртв",
+      "patay",
+      "mati"
     ],
     "its": [
       "its",
@@ -2211,7 +2603,15 @@
       "its def",
       "has to be",
       "gotta be",
-      "must be"
+      "must be",
+      "es el",
+      "es ella",
+      "fue",
+      "é o",
+      "é a",
+      "foi o",
+      "foi a",
+      "это"
     ],
     "so": [
       "so"
@@ -2255,7 +2655,15 @@
       "did not",
       "was not",
       "is not",
-      "do not"
+      "do not",
+      "não",
+      "nao",
+      "не",
+      "hindi",
+      "bukan",
+      "jangan",
+      "wag",
+      "huwag"
     ],
     "agree": [
       "same",
@@ -2333,7 +2741,13 @@
       "mine",
       "ive",
       "id",
-      "ill"
+      "ill",
+      "eu",
+      "я",
+      "ako",
+      "aku",
+      "gue",
+      "saya"
     ],
     "selfBe": [
       "im",
@@ -2375,7 +2789,13 @@
       "dude",
       "he s",
       "she s",
-      "they themselves"
+      "they themselves",
+      "он",
+      "она",
+      "él",
+      "ele",
+      "ela",
+      "siya"
     ],
     "pronPlural": [
       "them",
@@ -2517,7 +2937,19 @@
     "seem": 0.8,
     "kinda sorta": 0.5,
     "unsure": 0.5,
-    "perhaps": 0.6
+    "perhaps": 0.6,
+    "creo": 0.8,
+    "acho": 0.8,
+    "talvez": 0.6,
+    "quizás": 0.6,
+    "quizas": 0.6,
+    "наверное": 0.7,
+    "наверно": 0.7,
+    "мб": 0.6,
+    "siguro": 0.6,
+    "baka": 0.6,
+    "mungkin": 0.6,
+    "kayaknya": 0.7
   },
   "intensifiers": {
     "100": 0.3,
@@ -2558,7 +2990,12 @@
     "no cap": 0.2,
     "on god": 0.2,
     "ong": 0.2,
-    "af": 0.15
+    "af": 0.15,
+    "lo juro": 0.2,
+    "juro": 0.2,
+    "клянусь": 0.2,
+    "sumpah": 0.2,
+    "swear": 0.2
   },
   "questions": {
     "where": [
@@ -2583,7 +3020,18 @@
       "wh",
       "where body",
       "body where",
-      "where was the body"
+      "where was the body",
+      "donde",
+      "dónde",
+      "onde",
+      "cadê",
+      "cade",
+      "где",
+      "saan",
+      "nasaan",
+      "dimana",
+      "di mana",
+      "where u at"
     ],
     "who": [
       "who",
@@ -2600,7 +3048,13 @@
       "who reported",
       "anyone sus",
       "who reported",
-      "who called"
+      "who called",
+      "quien",
+      "quién",
+      "quem",
+      "кто",
+      "sino",
+      "siapa"
     ],
     "why": [
       "why",
@@ -2731,6 +3185,97 @@
     "l",
     "ww",
     "gj",
-    "wb"
-  ]
+    "wb",
+    "jaja",
+    "jajaja",
+    "kkk",
+    "kkkk",
+    "kkkkk",
+    "rs",
+    "ахах",
+    "лол",
+    "гг",
+    "ок",
+    "wkwk",
+    "wkwkwk",
+    "anjir",
+    "pre",
+    "хз"
+  ],
+  "expand": {
+    "conmigo": [
+      "with",
+      "me"
+    ],
+    "comigo": [
+      "with",
+      "me"
+    ],
+    "wya": [
+      "where",
+      "you"
+    ],
+    "wyd": [
+      "what",
+      "you"
+    ],
+    "imma": [
+      "im"
+    ],
+    "wme": [
+      "with",
+      "me"
+    ],
+    "ppl": [
+      "people"
+    ],
+    "bc": [
+      "because"
+    ]
+  },
+  "confusableColors": {
+    "_doc": "Colours players mix up (research seed). Not used by the parser yet; for suspicion weighting of colour-named sightings.",
+    "pairs": [
+      [
+        "brown",
+        "maroon"
+      ],
+      [
+        "lime",
+        "green"
+      ],
+      [
+        "rose",
+        "pink"
+      ],
+      [
+        "banana",
+        "yellow"
+      ],
+      [
+        "coral",
+        "orange"
+      ],
+      [
+        "tan",
+        "brown"
+      ],
+      [
+        "cyan",
+        "blue"
+      ],
+      [
+        "gray",
+        "white"
+      ],
+      [
+        "maroon",
+        "red"
+      ],
+      [
+        "purple",
+        "pink"
+      ]
+    ]
+  }
 }

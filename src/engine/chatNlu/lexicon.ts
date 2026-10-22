@@ -28,6 +28,8 @@ interface Lexicon {
   intensifiers: Record<string, number>;
   questions: Record<string, string[]>;
   noise: string[];
+  /** Single words the tokenizer rewrites into several ("conmigo" → with me). */
+  expand?: Record<string, string[]>;
 }
 export const LEX = raw as unknown as Lexicon;
 
