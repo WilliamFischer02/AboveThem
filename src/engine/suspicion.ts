@@ -351,12 +351,34 @@ function scoreCore(m: MatchState): SuspectScore[] {
   return combine(m, hf, [...all, ...rec]).scores;
 }
 
+/**
+ * Past meetings rarely change, so snapshot probabilities are memoised by a content signature
+ * (counts + last ids of everything the snapshot keeps, plus roster facts). Bounded LRU-ish map.
+ */
+const SNAP_CACHE = new Map<string, Map<PlayerId, number>>();
+function snapshotSignature(s: MatchState, k: number): string {
+  const last = <T extends { id?: string }>(xs: T[]) => `${xs.length}:${xs.length ? (xs[xs.length - 1].id ?? '') : ''}`;
+  const roster = Object.values(s.players).map(p => `${p.id}/${p.name}/${p.status}/${p.knownRole}/${p.isPartner ? 1 : 0}/${p.isMe ? 1 : 0}`).sort().join(',');
+  return [s.id, k, s.me, s.myRole, JSON.stringify(s.settings), s.map.id, last(s.observations), last(s.claims), last(s.chat),
+    JSON.stringify(s.votes), JSON.stringify(s.ejections), roster, JSON.stringify(s.myTasks ?? [])].join('|');
+}
+function snapshotProbabilities(m: MatchState, k: number): Map<PlayerId, number> {
+  const snap = snapshotAtMeeting(m, k);
+  const sig = snapshotSignature(snap, k);
+  const hit = SNAP_CACHE.get(sig);
+  if (hit) return hit;
+  resetEvidenceIds();
+  const out = new Map(scoreCore(snap).map(s => [s.player, s.probability]));
+  if (SNAP_CACHE.size > 64) SNAP_CACHE.delete(SNAP_CACHE.keys().next().value!);
+  SNAP_CACHE.set(sig, out);
+  return out;
+}
+
 export function scoreAll(m: MatchState): SuspectScore[] {
   // Trend first (its evidence ids are thrown away), then the real pass with fresh ids.
   const points = new Map<PlayerId, { meeting: number; probability: number }[]>();
   for (const k of completedMeetings(m)) {
-    resetEvidenceIds();
-    for (const s of scoreCore(snapshotAtMeeting(m, k))) points.set(s.player, [...(points.get(s.player) ?? []), { meeting: k, probability: s.probability }]);
+    for (const [player, probability] of snapshotProbabilities(m, k)) points.set(player, [...(points.get(player) ?? []), { meeting: k, probability }]);
   }
   resetEvidenceIds();
   const now = currentMeeting(m);
