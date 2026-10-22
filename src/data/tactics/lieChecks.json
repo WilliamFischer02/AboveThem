@@ -1,0 +1,1387 @@
+{
+  "_doc": "Lie-check catalogue (docs/GAME_KNOWLEDGE.md section 2). Each check lists the inputs the engine needs, how confident a hit is, the EvidenceItem category it belongs to, its effect (suspect = raises the player, clear = lowers, invalidateClear = a claimed clear proves nothing, constraint = narrows kill windows or impostor counts) and a chat question (<= 70 chars) with placeholders {P} player, {P2} second player, {R} room, {R2} other room, {T} time m:ss, {TASK} task, {W} witness, {V} victim, {N} number. 'situation' links to a crew.json situation; 'wiredIn' names the engine rule that already implements it (null = not yet). Inputs use the vocabulary in 'inputVocabulary'; entries starting with * there do not exist in the domain model yet.",
+  "version": 1,
+  "confidenceLogOdds": {
+    "hard": 4.0,
+    "high": 1.5,
+    "med": 0.8,
+    "low": 0.3
+  },
+  "inputVocabulary": {
+    "settings.visualTasksOn": "LobbySettings.visualTasksOn",
+    "settings.taskBarMode": "LobbySettings.taskBarMode",
+    "settings.killCooldownSec": "LobbySettings.killCooldownSec",
+    "settings.playerSpeed": "LobbySettings.playerSpeed",
+    "settings.impostorCount": "LobbySettings.impostorCount",
+    "settings.anonymousVotes": "LobbySettings.anonymousVotes",
+    "settings.confirmEjectsOn": "LobbySettings.confirmEjectsOn",
+    "lobby.roles": "* which roles are enabled (Engineer, Shapeshifter, Phantom, Viper, Scientist ...)",
+    "map.id": "MapData.id",
+    "map.tasks": "MapData.tasks",
+    "map.tasks.visual": "MapTask.visual",
+    "map.tasks.kind": "MapTask.kind",
+    "map.tasks.rooms": "MapTask.rooms",
+    "map.tasks.stages": "MapTask.stages",
+    "map.tasks.stageDurationSec": "MapTask.stageDurationSec",
+    "map.rooms.adjacent": "MapRoom.adjacent (walk seconds at 1.0x)",
+    "map.rooms.deadEnd": "MapRoom.deadEnd",
+    "map.vents": "MapData.vents",
+    "map.cameras": "* camera coverage per map (not in map JSON yet)",
+    "myTasks": "my own task list (setup screen)",
+    "obs.sighting": "sighting observation",
+    "obs.withMe": "withMe observation",
+    "obs.myRoom": "myRoom observation",
+    "obs.sawTask": "sawTask observation",
+    "obs.sawVent": "sawVent observation",
+    "obs.sawKill": "sawKill observation",
+    "obs.bodyFound": "bodyFound observation",
+    "obs.sabotage": "sabotage observation",
+    "obs.admin": "* admin table reading (room -> count, time)",
+    "obs.cams": "* camera feed watched (feed, window)",
+    "obs.doorlog": "* MIRA doorlog entry (player, sensor, time)",
+    "vitals": "* vitals reading (player -> OK/DED/DC, time)",
+    "claim.location": "Claim type location",
+    "claim.companion": "Claim type companion",
+    "claim.task": "Claim type task",
+    "claim.sighting": "Claim type sighting",
+    "claim.clear": "Claim type clear",
+    "chat.lines": "chat lines / chat-nlu assertions",
+    "votes": "MatchState votes",
+    "ejections": "MatchState ejections",
+    "report": "who reported, where, when",
+    "meeting.endTime": "round start time",
+    "meeting.overview": "dead players shown at meeting start"
+  },
+  "checks": [
+    {
+      "id": "visual_unseen",
+      "name": "Visual task claimed but no animation while I watched",
+      "group": "task",
+      "category": "task",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "settings.visualTasksOn",
+        "map.tasks.visual",
+        "obs.sighting",
+        "claim.task"
+      ],
+      "check": "Visuals on, task is visual on this map, I watched P at that panel for the whole claimed duration and saw no effect.",
+      "ask": "{P} {TASK} is visual. I watched and saw nothing.",
+      "situation": "visual_task_check",
+      "caveats": [
+        "Visuals off: only the doer sees it.",
+        "A ghost doing the same visual elsewhere does not matter."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Visual_tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "visual_wrong_map",
+      "name": "Clear based on a task that is not visual on this map",
+      "group": "task",
+      "category": "task",
+      "confidence": "hard",
+      "effect": "invalidateClear",
+      "inputs": [
+        "map.id",
+        "map.tasks.visual",
+        "claim.clear"
+      ],
+      "check": "Asteroids/Shields on MIRA, anything on Airship/Fungle, Garbage outside Skeld are not visual. The clear proves nothing (the clearer is not guilty for it).",
+      "ask": "{TASK} is not visual on this map. That clears nobody.",
+      "caveats": [
+        "Common mistake by new players; do not treat the clearer as impostor."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Visual_tasks"
+      ]
+    },
+    {
+      "id": "visual_off_clear",
+      "name": "Visual clear while visuals are off",
+      "group": "task",
+      "category": "task",
+      "confidence": "hard",
+      "effect": "invalidateClear",
+      "inputs": [
+        "settings.visualTasksOn",
+        "claim.clear"
+      ],
+      "check": "With visuals off nobody but the doer sees the effect. Exception: Submit Scan \"Waiting for <name>\".",
+      "ask": "Visuals are off. Only scan waiting proves it.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Visual_tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "common_not_dealt",
+      "name": "Claims a common task the lobby does not have",
+      "group": "task",
+      "category": "task",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "myTasks",
+        "map.tasks.kind",
+        "claim.task"
+      ],
+      "check": "Common tasks are identical for every crewmate. If the claimed task is a common task on this map and it is not on my list, the claim is false.",
+      "ask": "{TASK} is common. I dont have it. Nobody does.",
+      "situation": "common_task_claim",
+      "caveats": [
+        "Only valid when my task list is known (setup screen).",
+        "Name aliasing (wires vs divert): confirm the task id."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleCommonTaskClaims",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "task_not_on_map",
+      "name": "Claims a task that does not exist on this map",
+      "group": "task",
+      "category": "task",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.tasks",
+        "claim.task"
+      ],
+      "check": "Task id not in map.tasks (e.g. scan on Airship/Fungle, divert power on Polus/Fungle, swipe card on MIRA/Airship/Fungle).",
+      "ask": "There is no {TASK} on this map {P}.",
+      "situation": "task_not_in_room",
+      "caveats": [
+        "Players use other maps' names; ask before voting."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks"
+      ]
+    },
+    {
+      "id": "task_not_in_room",
+      "name": "Claims a task in a room where it has no stage",
+      "group": "task",
+      "category": "task",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.tasks.rooms",
+        "claim.task",
+        "claim.location"
+      ],
+      "check": "Claimed room not in task.rooms for this map.",
+      "ask": "{TASK} is not in {R}. Which panel {P}?",
+      "situation": "task_not_in_room",
+      "caveats": [
+        "Some wiring panels sit in the corridor outside the named room."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleTaskClaims",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks"
+      ]
+    },
+    {
+      "id": "dummy_panel",
+      "name": "Seen using a dummy (impossible) task panel",
+      "group": "task",
+      "category": "hard",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "obs.sighting",
+        "obs.sawTask"
+      ],
+      "check": "Dummy panels: Skeld Reactor divert power, Polus Office divert power, Airship Armory/Communications/Vault wiring, Airship Lounge garbage bin.",
+      "ask": "{P} that panel in {R} is fake. Nobody can do it.",
+      "caveats": [
+        "Map JSON has no dummy-panel field yet; needs a list per map."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "stage_order",
+      "name": "Multi-stage task done in an impossible order",
+      "group": "task",
+      "category": "task",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.tasks.rooms",
+        "claim.task",
+        "obs.sawTask"
+      ],
+      "check": "Stage order is fixed: Skeld upload always Admin, Polus upload Communications, divert before accept, garbage/chute final stage Storage, align upper then lower.",
+      "ask": "{P} upload is always in admin. Where did you download?",
+      "caveats": [
+        "Map JSON lists rooms but not stage order; needs rooms per stage."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Tasks"
+      ]
+    },
+    {
+      "id": "wiring_order",
+      "name": "Wiring panels claimed in an order the game never assigns",
+      "group": "task",
+      "category": "task",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "claim.task"
+      ],
+      "check": "Wiring order per map: Skeld Elec>Storage>Admin>Nav>Cafe>Sec; MIRA Storage>Hallway>Locker>Greenhouse>Lab; Polus Elec>O2>Office>Decon>Lab R>Lab L; Airship Viewing>Engine>Main Hall>Showers>Lounge>Cargo>Meeting.",
+      "ask": "{P} wires go in a fixed order. {R} cant come after {R2}.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "task_too_fast",
+      "name": "Left a task faster than its minimum time",
+      "group": "task",
+      "category": "task",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "map.tasks.stageDurationSec"
+      ],
+      "check": "Observed time at the panel < 0.6 x stageDurationSec (download/upload ~9-11 s, scan ~10 s, inspect sample 60 s wait).",
+      "ask": "{P} you were at {TASK} for a few seconds. It takes longer.",
+      "caveats": [
+        "Most durations in map JSON are guesses; only download, scan and sample are sourced."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "bar_no_move",
+      "name": "Task bar did not move when P finished a single-stage task",
+      "group": "task",
+      "category": "task",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "settings.taskBarMode",
+        "obs.sawTask",
+        "map.tasks.stages"
+      ],
+      "check": "Bar mode Always, single-stage task, P closed it as done in my view, no bar movement within ~1 s.",
+      "ask": "{P} you said done {TASK}. The bar did not move.",
+      "caveats": [
+        "Multi-stage tasks only move the bar at the final stage.",
+        "Comms hides bar progress."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Tasks",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "bar_moved_alone",
+      "name": "Task bar moved exactly when P finished (soft clear)",
+      "group": "task",
+      "category": "task",
+      "confidence": "med",
+      "effect": "clear",
+      "inputs": [
+        "settings.taskBarMode",
+        "obs.sawTask"
+      ],
+      "check": "Bar mode Always, start of round, P finished a single-stage task and the bar moved with nobody else likely finishing.",
+      "ask": "Bar moved when {P} finished {TASK}. Soft clear.",
+      "caveats": [
+        "Another crewmate finishing at the same moment fakes this."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "no_tasks_wander",
+      "name": "Wanders with no task activity",
+      "group": "task",
+      "category": "movement",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting"
+      ],
+      "check": "Seen several times in a round, never at a panel, in rooms with no plausible task.",
+      "ask": "{P} what tasks did you do this round? Name two.",
+      "caveats": [
+        "Late game crew may have finished all tasks."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "task_list_vague",
+      "name": "Cannot name a task or its location",
+      "group": "task",
+      "category": "meeting",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "Asked twice, answers with no task name, or a task but no room.",
+      "ask": "{P} which task exactly and where?",
+      "caveats": [
+        "Quick Chat users cannot type freely."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "travel_impossible",
+      "name": "Two placements closer in time than the walk allows",
+      "group": "movement",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "claim.location",
+        "map.rooms.adjacent",
+        "settings.playerSpeed",
+        "map.vents"
+      ],
+      "check": "gap < shortestPathSec / playerSpeed x 0.7 => impossible on foot; if both rooms are on one vent network, flag \"vented\".",
+      "ask": "{P} you were in {R} at {T}. {R2} is too far for that.",
+      "situation": "contradiction",
+      "caveats": [
+        "Travel seconds are eyeballed; keep 30% slack.",
+        "MIRA vents connect everything."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleLocationClaims",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Vent_(object)"
+      ]
+    },
+    {
+      "id": "vanished_dead_end",
+      "name": "Entered a watched dead-end and was gone",
+      "group": "movement",
+      "category": "hard",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "map.rooms.deadEnd",
+        "map.vents"
+      ],
+      "check": "I watched the only door of a dead-end; P went in, the room was later empty or P was seen elsewhere without coming out. Room has a vent.",
+      "ask": "{P} went into {R} and was gone. Theres a vent there.",
+      "situation": "body_in_dead_end",
+      "caveats": [
+        "Phantom vanish if Phantom is enabled.",
+        "Engineers can vent."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Vent_(object)"
+      ]
+    },
+    {
+      "id": "appeared_from_vent_room",
+      "name": "Appeared in a room nobody walked into",
+      "group": "movement",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "map.vents"
+      ],
+      "check": "I was watching the entrances of R; P appears inside; R has a vent.",
+      "ask": "{P} how did you get to {R}? Nobody came through.",
+      "caveats": [
+        "Vision edges; ask before voting."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "gap_crossed",
+      "name": "Airship Gap Room crossed too fast",
+      "group": "movement",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "obs.sighting"
+      ],
+      "check": "Seen on one side of Gap Room, then the other side faster than the platform ride or the long route; Gap Room left/right vents connect.",
+      "ask": "{P} you crossed gap without the platform. How?",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Moving_platform"
+      ]
+    },
+    {
+      "id": "ladder_claim",
+      "name": "Ladder trip nobody heard",
+      "group": "movement",
+      "category": "movement",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "claim.location"
+      ],
+      "check": "Ladder sound plays map-wide on Airship/Fungle; a claimed climb at a time nobody heard one is doubtful.",
+      "ask": "{P} which ladder? Nobody heard one.",
+      "caveats": [
+        "Players rarely track ladder sounds; low weight."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Ladder"
+      ]
+    },
+    {
+      "id": "cooldown_window",
+      "name": "Kill time inside the post-meeting cooldown",
+      "group": "movement",
+      "category": "structural",
+      "confidence": "hard",
+      "effect": "constraint",
+      "inputs": [
+        "meeting.endTime",
+        "settings.killCooldownSec",
+        "obs.bodyFound"
+      ],
+      "check": "Kill cooldown resets at every meeting end (10 s at match start). Earliest kill = meetingEnd + cooldown (+ time the killer spent in vents or on cams). Alibis covering only that window prove nothing.",
+      "ask": "First kill cant be before {N}s. Where were you after?",
+      "caveats": [
+        "Kill-during-meeting-call glitch can place a body at the button."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Kill",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "double_kill_gap",
+      "name": "Two bodies closer than one cooldown",
+      "group": "movement",
+      "category": "structural",
+      "confidence": "hard",
+      "effect": "constraint",
+      "inputs": [
+        "obs.bodyFound",
+        "vitals",
+        "settings.killCooldownSec",
+        "settings.impostorCount"
+      ],
+      "check": "Time-of-death gap < killCooldownSec => two different killers. One impostor can never double kill.",
+      "ask": "Two kills {N}s apart. That is two impostors.",
+      "caveats": [
+        "Time of death must be bounded (vitals, noisemaker, sightings)."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Kill"
+      ]
+    },
+    {
+      "id": "alibi_partner_denies",
+      "name": "Named companion denies",
+      "group": "movement",
+      "category": "meeting",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "claim.companion",
+        "chat.lines"
+      ],
+      "check": "P claims to be with W; W says no (or names someone else). One of them lies; the one with other contradictions is the liar.",
+      "ask": "{W} were you with {P}? Yes or no.",
+      "situation": "contradiction",
+      "caveats": [
+        "Both may be honest about different minutes."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleCompanionClaims",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "story_changed",
+      "name": "Location or companion changed for the same window",
+      "group": "movement",
+      "category": "meeting",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "claim.location",
+        "claim.companion"
+      ],
+      "check": "Two claims by P for overlapping windows name different rooms or companions.",
+      "ask": "Last meeting {P} said {R}. Now {R2}. Which?",
+      "situation": "contradiction",
+      "caveats": [
+        "Players misname rooms; check aliases."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleStoryChanged",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "late_location",
+      "name": "Avoids giving a location",
+      "group": "movement",
+      "category": "meeting",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "Asked where, answers with a question or only after others have given theirs.",
+      "ask": "{P} you still havent said where you were.",
+      "situation": "insufficient_info",
+      "caveats": [
+        "Slow typers, translation lag."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "mutual_pair",
+      "name": "Two players only ever alibi each other",
+      "group": "movement",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "claim.companion",
+        "votes"
+      ],
+      "check": "Across >= 2 meetings P and P2 clear each other and nobody else confirms either.",
+      "ask": "{P} and {P2} only clear each other. Who else saw you?",
+      "situation": "pair_tell",
+      "caveats": [
+        "Real duos (friends) do this as crew."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "two_together_one_dies",
+      "name": "Left alone together, one died",
+      "group": "body",
+      "category": "hard",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "obs.withMe",
+        "obs.bodyFound"
+      ],
+      "check": "I saw only P and V together in R; V found dead in or near R soon after with no third player seen.",
+      "ask": "I left {P} alone with {V} in {R}. Then {V} died.",
+      "situation": "last_seen_with_victim",
+      "caveats": [
+        "A Shapeshifter may have worn P.",
+        "Vents let a third player arrive unseen."
+      ],
+      "wiredIn": "src/engine/rules.ts#ruleLastSeenWithVictim",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "left_body_room",
+      "name": "Left the body room shortly before the report",
+      "group": "body",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "obs.bodyFound"
+      ],
+      "check": "P seen leaving R within ~15 s before the body in R was reported; P did not report.",
+      "ask": "{P} you came out of {R} right before. Didnt see {V}?",
+      "situation": "body_in_dead_end",
+      "caveats": [
+        "The body may have been out of P's vision."
+      ],
+      "wiredIn": "src/engine/rules.ts#ruleProximityToKill",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "near_body_no_report",
+      "name": "Walked past a body",
+      "group": "body",
+      "category": "movement",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "obs.bodyFound"
+      ],
+      "check": "P was within vision of the body location after the kill and kept walking.",
+      "ask": "{P} you walked right past the body in {R}.",
+      "caveats": [
+        "Lights shrink crew vision ~5x.",
+        "Doors block reports."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleSilentNearBody",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "self_report_instant",
+      "name": "Report seconds after the kill, no witness",
+      "group": "body",
+      "category": "movement",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "report",
+        "vitals",
+        "obs.bodyFound"
+      ],
+      "check": "Report time minus time of death (vitals OK->DED, noisemaker alert) under ~5 s and nobody saw the reporter arrive.",
+      "ask": "{P} you found {V} seconds after the kill. Who did you see?",
+      "situation": "self_report",
+      "caveats": [
+        "Crew who witnessed the kill also report instantly."
+      ],
+      "wiredIn": "src/engine/rules.ts#ruleSelfReport",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Vitals",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "self_report_no_reason",
+      "name": "Reporter had no reason to be in that dead-end",
+      "group": "body",
+      "category": "movement",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "report",
+        "map.rooms.deadEnd",
+        "claim.task",
+        "map.tasks.rooms"
+      ],
+      "check": "Body in a dead-end; the reporter claims no task there (or a task that is not in that room).",
+      "ask": "{P} what task took you to {R}?",
+      "situation": "self_report",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "report_wrong_direction",
+      "name": "Claimed route cannot reach the body in time",
+      "group": "body",
+      "category": "movement",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "report",
+        "claim.location",
+        "map.rooms.adjacent",
+        "obs.sighting"
+      ],
+      "check": "Reporter says they came from R2; the path R2->R would pass me or a watched corridor, or takes longer than the time available.",
+      "ask": "{P} from {R2} you would pass me. You didnt.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "body_behind_doors",
+      "name": "Saw or reported a body through closed doors",
+      "group": "body",
+      "category": "sabotage",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sabotage",
+        "claim.sighting"
+      ],
+      "check": "Bodies cannot be reported through closed doors and doors block vision.",
+      "ask": "Doors were shut. You couldnt see into {R}.",
+      "caveats": [
+        "A body right at the door can bug through."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Report",
+        "https://among-us.fandom.com/wiki/Door_Sabotage"
+      ]
+    },
+    {
+      "id": "knows_too_much",
+      "name": "Knows details nobody announced",
+      "group": "body",
+      "category": "meeting",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines",
+        "report"
+      ],
+      "check": "P names the body room, victim or body count before the reporter or anyone else said it, without having been there.",
+      "ask": "{P} how did you know it was in {R}? Nobody said.",
+      "caveats": [
+        "The meeting overview shows who died, so victim names are public.",
+        "Ghost info can leak via voice calls."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "nearest_player_kill",
+      "name": "Killer skipped a closer player",
+      "group": "body",
+      "category": "hard",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sawKill",
+        "obs.sighting"
+      ],
+      "check": "Impostors cannot kill impostors: if K killed far-away V while P stood closer, P is likely K's partner.",
+      "ask": "{P2} was closer to {P}. Why was {V} the target?",
+      "caveats": [
+        "Rare; ping and movement break it."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Kill"
+      ]
+    },
+    {
+      "id": "dissolved_body",
+      "name": "Victim dead with no body (Viper)",
+      "group": "body",
+      "category": "structural",
+      "confidence": "med",
+      "effect": "constraint",
+      "inputs": [
+        "vitals",
+        "meeting.overview",
+        "lobby.roles"
+      ],
+      "check": "Player shown dead at meeting / DED on vitals but no body anywhere: Viper acid dissolved it (default 15 s).",
+      "ask": "No body for {V}. Viper is on. Who was near {R}?",
+      "caveats": [
+        "Only when the Viper role is enabled."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Viper"
+      ]
+    },
+    {
+      "id": "monitor_during_comms",
+      "name": "Read a monitor during Comms",
+      "group": "monitor",
+      "category": "sabotage",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sabotage",
+        "claim.sighting"
+      ],
+      "check": "Comms disables Admin, Cams, Vitals and Doorlog (not Fungle binoculars). A claimed reading inside a comms window is false.",
+      "ask": "Comms were down. Cams and admin were off then.",
+      "caveats": [
+        "Check the exact comms window; readings just before it are fine."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Sabotage",
+        "https://among-us.fandom.com/wiki/Security_(ability)"
+      ]
+    },
+    {
+      "id": "facility_not_on_map",
+      "name": "Claims a monitor this map does not have",
+      "group": "monitor",
+      "category": "structural",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "claim.sighting",
+        "lobby.roles"
+      ],
+      "check": "No cams on MIRA, no admin on Fungle, no vitals on Skeld/MIRA (except Scientist), doorlog only on MIRA.",
+      "ask": "There are no cams on this map {P}.",
+      "caveats": [
+        "Scientist has portable vitals on any map."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Security_(ability)",
+        "https://among-us.fandom.com/wiki/Admin_(ability)",
+        "https://among-us.fandom.com/wiki/Vitals"
+      ]
+    },
+    {
+      "id": "admin_count_mismatch",
+      "name": "Admin count disagrees with claims",
+      "group": "monitor",
+      "category": "movement",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "obs.admin",
+        "claim.location"
+      ],
+      "check": "My admin read: N icons in R at T. Claims put a different number of players in R at T.",
+      "ask": "Admin had {N} in {R} at {T}. Who else was there?",
+      "caveats": [
+        "Admin is anonymous and updates as people move; allow +-5 s.",
+        "No admin observation type in the model yet."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Admin_(ability)"
+      ]
+    },
+    {
+      "id": "admin_ghost_icon",
+      "name": "Admin shows someone where I see nobody",
+      "group": "monitor",
+      "category": "hard",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.admin",
+        "obs.myRoom"
+      ],
+      "check": "Admin icon in a room I am standing in or watching, nobody visible => someone is in that room's vent.",
+      "ask": "Admin showed someone in {R} but it was empty.",
+      "caveats": [
+        "Only meaningful for rooms with a vent."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Admin_(ability)",
+        "https://among-us.fandom.com/wiki/Vent_(object)"
+      ]
+    },
+    {
+      "id": "admin_blind_spot",
+      "name": "Evidence from an area admin does not cover",
+      "group": "monitor",
+      "category": "structural",
+      "confidence": "hard",
+      "effect": "invalidateClear",
+      "inputs": [
+        "map.id",
+        "claim.sighting"
+      ],
+      "check": "Admin does not show hallways or Polus Outside. \"Admin showed nobody there\" is no evidence for those areas.",
+      "ask": "Admin doesnt show {R}. That proves nothing.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Admin_(ability)"
+      ]
+    },
+    {
+      "id": "cams_not_seen",
+      "name": "Not on camera where they claim to have walked",
+      "group": "monitor",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "obs.cams",
+        "claim.location",
+        "map.cameras"
+      ],
+      "check": "I watched a feed covering corridor C for the window; P claims to have walked through C then and never appeared.",
+      "ask": "I was on cams. {P} never walked past {R}.",
+      "caveats": [
+        "Polus/Airship feeds show one camera at a time.",
+        "No cams observation type or camera coverage table yet."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Security_(ability)",
+        "https://among-us.fandom.com/wiki/Camera"
+      ]
+    },
+    {
+      "id": "cams_no_blink",
+      "name": "Claims cams but nobody saw them blink",
+      "group": "monitor",
+      "category": "meeting",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "claim.sighting",
+        "chat.lines"
+      ],
+      "check": "Living viewers make every camera blink red. If several players near cameras saw no blink, the cams claim is doubtful.",
+      "ask": "{P} you were on cams? Nobody saw them blink.",
+      "caveats": [
+        "Polus/Airship cams can be body-blocked; quick re-entry avoids the blink."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Camera"
+      ]
+    },
+    {
+      "id": "doorlog_contradiction",
+      "name": "Doorlog disagrees with the claimed route",
+      "group": "monitor",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "obs.doorlog",
+        "claim.location"
+      ],
+      "check": "MIRA doorlog logs living players at the north/SW/SE hallway sensors (5 s per-player cooldown, last 20 events, real identity even if shifted).",
+      "ask": "Doorlog has {P} at the {R} sensor at {T}.",
+      "caveats": [
+        "Comms wipes the display until fixed."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Doorlog"
+      ]
+    },
+    {
+      "id": "vitals_timing",
+      "name": "Claim contradicts the vitals time of death",
+      "group": "monitor",
+      "category": "movement",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "vitals",
+        "claim.sighting",
+        "report"
+      ],
+      "check": "Vitals showed V OK at T; any claim of finding V dead before T is false. DED = killed since the last meeting, body present.",
+      "ask": "{V} was alive on vitals at {T}. Not before.",
+      "caveats": [
+        "D/C also covers disconnects and earlier deaths."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Vitals"
+      ]
+    },
+    {
+      "id": "wrong_fix_location",
+      "name": "Claims fixing a sabotage where it cannot be fixed",
+      "group": "sabotage",
+      "category": "sabotage",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "claim.location",
+        "obs.sabotage"
+      ],
+      "check": "Fix points: Skeld reactor Reactor, O2 O2+Admin, lights Electrical, comms Comms; MIRA reactor Reactor, O2 Greenhouse+SW hall, lights Office, comms Office+Comms; Polus seismic both sides of Dropship, lights Electrical, comms outside by Comms; Airship crash both sides of Gap Room, lights Gap/Viewing/Cargo, comms Comms; Fungle reactor Reactor, comms Comms+Lookout, no lights.",
+      "ask": "{TASK} isnt fixed in {R} on this map.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Sabotage",
+        "https://among-us.fandom.com/wiki/Fix_Lights"
+      ]
+    },
+    {
+      "id": "sabotage_no_show",
+      "name": "Absent from a critical sabotage",
+      "group": "sabotage",
+      "category": "sabotage",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sabotage",
+        "obs.sighting",
+        "claim.location"
+      ],
+      "check": "Critical sabotage; P seen at neither fix point and claims a location far from both.",
+      "ask": "{P} reactor was called. Where were you?",
+      "situation": "sabotage_unfixed",
+      "caveats": [
+        "Plenty of crew ignore sabotages."
+      ],
+      "wiredIn": "src/engine/rules.ts#ruleSabotage",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Sabotage"
+      ]
+    },
+    {
+      "id": "fix_is_not_clear",
+      "name": "\"I fixed it\" offered as a clear",
+      "group": "sabotage",
+      "category": "sabotage",
+      "confidence": "hard",
+      "effect": "invalidateClear",
+      "inputs": [
+        "claim.clear"
+      ],
+      "check": "Impostors can fix sabotages. Fixing proves nothing alone; only a 2-person fix with a cleared partner is an alibi for that moment.",
+      "ask": "Impostors can fix too. Who was with you?",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Sabotage"
+      ]
+    },
+    {
+      "id": "reactor_partner",
+      "name": "Two-person fix partner does not match",
+      "group": "sabotage",
+      "category": "meeting",
+      "confidence": "high",
+      "effect": "suspect",
+      "inputs": [
+        "claim.companion",
+        "obs.sabotage"
+      ],
+      "check": "Reactor/seismic need two hands at once; P claims W held the other reader; W denies or was seen elsewhere.",
+      "ask": "{W} were you on the other reactor hand with {P}?",
+      "situation": "sabotage_unfixed",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Sabotage"
+      ]
+    },
+    {
+      "id": "airship_spawn_claim",
+      "name": "Impossible Airship spawn",
+      "group": "sabotage",
+      "category": "structural",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "map.id",
+        "claim.location"
+      ],
+      "check": "Airship spawn choices after a meeting are only Brig, Cargo Bay, Engine Room, Kitchen, Main Hall, Records (3 offered each time).",
+      "ask": "You cant spawn in {R} on Airship.",
+      "caveats": [
+        "Players often name where they walked first, not the spawn."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Emergency_meeting",
+        "https://among-us.fandom.com/wiki/The_Airship"
+      ]
+    },
+    {
+      "id": "mixup_sighting",
+      "name": "Sighting made during Mushroom Mixup",
+      "group": "sabotage",
+      "category": "sabotage",
+      "confidence": "hard",
+      "effect": "invalidateClear",
+      "inputs": [
+        "map.id",
+        "obs.sabotage",
+        "obs.sighting"
+      ],
+      "check": "During Fungle Mushroom Mixup (~10 s) every living player has a random colour and crew cannot see names: drop colour-based sightings in that window.",
+      "ask": "That was during mixup. Colours were random.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Mushroom_Mixup"
+      ]
+    },
+    {
+      "id": "saw_vent",
+      "name": "Saw P enter or leave a vent",
+      "group": "eyewitness",
+      "category": "hard",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sawVent",
+        "lobby.roles"
+      ],
+      "check": "Hard if Engineers are off. With Engineers: hard if P re-vented within the engineer cooldown, vented during comms, or stayed longer than the max vent time.",
+      "ask": "I saw {P} vent in {R}.",
+      "caveats": [
+        "Clean Vent forcing someone out is the same evidence."
+      ],
+      "wiredIn": "src/engine/suspicion.ts#hardFacts",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Vent_(object)",
+        "https://among-us.fandom.com/wiki/Engineer",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "saw_kill",
+      "name": "Saw P kill",
+      "group": "eyewitness",
+      "category": "hard",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sawKill",
+        "lobby.roles"
+      ],
+      "check": "Hard unless Shapeshifter is enabled (the killer may wear P's look). An acid (Viper) kill is hard even then: Viper and Shapeshifter cannot both be on.",
+      "ask": "I saw {P} kill {V} in {R}.",
+      "caveats": [],
+      "wiredIn": "src/engine/suspicion.ts#hardFacts",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Kill",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Viper"
+      ]
+    },
+    {
+      "id": "saw_shift_or_vanish",
+      "name": "Saw a shapeshift cocoon or Phantom cloud",
+      "group": "eyewitness",
+      "category": "hard",
+      "confidence": "hard",
+      "effect": "suspect",
+      "inputs": [
+        "obs.sighting",
+        "lobby.roles"
+      ],
+      "check": "The cocoon/cloud is in the impostor's real colour.",
+      "ask": "I saw {P} shift in {R}. Same colour cloud.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Shapeshifter",
+        "https://among-us.fandom.com/wiki/Phantom",
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "two_of_same",
+      "name": "Saw two players with the same look",
+      "group": "eyewitness",
+      "category": "hard",
+      "confidence": "hard",
+      "effect": "constraint",
+      "inputs": [
+        "obs.sighting",
+        "lobby.roles"
+      ],
+      "check": "Two identical players at once: one is a Shapeshifter. Watch both; the one that changes back is the impostor.",
+      "ask": "Two {P}s at once. One of them is a shapeshifter.",
+      "caveats": [
+        "Same cosmetics but different colours is not this."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate",
+        "https://among-us.fandom.com/wiki/Shapeshifter"
+      ]
+    },
+    {
+      "id": "accuse_first_no_info",
+      "name": "First accuser with no sighting",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "P accuses before any location was given and offers no sighting when asked.",
+      "ask": "{P} what did you actually see? Sus is not a location.",
+      "situation": "accuser_no_evidence",
+      "caveats": [
+        "Loud crew do this all the time."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleAccusations",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "flip_when_countered",
+      "name": "Switches target when countered",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "P accuses A; A counters with an alibi; P accuses someone else without addressing it.",
+      "ask": "{P} you dropped {P2} fast. Why were you sure before?",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "votes_last_majority",
+      "name": "Always votes last and with the majority",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "votes",
+        "settings.anonymousVotes"
+      ],
+      "check": "Across meetings P's vote lands after most votes and always on the leading target. Needs non-anonymous votes.",
+      "ask": "{P} you always vote last. Who do you think it is?",
+      "caveats": [
+        "Slow players and translators vote late too."
+      ],
+      "wiredIn": "src/engine/rules.ts#ruleVotingPairs",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "bandwagon",
+      "name": "Agrees without adding information",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "\"+1\", \"same\", \"yeah its X\" with no observation, especially from someone who has not given a location.",
+      "ask": "{P} what did you see yourself?",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://eathealthy365.com/a-glossary-for-every-among-us-player/"
+      ]
+    },
+    {
+      "id": "hard_defends_ejected_imp",
+      "name": "Hard-defended a confirmed impostor",
+      "group": "social",
+      "category": "social",
+      "confidence": "med",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines",
+        "ejections",
+        "settings.confirmEjectsOn"
+      ],
+      "check": "P vouched for, or claimed to be with, a player later ejected as impostor (confirm ejects on).",
+      "ask": "{P} why were you so sure {P2} was clear?",
+      "situation": "pair_tell",
+      "caveats": [
+        "Marinated crew do this honestly."
+      ],
+      "wiredIn": "src/engine/contradictions.ts#ruleEjectionFeedback",
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "over_explains",
+      "name": "Long unprompted alibi",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines"
+      ],
+      "check": "Long, detailed, unasked-for alibi; impostors over-build stories.",
+      "ask": "{P} short version. Room and who saw you.",
+      "caveats": [],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    },
+    {
+      "id": "dead_accuser",
+      "name": "The player who accused P died next",
+      "group": "social",
+      "category": "social",
+      "confidence": "low",
+      "effect": "suspect",
+      "inputs": [
+        "chat.lines",
+        "obs.bodyFound"
+      ],
+      "check": "P was accused last meeting and the accuser is the next victim. Can also be a frame by another impostor.",
+      "ask": "{V} accused {P} last meeting and {V} died next.",
+      "caveats": [
+        "Impostors use this to frame crew."
+      ],
+      "wiredIn": null,
+      "sources": [
+        "https://among-us.fandom.com/wiki/Guide:Crewmate"
+      ]
+    }
+  ]
+}
