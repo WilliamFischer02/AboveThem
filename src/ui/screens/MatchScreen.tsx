@@ -22,6 +22,7 @@ import { useAuto } from '../App';
 import { GhostPanel } from '../components/GhostPanel';
 import { ImpostorPanel } from '../components/ImpostorPanel';
 import { usePref } from '../prefs';
+import { FeatureSlots } from '../components/features/FeatureSlots'; // features
 
 function useNow(ms = 500) {
   const [, setTick] = useState(0);
@@ -112,7 +113,7 @@ export function MatchScreen() {
         </div>
         <div className="area-main">
           {!focus && <Tips />}
-          {/* features */}
+          {/* features */}<FeatureSlots />
           <Roster scores={scores} />
         </div>
         {!focus && (

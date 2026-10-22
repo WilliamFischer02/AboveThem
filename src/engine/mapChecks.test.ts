@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MAPS } from '../data/maps';
 import type { MapData, MyTask } from '../types/game';
-import { claimedTaskExists, commonTaskMismatch, monitorContradiction, findTask } from './mapChecks';
+import { claimedTaskExists, commonTaskMismatch, monitorContradiction, findTask, monitorReadFromObs } from './mapChecks';
 import { walkPath } from './map';
 
 const all = Object.values(MAPS);
@@ -59,6 +59,27 @@ describe('commonTaskMismatch', () => {
   });
   it('Fix Wiring is short (not common) on The Fungle', () => {
     expect(commonTaskMismatch(MAPS.fungle, my('collectSamples'), 'Fix Wiring')).toBeNull();
+  });
+});
+
+describe('monitorReadFromObs (features agent observation shapes)', () => {
+  const stamp = { round: 1, t: 40, wall: 0 };
+  it('adminRead → admin read at stamp.t, usable by monitorContradiction', () => {
+    const read = monitorReadFromObs({ type: 'adminRead', stamp, counts: { electrical: 0, storage: 2 }, bodies: [] });
+    expect(read).toEqual({ kind: 'admin', t: 40, counts: { electrical: 0, storage: 2 } });
+    expect(monitorContradiction(MAPS.skeld, read!, { player: 'red', room: 'electrical', t: 41 })).toMatchObject({ contradiction: true });
+  });
+  it('vitalsRead → per-player status (dc wins over dead wins over alive)', () => {
+    expect(monitorReadFromObs({ type: 'vitalsRead', stamp, alive: ['red', 'blue'], dead: ['pink'], dc: ['blue'] }))
+      .toEqual({ kind: 'vitals', t: 40, status: { red: 'alive', blue: 'dc', pink: 'dead' } });
+  });
+  it('doorLogRead → doorLog read', () => {
+    const read = monitorReadFromObs({ type: 'doorLogRead', stamp, from: 10, to: 40, entries: [{ player: 'red', t: 20 }] });
+    expect(read).toEqual({ kind: 'doorLog', from: 10, to: 40, entries: [{ player: 'red', t: 20 }] });
+  });
+  it('other observations → null; missing stamp → t = 0', () => {
+    expect(monitorReadFromObs({ type: 'sighting', player: 'red', room: 'admin' })).toBeNull();
+    expect(monitorReadFromObs({ type: 'adminRead', counts: {} })).toEqual({ kind: 'admin', t: 0, counts: {} });
   });
 });
 

@@ -205,6 +205,9 @@ export function describe(e: MatchEvent): string {
         case 'bodyFound': return `body: ${o.victim} in ${o.room}${o.reporter ? ' (reported by ' + o.reporter + ')' : ''}`;
         case 'sabotage': return `sabotage ${o.kind} ${o.phase}`;
         case 'manualMark': return `${o.player} marked ${o.mark}`;
+        case 'adminRead': return `admin: ${Object.entries(o.counts).map(([r, n]) => `${n} ${r}`).join(', ') || 'empty'}`;
+        case 'vitalsRead': return `vitals: ${o.dead.length ? o.dead.join(', ') + ' dead' : 'all alive'}`;
+        case 'doorLogRead': return `door log: ${o.entries.map(e => e.player + (e.sensor ? ' @' + e.sensor : '')).join(', ') || 'empty'}`;
       }
       return 'observation';
     }

@@ -146,3 +146,73 @@ Universal rules the coach always surfaces:
 Among Us is a social deduction game; lying is the mechanic. The coach helps you
 lie *well inside the rules*, using only what's on your screen. It does not and
 will not use anything hidden.
+
+---
+
+## 7. What strong impostors actually do (research, 2026-10-22)
+
+> Added by the research agent. Sources: [Guide:Impostor](https://among-us.fandom.com/wiki/Guide:Impostor),
+> [Guide:Faking tasks](https://among-us.fandom.com/wiki/Guide:Faking_tasks), [Guide:Crewmate](https://among-us.fandom.com/wiki/Guide:Crewmate),
+> [marinating](https://www.sportskeeda.com/esports/marinating-friends-among-us), mechanics in `docs/GAME_KNOWLEDGE.md` §1.
+> Everything here is public strategy; nothing needs hidden info. Each play lists the **crew-side tell** so the crew
+> engine can anticipate it (one table serves both modes).
+> Tags: **F** mechanic fact, **H** community heuristic, **⚠** works but is lobby-hostile (kicks/bans): the coach may
+> *recognise* it for the crew engine but should never *suggest* it.
+
+### 7.1 Mechanics the impostor coach must respect (F)
+
+| Mechanic | Coach consequence |
+|---|---|
+| Kill cooldown = 10 s at match start, full value after every kill and every meeting; paused in vents and on cams | Countdown starts at meeting end. The first cooldown only runs once you spawn: dismiss the "SHHHHHH" screen and pick the Airship spawn fast. Show "kill ready at mm:ss". |
+| Vitals show DED the moment you kill; Noisemaker alerts everyone; Scientist has portable vitals | Self-report risk goes up on Polus/Airship/Fungle and when Scientist/Noisemaker are enabled. Comms blinds vitals. |
+| Admin shows people inside vents; it has no hallways and no Polus Outside | Never sit in a vent in a room someone could be watching on admin (MIRA: no admin blind spot has a vent). |
+| Cams blink red while a living player watches | Check a camera's blink before killing near it. Ghost viewers don't blink. |
+| MIRA doorlog logs your real identity at the three hallway sensors (even shifted) | Venting across the hallway shows as "entered here, never left there". |
+| Report ends critical sabotage, not lights/comms; the button is blocked during any sabotage except doors and Mushroom Mixup | Post-kill sabotage = delayed report + blocked button. |
+| Impostors can fix sabotages; ghost impostors can still sabotage | "I fixed lights" is not a clear for anyone. |
+| Common tasks appear on your fake list | Only claim commons from the fake list; never claim a visual with visuals on; never fake Submit Scan even with visuals off (the scanner shows "Waiting for <name>" to real crew). |
+| Dummy panels (Skeld Reactor divert, Polus Office divert, Airship Armory/Comms/Vault wiring, Lounge bin) | The fake-task planner must never route you to them. |
+| Download/Upload ≈ 9–11 s; Inspect Sample needs a 60 s wait | Stand the real duration (existing ±15 % rule). |
+
+### 7.2 Play catalogue → crew-side tell
+
+| Play | What the impostor does | Crew tell / counter (crew engine) | Tag |
+|---|---|---|---|
+| Kill + far sabotage | Kill, then call a critical sabotage on the opposite side (or shut the body room's doors) and vent away | Critical sabotage after a quiet spell ⇒ sweep the opposite side; who reached the fix late, from where | H |
+| Lights kill | Lights, kill a lone crewmate far from Electrical, vent into a group, stay until the report | Who joined the group during lights without being seen arriving; vent animations show outside vision (not Polus) | H |
+| Stack kill | Kill inside a 4+ player pile at a fix point or common task | Only players *outside* the stack are cleared; ask each stack member who stood next to the victim | H |
+| Self-report | Report own kill with a pre-built route + task reason | `self_report_instant`, `self_report_no_reason`, `report_wrong_direction` (lieChecks) | H |
+| Marinate | Stay with one crewmate for rounds to earn a vouch, use it later | A vouch from one long-term companion is a soft clear only (multi-impostor) | H |
+| Group with partner | Two impostors alibi each other | `mutual_pair`; ask a third player to confirm | H |
+| Bus the partner ⚠ | Vote out / accuse own partner once they're lost | Confirm-eject reveal: who pushed hardest *after* the case was already made | H ⚠ |
+| Last-second weak defense | Defend a crewmate weakly so they get ejected, then point at the confirm-eject | Trust gained without evidence; weigh it at most as a soft clear | H |
+| Fake role claim | Claim Engineer (excuse a vent), Scientist (excuse a fast report), Tracker/Detective/Noisemaker | Role claims are checkable: is the role enabled, how many slots, counter-claims, a "Noisemaker" whose death never alerted | H |
+| Shapeshift frame | Shift into P, kill in front of a witness, then "remind everyone about Shapeshifters" | With Shapeshifter on, kill sightings are not hard; a report made while shifted shows the true skin | H |
+| Phantom vanish | Vanish (cloud in own colour) to escape | Cloud colour = impostor; "vanished in a dead-end" may be Phantom, not a vent | F/H |
+| Viper acid + far sabotage | Body dissolves (default 15 s) | Missing body + dead on overview ⇒ Viper; time of death bounded by dissolve time | F |
+| Doors trap (Skeld) | Shut a room's doors, kill inside, vent out | Who was in that room when doors closed; Skeld doors reopen after 10 s | H |
+| Decontamination kill (MIRA/Polus) | Kill a lone crewmate in decon early, exit the other side / vent (MIRA) | Who entered decon right before; early-round decon trips | H |
+| AFK kill ⚠ | Fake AFK at spawn, kill the last crewmate to leave | "AFK" players at spawn are not cleared; an AFK that moves is a tell | H ⚠ |
+| Kill when caught | A witness runs for the button; impostor sabotages (blocks the button) or shuts doors and chases | A crewmate who dies right after seeing something; their last known path | H |
+| Target the info players | Kill hard-cleared crew, cams/admin/vitals users, Detectives, the best talkers first | A hard-cleared crewmate dying is expected, not evidence against anyone | H |
+| Keep the scapegoat alive | Never kill the crewmate the lobby already suspects | "Most-suspected player still alive after 3 rounds" is weak evidence *for* them | H |
+| Colour confusion | Accuse "green" when Green and Lime are both alive, re-target after the eject | Demand full colour names; confusable pairs: Brown/Maroon, Lime/Green, Rose/Pink, Banana/Yellow, Coral/Orange, Tan/Brown | H |
+| Anonymous-vote fishing | Vote a random crewmate, then ask "who voted X?" | Low-value talk; ignore | H |
+| Doorlog misdirection (MIRA) | Kill one of two crewmates who crossed a sensor together, so the log implicates the survivor | The log shows crossings, not kills; two names together ≠ guilt | H |
+| Task-over-vent kill | Pop out of a vent next to someone doing a task over it, kill the other crewmate, report, accuse the task-doer | Was the accused facing a task screen? Task UIs cover most of the screen | H |
+| Endgame count | At 2 crew left: sabotage to block the button, kill when cooldown ends. With 2 impostors: double kill at 4 crew | Crew must meet immediately at 3–4 alive; never skip when one kill ends it | F (win rule) / H |
+| Hold at 7 with 2 impostors | Don't kill; build trust; keep 4 crew votes in play | A quiet round at 7 alive is itself information | H |
+
+### 7.3 New coach rules derived from the catalogue
+
+- **Kill-ready clock** (F): `readyAt = meetingEnd + cooldown + timeInVents + timeOnCams`. Crew mirror: the `cooldown_window` lie check.
+- **Monitor awareness** (F): before suggesting a kill room, check the map's monitors: cams (Skeld 4 hallways, Polus 6 feeds, Airship 6 views), admin (rooms only), vitals (Polus Office, Airship Medical, Fungle Lab), doorlog (MIRA hallway), binoculars (Fungle Beach + Jungle, not blinded by Comms). If one covers the room or its exit, suggest Comms first.
+- **Claim filter** (F): reject any generated alibi or task claim that would trip a `lieChecks.json` check with `confidence: "hard"` (visual with visuals on, common not on the fake list, task not in that room or map, dummy panel, wrong fix location, Airship spawn outside the set, monitor during comms).
+- **Map notes** (H): Skeld: Electrical vents to MedBay/Security; Lights pulls everyone to Electrical, so kill elsewhere during lights. MIRA: one vent network, admin has no blind spot with a vent, doorlog in Comms. Polus: silent vents, admin blind Outside, doors need manual switches. Airship: pick the spawn fast; Gap Room vents are a tell if seen; ladders are heard map-wide. Fungle: no admin or cams; binoculars cover Beach + Jungle and survive Comms; Mushroom Mixup hides names from crew for ~10 s and does not block the button.
+- **⚠ plays** (bussing, fake AFK, betraying a partner who fails a double kill, flooding chat with irrelevant talk): recognise them for the crew engine; never propose them in impostor mode.
+
+### 7.4 Data mapping
+
+- New accusation templates (`impostor.json` → `accusations`): `saw_you_vent`, `visual_not_seen`, `common_task_callout`, `monitor_callout`, `too_fast_task`, `story_changed`, `stack_kill_blame`. `classifyAccusation` in `src/engine/impostor.ts` does not route to them yet (owner: engine agent). They use `{TASK2}` (a second fake-list task) and `{X}` (a real nearby player) placeholders; lines with unfilled placeholders are skipped by `complete()`.
+- New rule lists (`impostor.json` → `deception`): `sabotage_rules`, `monitor_rules`, `kill_window_rules`, `chat_rules`, `endgame_rules`.
+- Crew counterparts: `crew.json` situations (`cooldown_window`, `double_kill`, `monitor_during_comms`, `vitals_timing`, `doorlog_check`, `cams_check`, `admin_check`, `two_of_same`, …) and `lieChecks.json`.

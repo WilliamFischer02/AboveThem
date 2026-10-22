@@ -37,7 +37,7 @@
     },
     "body_in_dead_end": {
       "ask": [
-        "{R} is a dead end. Who went in or came out? I saw {P} leave around {T}."
+        "{R} is a dead end. Who went in or out? I saw {P} leave around {T}."
       ],
       "say": [
         "Body in {R}, one way in. Last one through that door explains."
@@ -172,7 +172,7 @@
     },
     "stacked_kill": {
       "say": [
-        "Kill in the stack. {P} {P2} {P3} were all there. Who was closest to {V}?"
+        "Stack kill. {P} {P2} {P3} were all there. Who was closest to {V}?"
       ],
       "ask": [
         "{P} {P2} {P3} who was next to the body before the report?"
@@ -180,6 +180,401 @@
       "watch": [
         "The one who claims they 'didn't notice' the kill."
       ]
+    },
+    "cooldown_window": {
+      "say": [
+        "Kill cooldown is {N}s after a meeting. No kill before that."
+      ],
+      "ask": [
+        "Where was everyone after the first {N} seconds?"
+      ],
+      "watch": [
+        "Alibis that only cover the first seconds of the round prove nothing."
+      ]
+    },
+    "double_kill": {
+      "say": [
+        "Two kills {N}s apart. That is two impostors, not one."
+      ],
+      "ask": [
+        "Who was near {R} and who was near {R2} at {T}?"
+      ],
+      "watch": [
+        "A player cleared for one kill is still open for the other."
+      ]
+    },
+    "monitor_during_comms": {
+      "say": [
+        "Comms were down then. Admin and cams were off."
+      ],
+      "ask": [
+        "{P} when exactly did you check it? Comms was sabotaged."
+      ],
+      "watch": [
+        "Readings claimed inside a comms window are made up."
+      ]
+    },
+    "wrong_fix_location": {
+      "say": [
+        "{TASK} is not fixed in {R} on this map."
+      ],
+      "ask": [
+        "{P} where exactly did you fix {TASK}?"
+      ],
+      "watch": [
+        "Wrong fix spots mean the player was not at the sabotage."
+      ]
+    },
+    "fix_not_clear": {
+      "say": [
+        "Impostors can fix sabotage too. Fixing is not a clear."
+      ],
+      "ask": [
+        "{P} who was at the fix with you?"
+      ],
+      "watch": [
+        "Only a two-person fix with a cleared partner is an alibi."
+      ]
+    },
+    "dummy_panel": {
+      "say": [
+        "{P} was at the fake panel in {R}. Nobody can do that task."
+      ],
+      "ask": [
+        "{P} what task were you doing in {R}?"
+      ],
+      "watch": [
+        "Skeld reactor divert, Polus office divert, Airship armory/comms/vault wires."
+      ]
+    },
+    "stage_order": {
+      "say": [
+        "{TASK} goes in a fixed order. {R} cant be first."
+      ],
+      "ask": [
+        "{P} where did you do the first part of {TASK}?"
+      ],
+      "watch": [
+        "Upload is always admin on Skeld and comms on Polus."
+      ]
+    },
+    "visual_not_on_map": {
+      "say": [
+        "{TASK} is not visual on this map. That clears nobody."
+      ],
+      "ask": [
+        "Did anyone see a real visual? Scan counts."
+      ],
+      "watch": [
+        "The clearer is usually just wrong, not an impostor."
+      ]
+    },
+    "visuals_off_clear": {
+      "say": [
+        "Visuals are off. Only scan waiting proves anything."
+      ],
+      "ask": [
+        "{P} did the scan say waiting for {P2}?"
+      ],
+      "watch": [
+        "Clears based on animations mean nothing with visuals off."
+      ]
+    },
+    "airship_spawn": {
+      "say": [
+        "You cant spawn in {R} on Airship."
+      ],
+      "ask": [
+        "{P} which spawn did you pick, and then where?"
+      ],
+      "watch": [
+        "Spawns are brig, cargo, engine, kitchen, main hall, records."
+      ]
+    },
+    "mixup_sighting": {
+      "say": [
+        "That was during mixup. Colours were random then."
+      ],
+      "ask": [
+        "{P} was that before or after the mixup?"
+      ],
+      "watch": [
+        "Drop colour sightings from the mixup window."
+      ]
+    },
+    "vitals_timing": {
+      "say": [
+        "{V} was alive on vitals at {T}."
+      ],
+      "ask": [
+        "Who checked vitals and when did {V} go DED?"
+      ],
+      "watch": [
+        "Claims of finding {V} before that time are false."
+      ]
+    },
+    "doorlog_check": {
+      "say": [
+        "Doorlog shows {P} at the {R} sensor at {T}."
+      ],
+      "ask": [
+        "Who checked doorlog? Who crossed the hallway?"
+      ],
+      "watch": [
+        "Crossing one sensor then appearing on the far side means vents."
+      ]
+    },
+    "cams_check": {
+      "say": [
+        "I was on cams. {P} never walked past {R}."
+      ],
+      "ask": [
+        "Who was on cams and which feed were you on?"
+      ],
+      "watch": [
+        "Polus and Airship show one feed at a time."
+      ]
+    },
+    "admin_check": {
+      "say": [
+        "Admin had {N} in {R} at {T}."
+      ],
+      "ask": [
+        "Who else was in {R} around {T}?"
+      ],
+      "watch": [
+        "Admin does not show hallways or Polus outside."
+      ]
+    },
+    "vanished_dead_end": {
+      "say": [
+        "{P} went into {R} and was gone. There is a vent."
+      ],
+      "ask": [
+        "{P} how did you get out of {R}?"
+      ],
+      "watch": [
+        "Phantom vanish if Phantom is on; Engineers can vent too."
+      ]
+    },
+    "gap_crossed": {
+      "say": [
+        "{P} crossed gap room without the platform."
+      ],
+      "ask": [
+        "{P} platform or the long way round?"
+      ],
+      "watch": [
+        "Gap room left and right vents connect."
+      ]
+    },
+    "two_together_one_dies": {
+      "say": [
+        "I left {P} alone with {V} in {R}. Then {V} died."
+      ],
+      "ask": [
+        "{P} where did you split from {V}?"
+      ],
+      "watch": [
+        "A shapeshifter could have worn {P}."
+      ]
+    },
+    "left_body_room": {
+      "say": [
+        "{P} came out of {R} right before the report."
+      ],
+      "ask": [
+        "{P} you were in {R}. Didnt you see {V}?"
+      ],
+      "watch": [
+        "Whether {P} admits being in {R} at all."
+      ]
+    },
+    "self_report_instant": {
+      "say": [
+        "{V} died seconds before {P} reported."
+      ],
+      "ask": [
+        "{P} who did you see on the way to {R}?"
+      ],
+      "watch": [
+        "Real witnesses name the killer; self reporters name nobody."
+      ]
+    },
+    "knows_too_much": {
+      "say": [
+        "{P} knew the body was in {R} before anyone said."
+      ],
+      "ask": [
+        "{P} how did you know it was in {R}?"
+      ],
+      "watch": [
+        "Details only the killer or a witness could know."
+      ]
+    },
+    "saw_vent": {
+      "say": [
+        "I saw {P} vent in {R}."
+      ],
+      "ask": [
+        "{P} where were you right before the meeting?"
+      ],
+      "watch": [
+        "Engineers on? Then ask if {P} went in and out fast."
+      ]
+    },
+    "saw_kill": {
+      "say": [
+        "I saw {P} kill {V} in {R}."
+      ],
+      "ask": [
+        "Anyone else see {P} near {R}?"
+      ],
+      "watch": [
+        "Shapeshifter on? Then the killer may only look like {P}."
+      ]
+    },
+    "two_of_same": {
+      "say": [
+        "There were two {P}s at once. One is a shapeshifter."
+      ],
+      "ask": [
+        "Who saw {P} at {T} and where?"
+      ],
+      "watch": [
+        "The copy that changes back is the impostor."
+      ]
+    },
+    "alibi_partner_denies": {
+      "say": [
+        "{P} says they were with {W}. {W} says no."
+      ],
+      "ask": [
+        "{W} were you with {P}? Yes or no."
+      ],
+      "watch": [
+        "The one with other holes in their story is lying."
+      ]
+    },
+    "report_wrong_direction": {
+      "say": [
+        "From {R2} {P} would have passed me. They didnt."
+      ],
+      "ask": [
+        "{P} which way did you walk to {R}?"
+      ],
+      "watch": [
+        "Routes that skip a watched hallway."
+      ]
+    },
+    "task_too_fast": {
+      "say": [
+        "{P} did {TASK} in a few seconds. It takes longer."
+      ],
+      "ask": [
+        "{P} did you finish {TASK} or close it?"
+      ],
+      "watch": [
+        "Download/upload ~9 s, scan ~10 s, sample needs a 60 s wait."
+      ]
+    },
+    "bar_no_move": {
+      "say": [
+        "{P} finished {TASK} and the bar did not move."
+      ],
+      "ask": [
+        "{P} was that the last part of {TASK}?"
+      ],
+      "watch": [
+        "Multi-stage tasks only move the bar at the end."
+      ]
+    },
+    "flip_when_countered": {
+      "say": [
+        "{P} dropped {P2} the moment {P2} answered."
+      ],
+      "ask": [
+        "{P} why were you sure about {P2} before?"
+      ],
+      "watch": [
+        "Accusers who never give their own location."
+      ]
+    },
+    "bandwagon": {
+      "say": [
+        "Plus ones are not evidence. What did you see?"
+      ],
+      "ask": [
+        "{P} what did you see yourself?"
+      ],
+      "watch": [
+        "Late agreers with no location of their own."
+      ]
+    },
+    "count_check": {
+      "say": [
+        "{N} alive and {N2} impostors left. Count before you skip."
+      ],
+      "ask": [
+        "Everyone vote or skip on purpose. No random votes."
+      ],
+      "watch": [
+        "With 2 impostors at 7 alive a wrong eject can lose it."
+      ]
+    },
+    "skip_early": {
+      "say": [
+        "Nobody has a sighting. Skip and stay in pairs."
+      ],
+      "ask": [
+        "Everyone say room and who you were with."
+      ],
+      "watch": [
+        "Who pushes hard for a vote with nothing behind it."
+      ]
     }
+  },
+  "mapQuestions": {
+    "_doc": "Map-specific questions (<= 70 chars) from docs/GAME_KNOWLEDGE.md section 4. Same placeholders as situations.",
+    "skeld": [
+      "{P} you said elec. Did you see anyone in storage?",
+      "{P} where did you download? Upload is always admin.",
+      "Who was on cams? Who walked the medbay hall?",
+      "{P} which wires? Wires go elec storage admin nav cafe sec.",
+      "{P} nav has two vents. Who came out of shields or weps?",
+      "Who fixed O2 in admin and who in O2?"
+    ],
+    "mira": [
+      "Who checked doorlog? Who crossed the north sensor?",
+      "{P} you came from launchpad. Doorlog would show you.",
+      "{P} asteroids is not visual on Mira. That clears nobody.",
+      "Who fixed O2 in greenhouse and who by medbay?",
+      "{P} you went through decon. Who was behind you?",
+      "Lights are fixed in office here. {P} where were you?"
+    ],
+    "polus": [
+      "Who checked vitals? When did {V} go DED?",
+      "{P} which weather node? Then lab?",
+      "{P} you were in elec with doors shut. Who let you out?",
+      "{P} upload on Polus is in comms. Where did you download?",
+      "Who was on cams? Did anyone pass the lab camera?",
+      "{P} specimen is behind decon. Who saw you go in?"
+    ],
+    "airship": [
+      "{P} where did you spawn? Then where did you go?",
+      "{P} you crossed gap room. Platform or the long way?",
+      "Who was on vitals? When did {V} die?",
+      "{P} wiring in armory is fake. Which panel?",
+      "{P} which ladder did you take? We heard one.",
+      "{P} you said electrical. Which room of the maze?"
+    ],
+    "fungle": [
+      "{P} did you zip or walk from storage?",
+      "Who was on binoculars? Who was in the jungle?",
+      "{P} that was during mixup. Are you sure of the colour?",
+      "Who checked vitals in lab? When did {V} die?",
+      "{P} marshmallow is common. Did everyone get it?",
+      "{P} you came down the cliff ladder. Who was up there?"
+    ]
   }
 }
