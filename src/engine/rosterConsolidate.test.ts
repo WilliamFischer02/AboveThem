@@ -66,3 +66,15 @@ describe('consolidate', () => {
     expect(consolidate(players, { size: 2, tolerance: 1, meeting: 0 }).filter(a => a.kind === 'remove')).toHaveLength(1);
   });
 });
+
+describe('similar real names before the first grid (bugs-rust review)', () => {
+  it('"Bob" and "Bobby" stay two players until a second signal', () => {
+    expect(sameIdentity(P('a', 'Bob'), P('b', 'Bobby')).same).toBe(false);
+    expect(sameIdentity(P('a', 'Bob', { color: 'red' }), P('b', 'Bobby', { color: 'red' })).same).toBe(true);
+    // once one of them was on the grid, the name may decide again
+    expect(sameIdentity(P('a', 'Bob', { slot: 2, slotMeeting: 1 }), P('b', 'Bobby')).same).toBe(true);
+  });
+  it('OCR substitutions still merge on the name alone', () => {
+    expect(sameIdentity(P('a', 'BigBihgis'), P('b', 'BigBingus')).same).toBe(true);
+  });
+});
