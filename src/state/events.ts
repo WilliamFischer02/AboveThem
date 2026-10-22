@@ -86,7 +86,7 @@ export function initState(p: InitPayload): MatchState {
 }
 
 const PLAYER_KEYS = new Set(['player', 'killer', 'victim', 'reporter', 'sender', 'by', 'about', 'voter', 'target', 'calledBy', 'to', 'companion']);
-const PLAYER_LIST_KEYS = new Set(['withPlayers', 'present', 'fixers']);
+const PLAYER_LIST_KEYS = new Set(['withPlayers', 'present', 'fixers', /* features: VitalsReadObs */ 'dead', 'alive']);
 
 /** Replace every PlayerId-typed reference to `from` with `into` (deep; returns the same object when nothing changed). */
 export function repoint<T>(obj: T, from: PlayerId, into: PlayerId): T {

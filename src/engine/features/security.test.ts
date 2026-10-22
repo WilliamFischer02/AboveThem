@@ -1,0 +1,71 @@
+import { describe, it, expect } from 'vitest';
+import { securityFor, adminObservation, remoteSighting, vitalsObservation, newlyDeadFromVitals, adminChecks, SECURITY_FALLBACK } from './security';
+import { build, o, st } from './__fixtures__/build';
+import { repoint } from '../../state/events';
+
+describe('security availability', () => {
+  it('uses the fallback table and marks it unverified', () => {
+    const m = build();
+    const s = securityFor(m);
+    expect(s.admin).toBe(true);
+    expect(Array.isArray(s.cams) && s.cams.length).toBe(4);
+    expect(s._verified).toBe(false);
+    expect(SECURITY_FALLBACK.fungle.admin).toBe(false);
+    expect(SECURITY_FALLBACK.mira.doorLog).toBe(true);
+  });
+  it('prefers map.info.security when the maps agent supplies it', () => {
+    const m = build();
+    (m.map as unknown as { info: unknown }).info = { security: { vitals: true, _verified: true } };
+    expect(securityFor(m)).toMatchObject({ vitals: true, admin: true, _verified: true });
+  });
+});
+
+describe('observation builders', () => {
+  it('admin drops zero rooms; cams only for real rooms (edge)', () => {
+    expect(adminObservation({ electrical: 2, admin: 0 })).toEqual({ type: 'adminRead', counts: { electrical: 2 } });
+    const m = build();
+    expect(remoteSighting(m, 'red', 'navigation', 'cams', 'Navigation hallway')).toMatchObject({ type: 'sighting', room: 'navigation', note: 'cams: Navigation hallway' });
+    expect(remoteSighting(m, 'red', 'hallwayX', 'cams')).toBeNull();
+  });
+  it('vitals splits dead / alive and reports who just died', () => {
+    const m = build({ players: 4, dead: ['red'] });
+    const v = vitalsObservation(m, ['red', 'blue']);
+    expect(v.dead).toEqual(['red', 'blue']);
+    expect(v.alive.sort()).toEqual(['cyan', 'green']);
+    expect(newlyDeadFromVitals(m, ['red', 'blue'])).toEqual(['blue']);
+  });
+});
+
+describe('admin vs claims', () => {
+  it('flags more claimants than icons, and icons nobody accounts for', () => {
+    const m = build({
+      obs: [
+        o(40, { type: 'adminRead', counts: { electrical: 1, medbay: 2 } }),
+        o(41, { type: 'sighting', player: 'blue', room: 'medbay' }),
+      ],
+    });
+    m.claims.push(
+      { id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'electrical', timeWindow: [30, 50] },
+      { id: 'c2', meeting: 0, stamp: st(70), by: 'green', type: 'location', room: 'electrical', timeWindow: [35, 60] },
+    );
+    const checks = adminChecks(m);
+    const elec = checks.find(c => c.room === 'electrical')!;
+    expect(elec.verdict).toBe('tooManyClaims');
+    expect(elec.refs).toEqual(expect.arrayContaining(['c1', 'c2']));
+    const med = checks.find(c => c.room === 'medbay')!;
+    expect(med.verdict).toBe('unaccounted');
+    expect(med.line).toMatch(/only 1 accounted for \(Blue\)/);
+  });
+  it('a claim whose window does not cover the read is not checked (edge)', () => {
+    const m = build({ obs: [o(40, { type: 'adminRead', counts: {} })] });
+    m.claims.push({ id: 'c1', meeting: 0, stamp: st(70), by: 'red', type: 'location', room: 'electrical', timeWindow: [50, 60] });
+    expect(adminChecks(m)).toEqual([]);
+  });
+});
+
+describe('vitals reads follow player merges', () => {
+  it('repoint covers dead / alive lists', () => {
+    const v = { type: 'vitalsRead', dead: ['slot3'], alive: ['red'] };
+    expect(repoint(v, 'slot3', 'blue')).toMatchObject({ dead: ['blue'], alive: ['red'] });
+  });
+});

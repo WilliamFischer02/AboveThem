@@ -9,21 +9,26 @@ import { KillClock } from './KillClock';
 import { KillWindowCard } from './KillWindowCard';
 import { MeetingMathCard } from './MeetingMathCard';
 import { LastSeenCard } from './LastSeenCard';
+import { SecurityCard } from './SecurityCard';
+import { AdminCheckCard } from './AdminCheckCard';
 import './shared';
 
 export function FeatureSlots() {
   const m = useMatch(s => s.match);
   if (!m) return null;
   const phase = m.phase.phase;
-  const meeting = phase === 'meetingDiscussion' || phase === 'meetingVoting';
-  const ghost = m.players[m.me]?.status !== 'alive';
   if (phase === 'lobby' || phase === 'gameOver') return null;
+  const meeting = phase === 'meetingDiscussion' || phase === 'meetingVoting';
+  const round = phase === 'round' || phase === 'roundStart';
+  const ghost = m.players[m.me]?.status !== 'alive';
   return (
     <div className="feat">
-      {(phase === 'round' || phase === 'roundStart') && !ghost && <KillClock />}
+      {round && !ghost && <KillClock />}
+      {round && <SecurityCard />}
       {meeting && <MeetingMathCard />}
       {meeting && <KillWindowCard />}
-      {(meeting || phase === 'round') && <LastSeenCard open={meeting} />}
+      {meeting && <AdminCheckCard />}
+      {(meeting || round) && <LastSeenCard open={meeting} />}
     </div>
   );
 }
