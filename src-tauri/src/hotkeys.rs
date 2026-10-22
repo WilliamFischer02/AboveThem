@@ -82,7 +82,7 @@ fn all_shortcuts(config: &HotkeyConfig) -> Vec<String> {
 pub fn on_shortcut<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut, ev: ShortcutEvent) {
     if ev.state != ShortcutState::Pressed { return; }
     let chords: tauri::State<Chords> = app.state();
-    let mut st = chords.lock().unwrap();
+    let mut st = chords.lock().unwrap_or_else(|e| e.into_inner());
     let Some(key) = layer_key(sc, st.prefix_mods) else { return };
 
     // Second layer wins while a chord is pending.
@@ -113,7 +113,7 @@ pub fn on_shortcut<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut, ev: ShortcutEv
         std::thread::spawn(move || {
             std::thread::sleep(timeout);
             let chords: tauri::State<Chords> = app2.state();
-            let mut st = chords.lock().unwrap();
+            let mut st = chords.lock().unwrap_or_else(|e| e.into_inner());
             if matches!(&st.pending, Some((_, s)) if *s == seq) {
                 st.pending = None;
                 drop(st);
@@ -124,8 +124,10 @@ pub fn on_shortcut<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut, ev: ShortcutEv
 }
 
 /// Replace the whole hotkey configuration. Registers `<prefix>+<key>` for every first and second key.
+/// Returns the shortcuts that could NOT be registered (taken by another app): one taken key used to fail
+/// `register_multiple` as a whole and leave every hotkey dead.
 #[tauri::command]
-pub fn set_hotkey_config<R: Runtime>(app: AppHandle<R>, config: HotkeyConfig) -> Result<(), String> {
+pub fn set_hotkey_config<R: Runtime>(app: AppHandle<R>, config: HotkeyConfig) -> Result<Vec<String>, String> {
     let prefix_mods = parse_prefix_mods(&config.prefix)?;
     let gs = app.global_shortcut();
     gs.unregister_all().map_err(|e| e.to_string())?;
@@ -133,20 +135,22 @@ pub fn set_hotkey_config<R: Runtime>(app: AppHandle<R>, config: HotkeyConfig) ->
     for s in &shortcuts {
         Shortcut::from_str(s).map_err(|e| format!("bad shortcut {s:?}: {e}"))?;
     }
-    gs.register_multiple(shortcuts.iter().map(String::as_str)).map_err(|e| e.to_string())?;
+    // UNVERIFIED live: per-shortcut registration (behaviour with a key held by another app).
+    let failed: Vec<String> = shortcuts.iter().filter(|s| gs.register(s.as_str()).is_err()).cloned().collect();
+    if failed.len() == shortcuts.len() && !shortcuts.is_empty() { return Err(format!("no hotkey could be registered ({} taken)", failed.len())); }
     let chords: tauri::State<Chords> = app.state();
-    let mut st = chords.lock().unwrap();
+    let mut st = chords.lock().unwrap_or_else(|e| e.into_inner());
     st.config = config;
     st.prefix_mods = prefix_mods;
     st.pending = None;
-    Ok(())
+    Ok(failed)
 }
 
 #[tauri::command]
 pub fn clear_hotkeys<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
     let chords: tauri::State<Chords> = app.state();
-    let mut st = chords.lock().unwrap();
+    let mut st = chords.lock().unwrap_or_else(|e| e.into_inner());
     st.config = HotkeyConfig::default();
     st.pending = None;
     Ok(())
