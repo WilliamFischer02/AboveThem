@@ -83,3 +83,28 @@ Blunt note: the vote card (weights.vote threshold 0.6 + margin 0.15) and the hea
 2. Extract the reason-strip state machine into a pure module with Vitest coverage (no jsdom in the repo).
 3. Ghost and impostor panels: same density pass (not done; they still use the older look).
 4. Meeting panel at 380 px: merge the vote card into the headline header to save ~120 px of height.
+
+## Round 2 (after the first merge)
+Merged main twice (maps round 2, bugs-rust, features). Everything below is committed on `ui-streamline`; vitest 297/297, tsc clean, vite build OK; 380/900 px checked with headless-Edge screenshots (temporary harness, not committed).
+
+| # | What | Where |
+|---|---|---|
+| 1 | Vote recommendation = `headline.vote` (`recommendVote(basis, …)`); meetingScript copies it. 79%/62% → "Leaning: Red — vote · next: Green", VOTE Red, alternative Green. Thresholds come from weights.vote (MAJOR = threshold, PACK = marginToSecond). | engine/headline.ts, meetingScript.ts, headline.test.ts |
+| 1b | Critical rule per lead: `danger`/`critical` now come from features' `meetingMath(m)` (critical = wrong eject loses now; careful = warn + "One wrong vote from critical"). Critical forces a vote only when skipping can also lose. Parity test vs meetingMath. | headline.ts |
+| 2 | Reason strip is a pure state machine with 10 tests; Roster only feeds events. | src/ui/reasonStrip.ts (+test) |
+| 3 | Ghost panel: compact header, chip grid "who killed you". Impostor panel: compact header, push card with copy, first alibi/answer shown, rest folded, every line copyable. | GhostPanel.tsx, ImpostorPanel.tsx |
+| 4 | Vote folded into the meeting header (VOTE X % · "or Y %" chip · one reason line); suspects as pills; duplicate subtitle hidden. ≈120 px saved at 380. | HeadlineBar.tsx, MeetingPanel.tsx |
+| 5 | "What you can check" chips from `map.info` (cams/binoculars + covered rooms, Admin, Vitals, MIRA door log). Pure helper **`engine/mapLookouts.ts`** (renamed: maps agent owns `mapChecks.ts`). | mapLookouts.ts (+test), MapChecks.tsx |
+| 6 | `{/* features */}` marker still directly above `<Roster>`. FeatureSlots got a minimal `compact` prop: under 820 px the kill clock stays and every other card folds into one "🧰 tools" line; at ≥ 820 px the cards render in the right column. | FeatureSlots.tsx (shared, minimal), MatchScreen.tsx, useMedia.ts |
+| + | Per-map question bank wired into the meeting script: up to 2 Ask lines (note shown under "why"), lie notes → Watch. `MeetingQuestion.note?` added to game.ts (additive). | meetingScript.ts, meetingScriptMap.test.ts |
+| + | Screen-reading health: red dot on ⋯ + reason lines inside (bugs-rust `health`). | MatchScreen.tsx |
+| + | Possible-impostor-pair chip (reads `suspectPairs` through the module namespace; renders nothing until it exists); category icons in why-lists incl. 'social'. | PairChip.tsx, SusMeter.tsx |
+| + | "Roles on" chips in setup (saved with the lobby preset). `settings.roles` cast locally — MERGE note. | SetupScreen.tsx |
+
+### Bug found + fixed (outside my files — maps owner please review)
+`src/engine/map.ts` travel time crashed (`room.adjacent` of undefined) when an observation's room id is not on the current map (e.g. map re-detected mid-match: Skeld rooms logged, then Polus). Result: blank window. One-line guard (`if (!room) continue;`) + regression test `src/engine/unknownRoom.test.ts`. MatchScreen and the overlay snapshot also catch engine exceptions now (status line "Suspect engine hit an error"), so a future engine bug can't blank the window.
+
+### For the lead
+- The impostor panel shows unfilled template placeholders like `{A}` in defense lines ("Where were you, {A}?") — engine/impostor.ts content, not mine.
+- Auto-created matches (useGameEvents) may not carry `settings.roles` from the setup screen — whoever owns the auto layer should copy it from the preset.
+- PAIR_MIN = 0.5 assumes suspectPairs' score is 0..1 (UNVERIFIED until merge).
