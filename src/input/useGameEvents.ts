@@ -749,7 +749,7 @@ export function useGameEvents() {
             const pl = live.players[d.about!];
             if (pl && pl.status === 'alive' && pl.aliveLockMeeting !== meeting) { s.dispatch({ kind: 'player', payload: { id: pl.id, status: 'dead' } }); s.showToast(`${pl.name} is dead (chat)`); }
           }
-          const claims = toClaims(parsed, { meeting, stamp, by: sender }, msg.text, () => newId('c'));
+          const claims = toClaims(parsed, { meeting, stamp, by: sender, chatLineId: lineId }, msg.text, () => newId('c'));
           for (const c of claims) {
             s.dispatch({ kind: 'claim', payload: c });
           }

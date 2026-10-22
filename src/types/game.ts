@@ -530,3 +530,106 @@ export interface DoorLogReadObs extends BaseObs {
   from: RoundTime;
   to: RoundTime;
 }
+
+// ---------------------------------------------------------------------------
+// Chat NLU (src/engine/chatNlu) — DERIVED from MatchState.chat on demand, never stored.
+// Owner: chat-nlu. Consumers: suspicion (evidence weights), UI (transcript badges).
+// ---------------------------------------------------------------------------
+
+export type ChatAssertionKind =
+  | 'accuse' | 'clear' | 'withMe' | 'sawTask' | 'sawVent' | 'sawKill' | 'location'
+  | 'selfReport' | 'bodyLocation' | 'voteCall' | 'skipCall' | 'question' | 'defense' | 'noise'
+  | 'sighting' | 'withOther' | 'task' | 'dead' | 'myColor';
+
+/** Why an accusation / clear was made, when the line says so. */
+export type ChatReason =
+  | 'sus' | 'vent' | 'kill' | 'selfReport' | 'followed' | 'fakeTask' | 'lying' | 'nearBody'
+  | 'leftBody' | 'stack' | 'its' | 'either' | 'bare' | 'visual' | 'scan' | 'task' | 'safe'
+  | 'withThem' | 'notSus' | 'notClear' | 'didnt';
+
+/** How the `about` players were found. */
+export type ChatResolution = 'direct' | 'fuzzy' | 'pronoun' | 'addressee' | 'context' | 'reply' | 'implicit';
+
+export interface ChatAssertion {
+  /** `${lineId}:${n}` — stable while the line exists. */
+  id: string;
+  /** ChatLine.id this assertion was read from. */
+  line: string;
+  meeting: number;
+  speaker: PlayerId;
+  kind: ChatAssertionKind;
+  /** Players the assertion is about (accused, cleared, sighted, companions). The speaker for self-defense / location / task. */
+  about: PlayerId[];
+  room?: RoomId;
+  taskId?: string;
+  /** sawKill only. */
+  victim?: PlayerId;
+  reason?: ChatReason;
+  /** Effect on `about`: +1 = more suspicious, -1 = less suspicious, 0 = information only. */
+  polarity: 1 | -1 | 0;
+  /** 0..1 how strongly the speaker means it ("kinda" lowers, "hard" / "100%" raises). */
+  strength: number;
+  /** 0..1 how sure the parser is about this reading (fuzzy matches, context guesses lower it). */
+  confidence: number;
+  /** skipCall: "dont skip". */
+  negated?: boolean;
+  /** question only. */
+  question?: 'where' | 'who' | 'why' | 'what' | 'proof' | 'how';
+  /** myColor only. */
+  color?: PlayerColor;
+  /** The text that was parsed (ChatLine.translated when present, else original). */
+  text: string;
+  /** Character span in `text` the assertion came from. */
+  span: [number, number];
+  /** text.slice(span[0], span[1]) — what the UI shows as "why". */
+  quote: string;
+  resolvedVia: ChatResolution;
+  /** Chat line ids this assertion depends on: its own line first, then context lines (pronoun antecedent, question answered). */
+  refs: string[];
+  /** Short human trace of the reading: "'them' = White, Black (prev line)", "kinda: strength x0.6". */
+  why: string[];
+  /** Set when a later line by the same speaker in the same meeting reversed this stance (id of that assertion). */
+  supersededBy?: string;
+}
+
+export interface StanceFlip {
+  target: PlayerId;
+  from: 1 | -1;
+  to: 1 | -1;
+  fromAssertion: string;
+  toAssertion: string;
+  fromMeeting: number;
+  toMeeting: number;
+  sameMeeting: boolean;
+}
+
+/** Per-speaker chat aggregates (src/engine/chatProfile.ts → speakerProfiles). */
+export interface SpeakerProfile {
+  player: PlayerId;
+  lines: number;
+  assertions: number;
+  /** Assertions with polarity +1 about someone else (accuse, voteCall, sawVent, sawKill, selfReport). */
+  accusations: number;
+  accused: PlayerId[];
+  /** Assertions with polarity -1 about someone else (clear, defense, sawTask, withMe). */
+  clears: number;
+  cleared: PlayerId[];
+  selfDefenses: number;
+  questions: number;
+  voteCalls: number;
+  skipCalls: number;
+  /** Other speakers who accused / cleared this player in chat. */
+  accusedBy: PlayerId[];
+  clearedBy: PlayerId[];
+  /** Times this speaker was the first to accuse a target in a meeting. */
+  firstAccusations: number;
+  /** Accusations made after >= 2 other speakers had already accused that target in the meeting. */
+  bandwagons: number;
+  flips: StanceFlip[];
+  /** Same meeting, own location stated as two different rooms. */
+  locationChanges: { meeting: number; rooms: RoomId[]; assertions: string[] }[];
+  /** 1 = never changed story; drops with in-meeting flips and location changes (cross-meeting flips count half). */
+  consistency: number;
+  /** Assertion ids everything above was computed from. */
+  refs: string[];
+}
