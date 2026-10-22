@@ -3,102 +3,128 @@
 > Update this file at the end of **every** session. Future-you (or the next
 > Claude Code session) reads this first.
 
-## State (2026-10-22, session 4)
+## State (2026-10-22, session 5 — overnight multi-agent build)
 
-Phases 0–3 core live. Session 3 fixed phase snapping, identity-matched headshots, role
-locks, persistent marks, the chat dock and translation. Session 4 (this one) attacked the
-roster bloat William reported (30–40 cards per game): the screen now sets the roster
-size (lobby CAPACITY counter, vote-grid card count) and a consolidation pass merges
-duplicate / junk cards into the best-evidenced one (ADR-022). Engine + OCR parts are
-unit/fixture-tested; the live behaviour across a full game is still to be confirmed from
-the NDJSON log (look for `rosterSize` and `mergePlayers` lines).
+Seven parallel agents (chat NLU, suspicion engine, UI, maps, research, features, bugs/Rust)
+worked ~90 minutes each in git worktrees; the lead merged everything into `main`, built the
+release exe and pushed. Per-agent notes live in `docs/notes/<agent>.md` — read the one for the
+area you touch. Tests: **Vitest 585** (72 at the start of the night), **Rust 52 + 1 ignored**
+(31 at the start). `npm run check` = tsc + vitest + `cargo test --lib`.
+
+**Nothing from tonight has been seen in a live game.** Every number below the fold is
+unit/fixture/log-replay tested only. First live session: watch the toasts and the NDJSON diag lines.
 
 ### Launching
-`npm run tauri dev` from `C:\dev\AboveThem` (hot reload, auto-rebuild). A release build
-(`npm run tauri build`) produces `src-tauri\target\release\abovethem.exe` (standalone) and
-an installer at `src-tauri\target\release\bundle\msi\AboveThem_0.1.0_x64_en-US.msi`
-(built 2026-10-22, 2 min, WiX). The release exe runs on its own, no Vite server needed.
+`npm run tauri dev` (hot reload). Release: `npm run tauri build` →
+`src-tauri\target\release\abovethem.exe` (standalone; the desktop shortcut
+`AboveThem.lnk` points at it) and the MSI under `src-tauri\target\release\bundle\msi\`.
 
-### What runs automatically now (zero clicks)
-| Signal | Source | Event → effect |
-|---|---|---|
-| Game window | `capture.rs` (Windows Graphics Capture) | auto-start capture + watcher every 8 s |
-| Lobby code, map name, lobby settings | lobby panel + announcements | `game://lobby`, `game://map`, `game://settings` |
-| Lobby roster | floating names (`lobby.rs`; the host line "Name (Red)" is dropped) | match created in the lobby (2 consecutive sightings); never above CAPACITY + 1 |
-| Roster size | lobby CAPACITY "9/15" (`lobby_capacity`, 2× OCR) in the lobby; vote-grid card count at meetings (two agreeing reads) | `game://capacity` → `rosterSize {size, source}`; then `tidyRoster` merges duplicates (`src/engine/rosterConsolidate.ts`, `mergePlayers` re-points all evidence) and drops the weakest cards over the size (±1 in the lobby, exact at a meeting) |
-| Phase | task bar **or** REPORT/KILL/SABOTAGE/VENT = round (USE is in the lobby too); header **or** voting timer = meeting (sticky under chat); eject text; "WAITING FOR HOST" / "START" button **or** room code = lobby (sticky under chat); VICTORY/DEFEAT or coloured text on black = game over | `game://phase` + `game://game_over {outcome, accent}`; unknown keeps the phase ≤ 120 s |
-| Role | CREWMATE/IMPOSTOR word, or teal/red letters on the black role screen; KILL/SABOTAGE buttons; red floating names; "Fake Tasks:" header (round only) | `game://role`; user toggle locks it (`myRoleLocked`) |
-| Vote grid | `roster.rs` 1.2 s after the meeting opens, every 4 s, never under chat | names, colours (voted), dead (X **or** greyed plain card), headshots, **icon dHash**, dim ratio |
-| Grid → roster | `src/engine/rosterMatch.ts` | name × icon hash × colour × same-meeting slot; leftovers paired by elimination once ≥ 3 cards matched; slots re-read every meeting; roster confidence dot |
-| Name learning | `src/engine/nameBook.ts` → `names.json` | user rename = spelling + alias, "✕ remove" = junk forever, merges = alias, two agreeing grid reads = confirmed; readings resolved through the book; snap list = roster + lobby's names + aliases |
-| "DEAD" header, room popup, nearby names, my task list, chat → claims | as before | task list not read under meetings / chat |
-| Chat translation | `translate/google.rs` (keyless) after an English-word heuristic | `chatPatch {translated, lang}` under the bubble |
-| New game | role card after a played match, or the lobby | roll-over keeps names/colours/headshots, wipes the slate |
+### What changed tonight (by area)
 
-### Detection facts measured on real frames (don't re-derive)
-- Vote-grid icons ≈ 0.75·palette + 60; dead cards ≈ 0.45·that + 20; dead X = dim orange-red
-  band on the icon diagonals (score ≥ 700). Plain dead card strip ≈ 0.53 of the brightest
-  card (threshold 0.74, only when the strip is neutral: cosmetic nameplates are coloured).
-- Icon dHash (cell-local 6..134 × 2..90): same card across the fade-in frames ≤ 12 bits apart
-  and always closer than any other card (test on `meeting_vote_grid` / `_2`).
-- Role screen: ≥ 75 % black in the role-card region with ≥ 300 sampled teal pixels on both
-  role-card fixtures; lobby/round/meeting/eject/vote frames never look dark.
-- Chat panel open: "Send" button or the "N/100" counter. The panel covers the meeting header
-  but not the voting timer (1300,915,430,60).
-- Grid cells fill without gaps: a lone later cell is UI text (the frontend drops it).
-- Only `en-US` OCR is installed on this PC.
+**Chat → evidence (ADR-025, `src/engine/chatNlu/`, `chatProfile.ts`, `src/data/chatLexicon.json`).**
+Every chat line becomes `ChatAssertion`s (accuse / clear / withMe / sawTask / sawVent / sawKill /
+location / selfReport / voteCall / skipCall / question / defense / noise …) with polarity,
+strength (hedges / "100%"), parse confidence, the quoted span and a why-trace. Context across a
+meeting: "White and Black" + "was with them" = a clear; answers to "who"/"where"; pronouns and
+"u"; later lines supersede earlier stances. Lexicon: colour shorthand (6 languages), room/task
+aliases for all 5 maps, OCR digit fixes, run-together words. `chatClaims.ts` is a thin wrapper.
+`speakerProfiles(m)`, `voteCalls(m, meeting)`, `meetingTranscript(m, meeting)` for the UI.
+`unreadable` lines yield nothing; `xlatGuess` lines get ×0.7 confidence.
 
-### UI (meeting-tablet look, thin window)
-Top bar: brand, role pill, alive/imp, phase pill (CREWMATE teal / IMPOSTOR red at round
-start, VICTORY blue / DEFEAT red at the end). Then: meeting panel (vote card, room
-momentum, Say / Ask with a copy button per line, watch-for folded, manual claim/vote
-folded), roster (headshot cards with `here` / `with me` and `sus` / `clear` / `hard`
-toggles; marks recolour the card and persist until the game ends; confidence dot), then
-folded Timeline / Controls / Screen reading / Hotkeys. Chat dock pinned at the bottom
-(white outlined bubbles, headshot outside, translation line); click = full window, click
-the bar = shrink. Ghost and impostor panels unchanged apart from removed explainer text.
+**Suspicion engine (ADR-024, `src/engine/suspicion.ts` + `chatEvidence.ts`, `voting.ts`,
+`feasibility.ts`, `pairs.ts`, `history.ts`, `marks.ts`).** Whole-game score: social evidence
+weighted by speaker credibility (diminishing returns across independent accusers; an
+impostor's accusation is a mild clear; eyewitness lies implicate the speaker), voting rules,
+kill feasibility over travel times (≥ 30 % slack, unknown rooms never convict), mutual-alibi
+pairs, per-category decay with half-lives, impostor-count normalisation, per-meeting `trend` /
+`delta`, `summary`, `baseline`, evidence sorted by |weight|. User marks carry a **reason**
+(`SUS_REASONS` / `CLEAR_REASONS`, each with its own weight in `weights.json`). Roles:
+`LobbySettings.roles` (Engineer ⇒ a seen vent is +2.5 soft, not a hard fact; Shapeshifter ⇒
+seen-kill identity shaky). Visual hard clears use `task.visual` from the map JSON (MIRA =
+Submit Scan only). Whole-window "with me" is a hard clear only after the toggle was turned off
+("left me"); an open toggle is soft −3. Calibration: 4 scripted games + replay of all 77 real
+logs (`__fixtures__/replayLogs.test.ts`, skipped without the matches folder; warm `scoreAll`
+≈ 38 ms worst case).
 
-### Known gaps / next
-1. **Victory / defeat screen never seen live.** Colour fallback is UNVERIFIED; once a frame
-   exists add it to the fixtures and a `screen_accent` test. Impostor-side "Victory" is
-   assumed red (mapped to victory when myRole = impostor).
-2. Chat dock expanded view not visually checked yet (only the collapsed state was seen live).
-3. Translation only exercised on English lines (detected `en`, no change); a non-English
-   lobby will show the first real translations — watch for the endpoint rate-limiting.
-4. **Consolidation is new and unwatched live.** Check the newest NDJSON after a game:
-   `rosterSize` should appear in the lobby (source lobby) and at the first meeting (source
-   grid, = card count); `mergePlayers` lines should name OCR variants (why: "name …"),
-   never two people who were on the same grid. If a real player got merged or dropped,
-   the fix is in `sameIdentity` / `playerQuality`, not in the event wiring. The roster
-   header shows `cards/size`.
-   Many lobby-created players still show grey until the grid colour-votes settle.
-   The name book (ADR-023) is equally new: after a few games `%APPDATA%\AboveThem\names.json`
-   should hold BigBingus with its misreads as aliases and the host-line colours as junk.
-9. **Next consistency idea (not built):** Among Us orders the vote grid by player index with
-   the dead moved to the end, so the relative order of alive cards is the same every meeting.
-   Remember each player's first-meeting index (`gridOrder`) and give `pairScore` a bonus when
-   a card's rank among alive cards equals the player's rank among alive `gridOrder`s. That is
-   a second slot-like signal that survives re-sorting; with it, name and icon only have to
-   break ties.
-5. Every Rust rebuild restarts the app (match resumes from the log within 20 min; headshots
-   now resume from `avatars_<id>.json`).
-6. Signal helper (ghost image role) and sabotage banner: still no frames.
-7. Round after an ejection was missed once (18:39, ejection → next meeting with no round in
-   between; the clock then under-counts rounds). Check whether the task bar / REPORT button is
-   readable while dead, and consider "ejection text gone + no meeting for 5 s ⇒ round".
-8. "I'm not dead" (ghost panel) marks me alive and ignores death reads for the rest of that
-   meeting (`Player.aliveLockMeeting`); "☠ I'm dead" (top bar, while alive in a game) does
-   the opposite and clears the lock. The DEAD header now needs a still frame with no banner.
-   William was falsely read dead once tonight — if it recurs, log which signal fired.
+**UI (`src/ui/`).** Card menus open in a portal, clamped to the window (bug 1 fixed). SUS/CLR
+opens a 3-second "Why?" strip (click or digit 1–9; Enter / timeout = plain mark; Esc cancels;
+pure machine in `src/ui/reasonStrip.ts`). Suspicion bar per card with trend arrow, one-tap
+"why" list (category icons, 💬 = what others said), sort by suspicion or grid order
+(remembered). Situational headline (`src/engine/headline.ts`): Critical Vote (from
+`meetingMath`: a wrong eject loses now), "One wrong vote from critical", One/Two/Three Major
+Suspects with ordered headshots, Not Enough Info | Skip, Confirmed Impostor, I'm Dead;
+`meetingScript.vote` is the headline's vote, so header and vote card never disagree. Vote
+folded into the meeting header. Top bar = brand · phase pill · ☠ · ⋯ menu (phases, focus
+mode, overlay, rescan/reset, close, tips; red dot when capture/watcher is down). One column at
+380 px, two at ≥ 820 px. "What you can check" chips from `map.info` (cams/admin/vitals/door
+log). Transcript view (by speaker, assertion badges) in the expanded chat dock. Roles chips in
+setup. Engine exceptions no longer blank the window (status line instead).
+
+**Features (`src/engine/features/`, `src/ui/components/features/`, `docs/FEATURES.md`).**
+Kill-cooldown clock + per-body kill window (could / could-not lists, vent-aware); meeting
+math (plurality, tie ⇒ nobody, win condition); last-seen board; admin / cams / vitals / MIRA
+door-log one-tap loggers (`adminRead`, `vitalsRead`, `doorLogRead` observations) with
+monitor-vs-claim contradictions; vote tracker (manual, the only source of `Vote`s) + bandwagon
+/ voting-pair analysis; task-bar tracker; task-claim verifier against `lieChecks.json`;
+meeting timer + prep checklist; round plan (task route). All work with OCR off (task picker,
+room chips). `FeatureSlots` mounts once in `MatchScreen.tsx` above the roster (compact under
+820 px).
+
+**Maps (`src/data/maps/*.json`, `src/engine/map.ts`, `mapChecks.ts`, `mapQuestions.ts`).**
+MIRA HQ, Airship, Fungle are complete (rooms, adjacency with eyeballed seconds, vent networks
+with links, tasks with `visual`, `MapInfo`: admin/security/vitals/doorLog/sabotages/features/
+spawn/dummyPanels). Helpers: `travelMatrix`, `fastestSeconds`, `couldReach` (fails soft),
+`ventShortcutNote`, `walkPath`, `claimedTaskExists`, `commonTaskMismatch`,
+`monitorContradiction` (+ `monitorReadFromObs`), `selectMapQuestions` (`questions.json`,
+6–8 questions + lie notes per map). **Map detection never worked before tonight**: the Rust
+`map_name` rect only covered the "ROOM SETTINGS" label (now reads the map logo through a
+tolerant `map_id_of`, UNVERIFIED on all but the Skeld fixture) and the TS side lost the map
+on every lobby-code re-subscribe (fixed; also infers the map from room/task labels).
+
+**Research (`docs/GAME_KNOWLEDGE.md`, `src/data/tactics/lieChecks.json`, `gameFacts.json`,
+`chatSlang.seed.json`, `IMPOSTOR_PLAYBOOK.md` §7).** Sourced mechanics (F / F1 / H / U tags),
+61 lie checks (46 linked to crew.json situations, `wiredIn` names the engine rule), per-map
+question guide, slang in 6 languages, settings presets, OCR confusions.
+
+**Bugs / Rust (`docs/notes/bugs-rust.md`).** Russian chat: only `en-US` OCR is installed (Cyrillic
+reads as Latin garbage), `translate::detect` returned 3-letter codes so Google failed silently,
+`looksEnglish` wasn't script-aware, empty bubbles were dropped. Now: bubbles are found from
+pixels, unreadable ones are shown with "⚠ can't read: install the Russian OCR pack" and a
+look-alike guess ("≈ guess"), extra installed OCR languages are tried per bubble, ISO codes
+fixed, failures write `diag` lines. Also fixed: event listeners re-registered on every lobby
+code / name keystroke (lost events, wiped state); watcher panic left it "running" forever;
+capture picks the window titled exactly "Among Us" and restarts after 20 s without frames;
+hotkeys register one by one (taken keys reported); ejection → round fallback after 5 s
+(UNVERIFIED); `gridOrder` match bonus; clock back-dated by detection lag; duplicates merge
+instead of delete; reducer `default` + `parseLines` robustness; roles reach auto-created
+matches; impostor templates never leak `{A}`.
+
+### Known gaps / next (ordered)
+1. **Live verification of everything above** — one game on Skeld, one on MIRA. Watch for:
+   "Map: … (auto)" toast; `rosterSize` / `mergePlayers` lines; headline tone changes; the
+   reason strip; feature cards folding at 380 px; `diag` lines (`captureStart`, `watcherStalled`,
+   `chatUnreadable`, `translateFailed`).
+2. **Duplicate cards still happen** in real logs ("cherry e" ×2, "iesusgoat" ×2 in
+   `2026-10-22_07-57-38`): evidence and chat split between twins. Fix in `rosterConsolidate`
+   (`sameIdentity`), not in the engine.
+3. **Weights are hand-set**, calibrated on scripted games + sanity-checked on real logs. Tune from
+   real outcomes (ejection results are in the logs).
+4. Map logo OCR for MIRA / Polus / Airship / Fungle has no fixture — capture one lobby frame per map.
+5. Travel seconds are eyeballed on every map (`_verified.durations=false`; Airship / Fungle
+   probably 20–30 % short). Real fix: log room changes with timestamps live, take medians.
+6. Victory / defeat screen still never captured (colour fallback UNVERIFIED).
+7. Chat parser re-parses the whole meeting on each new line (25–40 ms at 60 lines); make it incremental.
+8. Undo also removes automatic OCR events (design call for William).
+9. No automatic vote reading — the vote tracker is manual (tap the name, then each voter icon).
+10. `roles` has no lobby-OCR source; only the setup chips set it.
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
 windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless
-on the primary monitor; app on the left monitor. Tests: Vitest 72, Rust 31 (OCR against the
-20 real frames in `src-tauri/fixtures/`).
+on the primary monitor; app on the left monitor. Only `en-US` OCR is installed.
 
 ## Open questions for William
-- Did the roster stay at the lobby size through a whole game? Which merges (toast text
-  "merged X → Y") were wrong, if any?
-- Stay on the victory/defeat screen a few seconds once so a frame can be captured.
-- Does the copy button paste cleanly into the game chat? (Clipboard via WebView2.)
-- Is the collapsed chat dock the right height (168 px) for the thin window?
+- Install the Russian OCR pack (Settings → Time & language → Language & region → Add Russian →
+  Optional features: OCR) and capture one Cyrillic chat frame as a fixture?
+- Default kill cooldown: the wiki says 45 s, `presets.ts` uses 30 s — which do your lobbies use?
+- Should undo skip automatic (OCR) events and only undo your own inputs?
+- Did any merge toast ("merged X → Y") name two real people? Did the roster stay at the lobby size?
