@@ -383,9 +383,50 @@ describe('chat NLU: conversation context', () => {
     expect(at(18)).toEqual(['withMe:white']);        // "ya" = yeah, not "you"
   });
 
+  it('memo: same state → same array; a new chat array or roster → re-read', () => {
+    const mm = withChat(line('green', 'white'), line('green', 'saw them do wires'));
+    const a = parseMeetingChat(mm, 1);
+    expect(parseMeetingChat(mm, 1)).toBe(a);
+    const more = { ...mm, chat: [...mm.chat, line('blue', 'red sus')] };
+    expect(parseMeetingChat(more, 1)).not.toBe(a);
+    expect(parseMeetingChat(more, 1)).toHaveLength(2);
+    const renamed = { ...mm, players: { ...mm.players, white: { ...mm.players.white, color: 'gray' as const } } };
+    expect(parseMeetingChat(renamed, 1)).not.toBe(a);
+  });
+
   it('lines from other meetings are not mixed in', () => {
     const mm = withChat(line('green', 'white'), { ...line('green', 'saw them do wires'), meeting: 2 });
     expect(sigs(parseMeetingChat(mm, 1))).toEqual(['green>accuse:white']);
+  });
+});
+
+describe('chat NLU: never throws on raw OCR', () => {
+  it('weird inputs', () => {
+    const weird = ['', '   ', '!!!', '?!?!', '😂😂 red sus 😂', 'a'.repeat(500), 'red '.repeat(60), 'http://x.y/red', '1234567', '%%%', "''''", 'w/', 'n n n',
+      'him him him', 'u u u', 'not not not', 'its its', 'vent vent vent vent', 'self self', 'with with me me', 'red,blue,green,,,sus', '….', 'ʀᴇᴅ sᴜs', 'ＲＥＤ',
+      'redredred', 'i i i was was in in', 'the the the', 'or or', 'and', ', , ,', 'Ⅳ', '\u0000\u0001', 'вентанул вентанул', 'body body', 'who who where'];
+    for (const w of weird) expect(() => parseLine(w, 'white', m)).not.toThrow();
+    // random byte soup
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789 ,.?!/&+\'';
+    for (let i = 0; i < 300; i++) {
+      const s = Array.from({ length: Math.floor(rnd() * 40) }, () => alphabet[Math.floor(rnd() * alphabet.length)]).join('');
+      expect(() => parseLine(s, 'white', m)).not.toThrow();
+    }
+    // a whole meeting of soup, with context on
+    const soup = Array.from({ length: 40 }, (_, i) => line(['blue', 'green', 'white'][i % 3], ['them', 'u', 'he vented', 'red', 'same', 'cap', '?', 'where', 'elec', 'sus'][i % 10]));
+    expect(() => meet(...soup)).not.toThrow();
+    expect(() => speakerProfiles(withChat(...soup))).not.toThrow();
+  });
+  it('spans always lie inside the parsed text', () => {
+    for (const [text] of CASES) for (const a of parseLine(text, 'white', m)) {
+      expect(a.span[0]).toBeGreaterThanOrEqual(0);
+      expect(a.span[1]).toBeLessThanOrEqual(a.text.length);
+      expect(a.quote.length).toBeGreaterThan(0);
+      expect(a.strength).toBeGreaterThan(0); expect(a.strength).toBeLessThanOrEqual(1);
+      expect(a.confidence).toBeGreaterThan(0); expect(a.confidence).toBeLessThanOrEqual(1);
+    }
   });
 });
 

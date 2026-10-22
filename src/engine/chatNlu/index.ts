@@ -16,8 +16,21 @@ export { lineText } from './context';
 export { tagLine, rawTokens } from './tokenize';
 export { LEX, osa, fuzzyCap } from './lexicon';
 
+/**
+ * Memo keyed on object identity of everything the reading depends on (the store replaces these
+ * objects on change), so the UI and the suspicion engine can call this on every render for free.
+ * The returned array is shared: treat it as read-only.
+ */
+const memo = new WeakMap<object, Map<number, { players: object; map: object; phase: object; obs: object; out: ChatAssertion[] }>>();
+
 export function parseMeetingChat(m: MatchState, meeting: number): ChatAssertion[] {
-  return parseLines(m.chat.filter(l => l.meeting === meeting), m);
+  const byMeeting = memo.get(m.chat) ?? new Map();
+  const hit = byMeeting.get(meeting);
+  if (hit && hit.players === m.players && hit.map === m.map && hit.phase === m.phase && hit.obs === m.observations) return hit.out;
+  const out = parseLines(m.chat.filter(l => l.meeting === meeting), m);
+  byMeeting.set(meeting, { players: m.players, map: m.map, phase: m.phase, obs: m.observations, out });
+  memo.set(m.chat, byMeeting);
+  return out;
 }
 
 export function parseAllChat(m: MatchState): ChatAssertion[] {
