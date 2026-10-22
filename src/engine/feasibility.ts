@@ -72,6 +72,8 @@ export interface Feasibility {
   refs: string[];
   /** Depends on map data marked unverified. */
   shaky: boolean;
+  /** Seconds the on-foot route misses by (0 when walkable; 0.5 = a hair, 30 = way off). */
+  margin?: number;
 }
 
 /** Could `player` have been in the body's room at some instant of its kill window? */
@@ -86,18 +88,25 @@ export function killFeasibility(m: MatchState, player: PlayerId, body: BodyFound
   // Relevant: sightings close enough in time to the window to constrain it.
   const relevant = sights.filter(s => s.stamp.t >= w0 - 40 && s.stamp.t <= w1 + 5);
   if (relevant.length === 0) return { feasible: 'unknown', reason: 'No sighting near the kill window', refs: [], shaky: false };
-  // A small grace (1 s) so rounding in our travel table never "clears" someone by a hair.
-  const GRACE = 1;
+  // Travel times in the map table are rough (±3 s): only call it impossible / vent-only when it is
+  // impossible by more than that. A hair-thin verdict accused crewmates in the calibration games.
+  const GRACE = 3;
   const block = (secs: (s: SightingObs) => number) => relevant.map(s => [s.stamp.t - secs(s) + GRACE, s.stamp.t + secs(s) - GRACE] as [number, number]);
   const walk = (s: SightingObs) => walkSeconds(m.map, s.room, body.room, speed);
   const vent = (s: SightingObs) => ventAssistedSeconds(m.map, s.room, body.room, speed);
   const refs = [...relevant.map(s => s.id), body.id];
   const where = relevant.map(s => `${roomName(s.room)} ${fmt(s.stamp.t)}`).join(', ');
   const shakyRooms = !m.map._verified.rooms;
-  if (freeTime(w0, w1, block(walk)) > 0) return { feasible: 'yes', reason: `Could have walked to ${roomName(body.room)} in the window`, refs, shaky: shakyRooms };
-  if (freeTime(w0, w1, block(vent)) > 0) return { feasible: 'ventOnly', reason: `Seen ${where}: could reach ${roomName(body.room)} in time only by vent`, refs, shaky: shakyRooms || !m.map._verified.vents };
-  return { feasible: 'no', reason: `Seen ${where}: could not reach ${roomName(body.room)} during the kill window (${fmt(w0)}–${fmt(w1)})`, refs, shaky: shakyRooms || !m.map._verified.vents };
+  if (freeTime(w0, w1, block(walk)) > 0) return { feasible: 'yes', reason: `Could have walked to ${roomName(body.room)} in the window`, refs, shaky: shakyRooms, margin: 0 };
+  // How many more seconds of slack the walk would need: 0.5 → a hair (weak), ≥ 6 → clear-cut.
+  let margin = 0;
+  while (margin < 30 && freeTime(w0, w1, block(s => Math.max(0, walk(s) - margin))) <= 0) margin += 0.5;
+  if (freeTime(w0, w1, block(vent)) > 0) return { feasible: 'ventOnly', reason: `Seen ${where}: could reach ${roomName(body.room)} in time only by vent`, refs, shaky: shakyRooms || !m.map._verified.vents, margin };
+  return { feasible: 'no', reason: `Seen ${where}: could not reach ${roomName(body.room)} during the kill window (${fmt(w0)}–${fmt(w1)})`, refs, shaky: shakyRooms || !m.map._verified.vents, margin };
 }
+
+/** 0.25..1: how much to trust an "impossible on foot" verdict, from the seconds it missed by. */
+export const marginTrust = (margin: number) => Math.max(0.25, Math.min(1, margin / 6));
 
 /** Evidence from killFeasibility for every alive (at the time) non-victim player I saw that round. */
 export function ruleKillFeasibility(m: MatchState): EvidenceItem[] {
@@ -111,11 +120,13 @@ export function ruleKillFeasibility(m: MatchState): EvidenceItem[] {
     for (const p of seen) {
       if (p === b.victim || p === m.me || !m.players[p]) continue;
       const f = killFeasibility(m, p, b);
+      const trust = marginTrust(f.margin ?? 0);
+      const hair = trust < 1 ? ` (by ${f.margin} s)` : '';
       if (f.feasible === 'no') {
-        const e = ev(p, W.movement.couldNotReachBody, 'movement', f.reason, f.refs, f.shaky);
+        const e = ev(p, W.movement.couldNotReachBody * trust, 'movement', f.reason + hair, f.refs, f.shaky);
         e.round = b.stamp.round; out.push(e);
       } else if (f.feasible === 'ventOnly') {
-        const e = ev(p, W.movement.ventOnlyReachable, 'movement', f.reason, f.refs, f.shaky, 'body_in_dead_end',
+        const e = ev(p, W.movement.ventOnlyReachable * trust, 'movement', f.reason + hair, f.refs, f.shaky, 'body_in_dead_end',
           { P: pname(p), R: roomName(b.room), V: pname(b.victim), T: fmt(b.stamp.t) });
         e.round = b.stamp.round; out.push(e);
       }

@@ -363,7 +363,9 @@ export function topReasons(score: SuspectScore, n = 3): EvidenceItem[] {
   return [...score.evidence].filter(e => Math.abs(e.weight) >= 0.05).sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).slice(0, n);
 }
 
-const lower1 = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+/** Lower-case the first letter only for sentence words ("Seen venting" → "seen venting"), never names ("Swipe Card", "Red"). */
+const SENTENCE_START = /^(Seen|Self|Alone|Last|Nobody|Claimed|Claims|Could|Story|Marked|Round|Hard|With|Visual|Voted|Pushed|Skipped|Said|Suspicious|At|Accused|Bandwagoned|Location|Defended|Confirmed|Task|Stood|Fixed|You|They|The|No|Everyone|Only|Vouched)\b/;
+const lower1 = (s: string) => (SENTENCE_START.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
 /** One line for the card: "2 accusations · alone near Electrical at 0:35 (kill window)". */
 export function summarize(m: MatchState, s: SuspectScore): string {
