@@ -9,7 +9,7 @@
 - **Tags:** **F** = fact, ≥ 2 independent sources (or two separate wiki pages that agree). **F1** = fact from a single source (the community wiki). **H** = community heuristic/strategy. **U** = uncertain/contradicted; never use as hard evidence.
 - The most powerful legit checks a crewmate has, in order: **saw a visual task (visuals on)**, **common-task mismatch**, **two-together-one-dies**, **saw vent**, **travel time impossible**, **monitor (admin/cams/vitals/doorlog) contradicts the claim**, **task does not exist in that room / on that map**, **story changed between meetings**.
 - Hard timing anchors: kill cooldown starts at **10 s** at game start, resets to the **full lobby value at every meeting end** and after every kill, and **pauses inside vents and while on Security**. So no kill can happen in the first `cooldown` seconds after a meeting.
-- Critical sabotage timers: **Skeld 30 s, MIRA 45 s, Polus 60 s, Fungle 60 s, Airship 90 s.** Reporting a body ends critical sabotage, never Lights or Comms.
+- Critical sabotage timers: **Skeld 30 s, MIRA 45 s, Polus 60 s, Fungle 60 s, Airship 90 s** (wiki Sabotage page + map pages + gamewith.net/among-us-wiki/article/show/22107). Reporting a body ends critical sabotage, never Lights or Comms.
 - Comms sabotage blinds **Admin, Cams, Vitals, Doorlog** (not Fungle binoculars). Any "I saw it on admin/cams" claim made for a comms window is false.
 - Visual tasks: **Skeld** = Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute (Storage stage). **Polus** = Submit Scan, Clear Asteroids. **MIRA** = Submit Scan only. **Airship, Fungle** = none.
 - §2 is a catalogue of **61 lie checks**; the machine-readable version is `src/data/tactics/lieChecks.json`.
@@ -61,7 +61,7 @@ Wiki pages were pulled on 2026-10-22 through the MediaWiki API (`api.php?action=
 |---|---|---|---|---|
 | # Impostors | 1 / 2 / 3 | none (host picks) | F1 | [W:Options](https://among-us.fandom.com/wiki/Options) |
 | Max impostors by lobby size | 1 impostor needs ≥ 4 players, 2 need ≥ 7, 3 need ≥ 9 | — | F1 (wiki options screenshot, marked outdated; matches decompiled `GameOptionsData` from memory) | https://among-us.fandom.com/wiki/File:Options_screenshot_outdated.png |
-| Kill cooldown | 10 s – 60 s in 2.5 s steps | 45 s on the wiki options table; the `Core Settings` preset value is not documented | F1 / **U** (default) | [W:Options](https://among-us.fandom.com/wiki/Options), [W:Kill](https://among-us.fandom.com/wiki/Kill) |
+| Kill cooldown | 10 s – 60 s in 2.5 s steps | 45 s on the wiki options table and in a Steam thread (another commenter says 15 s); the `Core Settings` preset value is not documented | F (range) / **U** (default) | [W:Options](https://among-us.fandom.com/wiki/Options), [W:Kill](https://among-us.fandom.com/wiki/Kill), https://steamcommunity.com/app/945360/discussions/0/4246299157464089949 |
 | Kill distance | Short / Medium / Long | Medium | F1 | W:Options |
 | Kill distance in world units | Short 1.0, Medium 1.8, Long 2.5 | — | **U** (decompiled-code folklore, no fetched source) | — |
 | Impostor vision | 0.25×–5× in 0.25 steps | 1.5× | F | W:Options, [W:Vision](https://among-us.fandom.com/wiki/Vision) |
@@ -176,7 +176,7 @@ Role settings (defaults): Engineer vent cooldown 30 s, max time in vent 15 s; Sc
 
 | Fact | Tag | Source |
 |---|---|---|
-| Sabotage cooldown: 10 s at game start, 30 s after the previous sabotage (cooldown starts when the previous sabotage is **fixed**; door cooldowns start when the door sabotage **starts**). Impostor ghosts can sabotage. Impostors can fix sabotages too. | F | [W:Sabotage](https://among-us.fandom.com/wiki/Sabotage), [W:Doors](https://among-us.fandom.com/wiki/Door_Sabotage) |
+| Sabotage cooldown: 10 s at game start, 30 s after the previous sabotage (cooldown starts when the previous sabotage is **fixed**; door cooldowns start when the door sabotage **starts**). Impostor ghosts can sabotage. Impostors can fix sabotages too. | F (behaviour) / **U** (the 30 s value: some guides say ~17 s) | [W:Sabotage](https://among-us.fandom.com/wiki/Sabotage), [W:Doors](https://among-us.fandom.com/wiki/Door_Sabotage) |
 | Skeld: door sabotage and other sabotages are mutually exclusive. Polus/Airship/Fungle: doors can be shut before (and on Polus during) other sabotages, but no door sabotage once another sabotage is running. | F | W:Sabotage, W:Doors |
 | Non-door sabotage disables the emergency button. | F | W:Sabotage, W:Button |
 | Comms disables task list, task arrows, task-bar progress, Admin, Cams (not Fungle binoculars), Vitals, Doorlog; also disables Engineer vent, Scientist vitals, Tracker, Noisemaker alert, Detective, Guardian Angel protect. **Impostors can still vent during comms.** | F | W:Sabotage, [W:Vent](https://among-us.fandom.com/wiki/Vent), [W:Security](https://among-us.fandom.com/wiki/Security_(ability)) |

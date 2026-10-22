@@ -97,6 +97,7 @@
       ],
       "check": "Asteroids/Shields on MIRA, anything on Airship/Fungle, Garbage outside Skeld are not visual. The clear proves nothing (the clearer is not guilty for it).",
       "ask": "{TASK} is not visual on this map. That clears nobody.",
+      "situation": "visual_not_on_map",
       "caveats": [
         "Common mistake by new players; do not treat the clearer as impostor."
       ],
@@ -118,6 +119,7 @@
       ],
       "check": "With visuals off nobody but the doer sees the effect. Exception: Submit Scan \"Waiting for <name>\".",
       "ask": "Visuals are off. Only scan waiting proves it.",
+      "situation": "visuals_off_clear",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -210,6 +212,7 @@
       ],
       "check": "Dummy panels: Skeld Reactor divert power, Polus Office divert power, Airship Armory/Communications/Vault wiring, Airship Lounge garbage bin.",
       "ask": "{P} that panel in {R} is fake. Nobody can do it.",
+      "situation": "dummy_panel",
       "caveats": [
         "Dummy panel list: src/data/gameFacts.json maps.<id>.dummyPanels."
       ],
@@ -233,6 +236,7 @@
       ],
       "check": "Stage order is fixed: Skeld upload always Admin, Polus upload Communications, divert before accept, garbage/chute final stage Storage, align upper then lower.",
       "ask": "{P} upload is always in admin. Where did you download?",
+      "situation": "stage_order",
       "caveats": [
         "Map JSON lists rooms but not stage order; needs rooms per stage."
       ],
@@ -255,6 +259,7 @@
       ],
       "check": "Wiring order per map: Skeld Elec>Storage>Admin>Nav>Cafe>Sec; MIRA Storage>Hallway>Locker>Greenhouse>Lab; Polus Elec>O2>Office>Decon>Lab R>Lab L; Airship Viewing>Engine>Main Hall>Showers>Lounge>Cargo>Meeting.",
       "ask": "{P} wires go in a fixed order. {R} cant come after {R2}.",
+      "situation": "stage_order",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -275,6 +280,7 @@
       ],
       "check": "Observed time at the panel < 0.6 x stageDurationSec (download/upload ~9-11 s, scan ~10 s, inspect sample 60 s wait).",
       "ask": "{P} you were at {TASK} for a few seconds. It takes longer.",
+      "situation": "task_too_fast",
       "caveats": [
         "Most durations in map JSON are guesses; only download, scan and sample are sourced."
       ],
@@ -297,6 +303,7 @@
       ],
       "check": "Bar mode Always, single-stage task, P closed it as done in my view, no bar movement within ~1 s.",
       "ask": "{P} you said done {TASK}. The bar did not move.",
+      "situation": "bar_no_move",
       "caveats": [
         "Multi-stage tasks only move the bar at the final stage.",
         "Comms hides bar progress."
@@ -409,7 +416,7 @@
       ],
       "check": "I watched the only door of a dead-end; P went in, the room was later empty or P was seen elsewhere without coming out. Room has a vent.",
       "ask": "{P} went into {R} and was gone. Theres a vent there.",
-      "situation": "body_in_dead_end",
+      "situation": "vanished_dead_end",
       "caveats": [
         "Phantom vanish if Phantom is enabled.",
         "Engineers can vent."
@@ -433,6 +440,7 @@
       ],
       "check": "I was watching the entrances of R; P appears inside; R has a vent.",
       "ask": "{P} how did you get to {R}? Nobody came through.",
+      "situation": "vanished_dead_end",
       "caveats": [
         "Vision edges; ask before voting."
       ],
@@ -454,6 +462,7 @@
       ],
       "check": "Seen on one side of Gap Room, then the other side faster than the platform ride or the long route; Gap Room left/right vents connect.",
       "ask": "{P} you crossed gap without the platform. How?",
+      "situation": "gap_crossed",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -496,6 +505,7 @@
       ],
       "check": "Kill cooldown resets at every meeting end (10 s at match start). Earliest kill = meetingEnd + cooldown (+ time the killer spent in vents or on cams). Alibis covering only that window prove nothing.",
       "ask": "First kill cant be before {N}s. Where were you after?",
+      "situation": "cooldown_window",
       "caveats": [
         "Kill-during-meeting-call glitch can place a body at the button."
       ],
@@ -520,6 +530,7 @@
       ],
       "check": "Time-of-death gap < killCooldownSec => two different killers. One impostor can never double kill.",
       "ask": "Two kills {N}s apart. That is two impostors.",
+      "situation": "double_kill",
       "caveats": [
         "Time of death must be bounded (vitals, noisemaker, sightings)."
       ],
@@ -542,7 +553,7 @@
       ],
       "check": "P claims to be with W; W says no (or names someone else). One of them lies; the one with other contradictions is the liar.",
       "ask": "{W} were you with {P}? Yes or no.",
-      "situation": "contradiction",
+      "situation": "alibi_partner_denies",
       "caveats": [
         "Both may be honest about different minutes."
       ],
@@ -630,7 +641,7 @@
       ],
       "check": "I saw only P and V together in R; V found dead in or near R soon after with no third player seen.",
       "ask": "I left {P} alone with {V} in {R}. Then {V} died.",
-      "situation": "last_seen_with_victim",
+      "situation": "two_together_one_dies",
       "caveats": [
         "A Shapeshifter may have worn P.",
         "Vents let a third player arrive unseen."
@@ -653,7 +664,7 @@
       ],
       "check": "P seen leaving R within ~15 s before the body in R was reported; P did not report.",
       "ask": "{P} you came out of {R} right before. Didnt see {V}?",
-      "situation": "body_in_dead_end",
+      "situation": "left_body_room",
       "caveats": [
         "The body may have been out of P's vision."
       ],
@@ -698,7 +709,7 @@
       ],
       "check": "Report time minus time of death (vitals OK->DED, noisemaker alert) under ~5 s and nobody saw the reporter arrive.",
       "ask": "{P} you found {V} seconds after the kill. Who did you see?",
-      "situation": "self_report",
+      "situation": "self_report_instant",
       "caveats": [
         "Crew who witnessed the kill also report instantly."
       ],
@@ -745,6 +756,7 @@
       ],
       "check": "Reporter says they came from R2; the path R2->R would pass me or a watched corridor, or takes longer than the time available.",
       "ask": "{P} from {R2} you would pass me. You didnt.",
+      "situation": "report_wrong_direction",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -786,6 +798,7 @@
       ],
       "check": "P names the body room, victim or body count before the reporter or anyone else said it, without having been there.",
       "ask": "{P} how did you know it was in {R}? Nobody said.",
+      "situation": "knows_too_much",
       "caveats": [
         "The meeting overview shows who died, so victim names are public.",
         "Ghost info can leak via voice calls."
@@ -853,6 +866,7 @@
       ],
       "check": "Comms disables Admin, Cams, Vitals and Doorlog (not Fungle binoculars). A claimed reading inside a comms window is false.",
       "ask": "Comms were down. Cams and admin were off then.",
+      "situation": "monitor_during_comms",
       "caveats": [
         "Check the exact comms window; readings just before it are fine."
       ],
@@ -900,6 +914,7 @@
       ],
       "check": "My admin read: N icons in R at T. Claims put a different number of players in R at T.",
       "ask": "Admin had {N} in {R} at {T}. Who else was there?",
+      "situation": "admin_check",
       "caveats": [
         "Admin is anonymous and updates as people move; allow +-5 s.",
         "Admin icons include dead bodies until the next meeting.",
@@ -946,6 +961,7 @@
       ],
       "check": "Admin does not show hallways or Polus Outside. \"Admin showed nobody there\" is no evidence for those areas.",
       "ask": "Admin doesnt show {R}. That proves nothing.",
+      "situation": "admin_check",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -966,6 +982,7 @@
       ],
       "check": "I watched a feed covering corridor C for the window; P claims to have walked through C then and never appeared.",
       "ask": "I was on cams. {P} never walked past {R}.",
+      "situation": "cams_check",
       "caveats": [
         "Polus/Airship feeds show one camera at a time.",
         "No cams observation type yet; feed coverage is in gameFacts.json monitors.cams."
@@ -1011,6 +1028,7 @@
       ],
       "check": "MIRA doorlog logs living players at the north/SW/SE hallway sensors (5 s per-player cooldown, last 20 events, real identity even if shifted).",
       "ask": "Doorlog has {P} at the {R} sensor at {T}.",
+      "situation": "doorlog_check",
       "caveats": [
         "Comms wipes the display until fixed."
       ],
@@ -1033,6 +1051,7 @@
       ],
       "check": "Vitals showed V OK at T; any claim of finding V dead before T is false. DED = killed since the last meeting, body present.",
       "ask": "{V} was alive on vitals at {T}. Not before.",
+      "situation": "vitals_timing",
       "caveats": [
         "D/C also covers disconnects and earlier deaths."
       ],
@@ -1056,6 +1075,7 @@
       ],
       "check": "Fix points: Skeld reactor Reactor, O2 O2+Admin, lights Electrical, comms Comms; MIRA reactor Reactor, O2 Greenhouse+SW hall, lights Office, comms Office+Comms; Polus seismic both sides of Dropship, lights Electrical, comms outside by Comms; Airship crash both sides of Gap Room, lights Gap/Viewing/Cargo, comms Comms; Fungle reactor Reactor, comms Comms+Lookout, no lights.",
       "ask": "{TASK} isnt fixed in {R} on this map.",
+      "situation": "wrong_fix_location",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -1098,6 +1118,7 @@
       ],
       "check": "Impostors can fix sabotages. Fixing proves nothing alone; only a 2-person fix with a cleared partner is an alibi for that moment.",
       "ask": "Impostors can fix too. Who was with you?",
+      "situation": "fix_not_clear",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -1138,6 +1159,7 @@
       ],
       "check": "Airship spawn choices after a meeting are only Brig, Cargo Bay, Engine Room, Kitchen, Main Hall, Records (3 offered each time).",
       "ask": "You cant spawn in {R} on Airship.",
+      "situation": "airship_spawn",
       "caveats": [
         "Players often name where they walked first, not the spawn."
       ],
@@ -1161,6 +1183,7 @@
       ],
       "check": "During Fungle Mushroom Mixup (~10 s) every living player has a random colour and crew cannot see names: drop colour-based sightings in that window.",
       "ask": "That was during mixup. Colours were random.",
+      "situation": "mixup_sighting",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -1180,6 +1203,7 @@
       ],
       "check": "Hard if Engineers are off. With Engineers: hard if P re-vented within the engineer cooldown, vented during comms, or stayed longer than the max vent time.",
       "ask": "I saw {P} vent in {R}.",
+      "situation": "saw_vent",
       "caveats": [
         "Clean Vent forcing someone out is the same evidence."
       ],
@@ -1203,6 +1227,7 @@
       ],
       "check": "Hard unless Shapeshifter is enabled (the killer may wear P's look). An acid (Viper) kill is hard even then: Viper and Shapeshifter cannot both be on.",
       "ask": "I saw {P} kill {V} in {R}.",
+      "situation": "saw_kill",
       "caveats": [],
       "wiredIn": "src/engine/suspicion.ts#hardFacts",
       "sources": [
@@ -1245,6 +1270,7 @@
       ],
       "check": "Two identical players at once: one is a Shapeshifter. Watch both; the one that changes back is the impostor.",
       "ask": "Two {P}s at once. One of them is a shapeshifter.",
+      "situation": "two_of_same",
       "caveats": [
         "Same cosmetics but different colours is not this."
       ],
@@ -1287,6 +1313,7 @@
       ],
       "check": "P accuses A; A counters with an alibi; P accuses someone else without addressing it.",
       "ask": "{P} you dropped {P2} fast. Why were you sure before?",
+      "situation": "flip_when_countered",
       "caveats": [],
       "wiredIn": null,
       "sources": [
@@ -1326,6 +1353,7 @@
       ],
       "check": "\"+1\", \"same\", \"yeah its X\" with no observation, especially from someone who has not given a location.",
       "ask": "{P} what did you see yourself?",
+      "situation": "bandwagon",
       "caveats": [],
       "wiredIn": null,
       "sources": [
