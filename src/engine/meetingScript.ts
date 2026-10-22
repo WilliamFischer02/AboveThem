@@ -16,6 +16,7 @@ import crew from '../data/tactics/crew.json';
 import weights from '../data/tactics/weights.json';
 import { fmt } from './evidence';
 import { impostorsRemaining } from './suspicion';
+import { headline as situationHeadline, headlineText } from './headline';
 
 type Situation = { say?: string[]; ask?: string[]; watch?: string[] };
 const S = crew.situations as Record<string, Situation>;
@@ -158,10 +159,8 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
     addWatch(S.insufficient_info.watch, {});
   }
 
-  const topLabel = top?.evidence.filter(e => e.weight > 0)[0]?.label;
-  const headline = top && top.verdict !== 'certainCrew'
-    ? `Prime suspect: ${name(m, top.player)} (${Math.round(top.probability * 100)}%)${topLabel ? ' — ' + topLabel : ''}`
-    : 'No prime suspect yet';
+  // One source of truth for the situational header (engine/headline.ts).
+  const headline = headlineText(situationHeadline(m, scores));
 
   return {
     meeting,

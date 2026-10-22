@@ -162,6 +162,34 @@ fn ocr_rect(f: &Frame, r: Rect, scale: u32) -> String {
     }
 }
 
+/// OCR of white text on a busy background (the lobby panel's stylised map logo): white-ish pixels become
+/// black ink on a white page, everything else white.
+pub fn ocr_white_text(f: &Frame, r: Rect, scale: u32) -> String {
+    let (mut c, w, h) = crop_bgra(f, r.x, r.y, r.w, r.h);
+    for px in c.chunks_exact_mut(4) {
+        let ink = px[0] >= 200 && px[1] >= 200 && px[2] >= 200;
+        let v = if ink { 0 } else { 255 };
+        px[0] = v; px[1] = v; px[2] = v;
+    }
+    let (u, uw, uh) = upscale_bgra(&c, w, h, scale);
+    match ocr_bgra(&u, uw, uh, None) {
+        Ok(res) => res.lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n"),
+        Err(_) => String::new(),
+    }
+}
+
+/// The lobby panel's map logo (stylised white letters): binarised OCR at 1×, then 2×, then the plain crop.
+/// Returns the first text that names a map (else the last text read). Measured on `lobby_v2` (THE SKELD only):
+/// UNVERIFIED for the other four logos.
+pub fn read_map_logo(f: &Frame, r: Rect) -> String {
+    let mut last = String::new();
+    for t in [ocr_white_text(f, r, 1), ocr_white_text(f, r, 2), ocr_rect(f, r, 2)] {
+        if map_id_of(&t).is_some() { return t; }
+        if !t.trim().is_empty() { last = t; }
+    }
+    last
+}
+
 pub fn parse_eject(text: &str) -> Option<EjectEvent> {
     let t = text.trim().replace('\n', " ");
     if t.is_empty() { return None; }
@@ -202,6 +230,30 @@ pub fn lobby_code_of(text: &str) -> Option<String> {
     if !up.contains("CODE") { return None; }
     up.split_whitespace().map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric()).to_string())
         .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_uppercase()) && w != "CODE")
+}
+
+/// Map id from the lobby panel's map-name text. The region also holds the "ROOM SETTINGS" label, so keywords are
+/// searched inside the text (with the usual OCR swaps 0→O, 1→I, Q→O) before a per-line fuzzy match.
+/// Mirrors `mapIdFromText` in src/engine/map.ts.
+// UNVERIFIED: written by the maps agent without running cargo; the bugs-rust agent / lead must build + test.
+pub fn map_id_of(text: &str) -> Option<&'static str> {
+    let up = text.to_uppercase().replace("ROOM SETTINGS", " ").replace("GAME SETTINGS", " ");
+    let flat: String = up.chars()
+        .map(|c| match c { '0' => 'O', '1' | '|' | '!' => 'I', '5' => 'S', _ => c })
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    for (k, id) in [("SKELD", "skeld"), ("MIRAHQ", "mira"), ("MIRAHO", "mira"), ("MIRA", "mira"), ("POLUS", "polus"), ("AIRSHIP", "airship"), ("FUNGLE", "fungle")] {
+        if flat.contains(k) { return Some(id); }
+    }
+    let names = ["The Skeld", "Skeld", "MIRA HQ", "Polus", "The Airship", "Airship", "The Fungle", "Fungle"];
+    for line in up.lines() {
+        if let Some((m, score)) = fuzzy_best(line, names) {
+            if score >= 0.6 {
+                return Some(match m { "The Skeld" | "Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" | "Airship" => "airship", _ => "fungle" });
+            }
+        }
+    }
+    None
 }
 
 fn room_label_of(text: &str) -> Option<String> {
@@ -291,7 +343,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                 let t0 = Instant::now();
                 // Role card / banner text is huge (1× keeps us under the OCR size limit); task list is small (3×).
                 let scale = match name.as_str() { "role_card" | "meeting_banner" => 1, "task_list" => 3, _ => 2 };
-                tr.text = ocr_rect(&frame, r, scale);
+                tr.text = if name == "map_name" { read_map_logo(&frame, r) } else { ocr_rect(&frame, r, scale) };
                 ocr_ms += t0.elapsed().as_millis() as u64;
                 ocr_calls += 1;
                 tr.dirty = false;
@@ -440,11 +492,12 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 6a. Map name from the lobby settings panel (needs the room code title nearby, i.e. the panel is open).
         if lobby_code.is_some() {
+            // UNVERIFIED (maps agent, not built/run): was a whole-region fuzzy match, which also contained the
+            // "ROOM SETTINGS" label above the logo and so never reached the 0.55 threshold (Polus games logged as Skeld).
             let mt = text("map_name");
-            if let Some((map, score)) = fuzzy_best(&mt, ["The Skeld", "MIRA HQ", "Polus", "The Airship", "The Fungle"]) {
-                if score > 0.55 && map != last_map {
-                    last_map = map.to_string();
-                    let id = match map { "The Skeld" => "skeld", "MIRA HQ" => "mira", "Polus" => "polus", "The Airship" => "airship", _ => "fungle" };
+            if let Some(id) = map_id_of(&mt) {
+                if id != last_map {
+                    last_map = id.to_string();
                     let _ = app.emit(EV_MAP, id);
                 }
             }
@@ -701,5 +754,34 @@ mod tests {
         assert_eq!(room_label_of("Upper Engine").as_deref(), Some("Upper Engine"));
         assert_eq!(room_label_of("PING: 69 ms"), None);
         assert_eq!(room_label_of("0/8"), None);
+    }
+
+    // UNVERIFIED: added by the maps agent without running cargo.
+    #[test]
+    fn map_name_variants() {
+        for (t, want) in [
+            ("ROOM SETTINGS\nTHE SKELD", Some("skeld")), ("*THE SkßLL)", Some("skeld")),
+            ("MIRA HQ", Some("mira")), ("MIRAHQ", Some("mira")), ("M1RA HQ", Some("mira")), ("ROOM SETTINGS\nMIRA HO", Some("mira")),
+            ("POLUS", Some("polus")), ("P0LUS", Some("polus")),
+            ("THE AIRSHIP", Some("airship")), ("AIRSHIP", Some("airship")),
+            ("THE FUNGLE", Some("fungle")), ("FUNGLE", Some("fungle")),
+            ("ROOM SETTINGS", None), ("", None),
+        ] {
+            assert_eq!(map_id_of(t), want, "{t:?}");
+        }
+    }
+
+    // UNVERIFIED: the lobby_v2 fixture shows THE SKELD; this is the read the live watcher does.
+    #[cfg(windows)]
+    #[test]
+    fn map_name_reads_on_lobby_fixture() {
+        let r = Regions::default();
+        let f = load_fixture("lobby_v2");
+        // The plain crop of the old rect read only "ROOM SETTINGS"; the binarised logo below it reads "*THE SKEL)" / "SkELD".
+        let t = read_map_logo(&f, r.map_name);
+        assert_eq!(map_id_of(&t), Some("skeld"), "{t:?}");
+        // A frame without the panel yields no map.
+        let t = read_map_logo(&load_fixture("round_cafeteria"), r.map_name);
+        assert_eq!(map_id_of(&t), None, "{t:?}");
     }
 }

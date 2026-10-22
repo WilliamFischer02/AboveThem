@@ -26,6 +26,7 @@ import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList,
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import { translationRequest, senderByIconColor, type ChatPayload } from './eventHelpers';
+import { inferMapFromLabels, mapIdFromText } from '../engine/map';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
 export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number]; icon_hash?: string; dim?: number }
@@ -40,6 +41,29 @@ const NOT_NAMES = /^(roles?|role amounts?|crewmate roles?|impostor roles?|scient
 const plausibleName = (n: string) => !NOT_NAMES.test(n.trim()) && !/^[\W_]+$/.test(n) && n.trim().length >= 2 && n.trim().length <= NAME_MAX && !/[()]/.test(n);
 /** Lobby names must be seen in two consecutive reads before they become players. */
 const lobbySeen = new Map<string, number>();
+
+// --- Map detection memory (maps agent). Module-level on purpose: the event effect below re-runs whenever the
+// lobby code changes, and the watcher emits `game://map` only once per change — usually in the same tick as
+// `game://lobby` — so an effect-local variable lost it and every game started on the default map (Skeld).
+/** Last map read from the screen, and how sure we are ('lobby' panel / settings line beats label inference). */
+let detectedMap: { id: MapId; source: 'lobby' | 'infer' } | null = null;
+/** Room popups / task-list lines seen in the current match: enough unique names reveal the map (fail-soft path). */
+let mapLabels: { matchId: string | null; labels: string[] } = { matchId: null, labels: [] };
+/** Feed one on-screen label; switches the match map when the labels clearly point at another map (unless the lobby panel said otherwise). */
+function inferMapFrom(label: string) {
+  const s = useMatch.getState();
+  const m = s.match;
+  if (!m || !label.trim()) return;
+  if (mapLabels.matchId !== m.id) mapLabels = { matchId: m.id, labels: [] };
+  mapLabels.labels.push(label);
+  if (mapLabels.labels.length > 40) mapLabels.labels.shift();
+  if (detectedMap?.source === 'lobby' && detectedMap.id === m.settings.map) return;
+  const guess = inferMapFromLabels(mapLabels.labels, Object.values(MAPS));
+  if (!guess || guess.map === m.settings.map) return;
+  detectedMap = { id: guess.map, source: 'infer' };
+  s.dispatch({ kind: 'settings', payload: { map: guess.map } });
+  s.showToast(`Map: ${MAPS[guess.map].name} (auto, from ${guess.hits.slice(0, 3).join(', ')})`);
+}
 
 function fuzzyFind<T extends { name: string }>(name: string, list: T[]): T | undefined {
   let best: { item: T; score: number } | null = null;
@@ -167,7 +191,7 @@ export function useGameEvents() {
     let creating = false;
     let role: Role | null = null;
     let roleAt = 0;
-    let pendingMap: MapId | null = null;
+    let pendingMap: MapId | null = detectedMap?.id ?? null;
     let pendingSettings: Record<string, unknown> = {};
     let bannerReason: 'body' | 'button' | null = null;
     const lastAutoSighting = new Map<string, number>();
@@ -346,7 +370,8 @@ export function useGameEvents() {
           if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
           const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined, slotMeeting: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
-          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
+          // Fail soft: a detected map is used even without room data (room rules stand down); never silently Skeld.
+          const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : baseSettings.map;
           s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyRef.current ?? undefined });
           if (!fromLobby) {
             for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
@@ -503,7 +528,7 @@ export function useGameEvents() {
           if (!['round', 'roundStart', 'meetingDiscussion', 'ejection'].includes(e.payload.phase)) return;
           if (creating || !resumeDone.current) return;
           creating = true;
-          const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
+          const mapId = pendingMap && MAPS[pendingMap] ? pendingMap : DEFAULT_SETTINGS.map;
           s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyRef.current ?? undefined,
             players: [{ id: 'me', name: settingsRef.current?.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
           creating = false;
@@ -565,8 +590,10 @@ export function useGameEvents() {
       guard(await listen<MapId>('game://map', e => {
         const id = e.payload;
         const s = useMatch.getState();
-        if (!MAPS[id] || MAPS[id].rooms.length === 0) { s.showToast(`Map ${id} detected — no map data yet, room features off`); pendingMap = null; return; }
+        if (!MAPS[id]) return;
+        if (MAPS[id].rooms.length === 0) s.showToast(`Map ${id} detected — no map data yet, room features off`);
         pendingMap = id;
+        detectedMap = { id, source: 'lobby' };
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
       }));
 
@@ -684,6 +711,7 @@ export function useGameEvents() {
           else if (key.includes('commontask')) { if (num >= 0 && num <= 4) patch.commonTasks = num; }
           else if (key.includes('longtask')) { if (num >= 0 && num <= 4) patch.longTasks = num; }
           else if (key.includes('shorttask')) { if (num >= 0 && num <= 6) patch.shortTasks = num; }
+          else if (key === 'map' || key.endsWith('map')) { const id = mapIdFromText(val); if (id) { patch.map = id; pendingMap = id; detectedMap = { id, source: 'lobby' }; } }
         }
         if (Object.keys(patch).length === 0) return;
         pendingSettings = { ...pendingSettings, ...patch };
@@ -702,6 +730,7 @@ export function useGameEvents() {
       }));
 
       guard(await listen<string>('game://room', e => {
+        inferMapFrom(e.payload);
         const s = useMatch.getState();
         const m = s.match;
         if (!m || m.map.rooms.length === 0) return;
@@ -745,6 +774,7 @@ export function useGameEvents() {
       }));
 
       guard(await listen<string[]>('game://tasks', e => {
+        for (const l of e.payload) if (!/total tasks|fake tasks/i.test(l)) inferMapFrom(l);
         const s = useMatch.getState();
         const m = s.match;
         if (!m) return;
