@@ -205,9 +205,12 @@ export function describe(e: MatchEvent): string {
         case 'bodyFound': return `body: ${o.victim} in ${o.room}${o.reporter ? ' (reported by ' + o.reporter + ')' : ''}`;
         case 'sabotage': return `sabotage ${o.kind} ${o.phase}`;
         case 'manualMark': return `${o.player} marked ${o.mark}`;
-        case 'adminRead': return `admin: ${Object.entries(o.counts).map(([r, n]) => `${n} ${r}`).join(', ') || 'empty'}`;
-        case 'vitalsRead': return `vitals: ${o.dead.length ? o.dead.join(', ') + ' dead' : 'all alive'}`;
-        case 'doorLogRead': return `door log: ${o.entries.map(e => e.player + (e.sensor ? ' @' + e.sensor : '')).join(', ') || 'empty'}`;
+        case 'adminRead': {
+          const rooms = Object.entries(o.counts).filter(([, n]) => n > 0);
+          return `admin read: ${rooms.map(([r, n]) => `${n} in ${r}`).join(', ') || 'nobody in any room'} (${rooms.reduce((s, [, n]) => s + n, 0)} icons)`;
+        }
+        case 'vitalsRead': return `vitals: ${[...o.dead.map(p => `${p} DED`), ...(o.dc ?? []).map(p => `${p} D/C`)].join(', ') || 'nobody dead'} · ${o.alive.length} OK`;
+        case 'doorLogRead': return `door log ${Math.floor(o.from / 60)}:${String(Math.floor(o.from % 60)).padStart(2, '0')}–${Math.floor(o.to / 60)}:${String(Math.floor(o.to % 60)).padStart(2, '0')}: ${o.entries.map(e => e.player).join(', ') || 'nobody crossed'}`;
       }
       return 'observation';
     }

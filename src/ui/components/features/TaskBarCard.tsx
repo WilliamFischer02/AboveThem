@@ -10,6 +10,7 @@ import { roomName, pname } from '../../../engine/features/util';
 import { myRoomNow } from '../../../input/useHotkeys';
 import { swatch } from '../../palette';
 import { useTick } from './shared';
+import { RoomChips } from './Pickers';
 
 export function TaskBarCard() {
   useTick(1000);
@@ -39,6 +40,7 @@ export function TaskBarCard() {
           <button className="btn xs danger" disabled={!player || !room} onClick={() => log(false)} title="They 'finished' and the bar stayed put">still ✗</button>
         </span>
       </div>
+      {player && !room && !choosing && <RoomChips label="Which room are you both in?" />}
       {choosing && (
         <div className="feat-grid" style={{ marginTop: 4 }}>
           {Object.values(m.players).filter(p => !p.isMe && p.status === 'alive').map(p => (
