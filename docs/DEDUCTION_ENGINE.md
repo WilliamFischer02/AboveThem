@@ -2,20 +2,40 @@
 
 ## TL;DR
 
-The engine is a small **constraint + evidence** system over ≤ 15 players:
+The engine is a **constraint + evidence** system over ≤ 15 players that keeps reasoning for the
+whole game, not just one meeting:
 
-1. **Hard constraints** settle players outright (vent seen = impostor; visual task
-   seen = crew; ejected impostor; etc.).
-2. **Soft evidence** moves a log-odds suspicion score with explicit weights, every
-   contribution kept as an `EvidenceItem` so the UI can show *why*.
-3. **Alibi graph** (who was with whom, where, when) propagates clears and
-   contradictions.
-4. **Meeting script generator** turns the top uncertainties into ranked
-   *questions to ask*, *statements to make*, and a *vote recommendation* with
-   confidence — in under a second, so it's ready when the meeting opens.
+1. **Hard constraints** settle players outright (vent seen = impostor; visual task seen = crew;
+   ejection text; counting; with me through a kill window in a 1-impostor lobby).
+2. **Soft evidence** moves a log-odds score. Every contribution is an `EvidenceItem` with a human
+   label, the ids it came from (`refs`), the round it is about, its decay and the weight applied.
+3. **Social evidence** is what *other players* say (accusations, vouches, eyewitness claims),
+   weighted by **how credible the speaker is** (a suspect's accusation counts less; a confirmed
+   crewmate's counts more; many independent voices converge with diminishing returns).
+4. **Carry-over**: evidence persists all game and **decays by category** (hard facts never);
+   probabilities are **normalised so they add up to the impostors still at large**; every score
+   carries a **trend** (probability at the end of each meeting) and a **delta**.
+5. **Explainability**: evidence sorted by |weight|, `topReasons(score, n)`, a one-line `summary`,
+   and a `baseline` that says where the score starts ("1 impostor left among 5 unresolved").
 
-Everything below is implementable from `src/types/game.ts`. Nothing requires
-hidden information.
+Nothing requires hidden information: only what the local player saw, typed, or read off the
+screen (chat, vote screen, ejection text). See §8.
+
+Code map (all pure TypeScript in `src/engine/`, Vitest-covered):
+
+| File | What |
+|---|---|
+| `suspicion.ts` | pipeline: `hardFacts`, `scoreAll`, decay, caps, count normalisation, trend, `topReasons`, `summarize`, `suspectPairs`, `chatAssertions` |
+| `rules.ts` | observation rules (movement, tasks, sabotage, never-vote-each-other) + `userMarks` |
+| `marks.ts` | user marks with reasons: `SUS_REASONS`, `CLEAR_REASONS`, `markObservation`, `markHistory` |
+| `contradictions.ts` | claim rules (location / story / companion / task / accusation behaviour / ejection feedback) |
+| `chatEvidence.ts` | `ChatAssertion` → social evidence; `claimsToAssertions` adapter; silence; NLU profile tells; dead accuser |
+| `voting.ts` | voting behaviour (needs visible votes) |
+| `feasibility.ts` | `killWindow`, `killFeasibility`, `travelLowerBound` (slack), vent-assisted travel |
+| `pairs.ts` | `impostorPairs` (display) + `ruleMutualAlibiPair` (score) |
+| `history.ts` | meetings completed / current, `aliveAtMeeting`, `snapshotAtMeeting` |
+| `alibi.ts` | alibi graph + kill-window clears |
+| `data/tactics/weights.json` | **every** weight, cap, half-life; tune here, not in code |
 
 ---
 
@@ -23,128 +43,220 @@ hidden information.
 
 | Source | Event types |
 |---|---|
-| Your eyes (hotkey/click) | `Sighting` (player, room, t), `WithMe`, `SawTask` (visual/non-visual), `SawVent`, `SawKill`, `BodyFound`, `Followed`, `Left/Entered` |
-| OCR | `Roster`, `Phase`, `Chat`, `Ejection`, `Sabotage`, `OwnTasks` |
-| Chat (clicked to log) | `Claim` (player claims location/companion/task/accusation), `Accusation`, `Defense`, `Vote` (if votes visible) |
-| Lobby settings (entered once, remembered per lobby code) | impostor count, kill cooldown, visual tasks on/off, confirm ejects on/off, anonymous votes, task bar mode, player vision |
+| Your eyes (hotkey/click) | `sighting`, `withMe`, `sawTask` (visual/non-visual, duration, task bar), `sawVent`, `sawKill`, `bodyFound`, `myRoom`, `sabotage`, `manualMark` (+ reason) |
+| OCR | roster, phase, chat lines, ejection text, vote screen, own task list |
+| Chat (parsed by chat-nlu or clicked) | `ChatAssertion` (accuse / clear / sawVent / sawKill / withMe / sawTask / defense / voteCall / selfReport …) and `Claim` records (location, companion, task, sighting, accusation, clear, defense) |
+| Lobby settings | impostor count, kill cooldown, visual tasks, confirm ejects, anonymous votes, task bar mode, speed |
 
 ---
 
 ## 2. Hard constraints (certainties)
 
-Applied first; they short-circuit scoring.
-
 | Constraint | Effect |
 |---|---|
-| You saw X vent | X = **Impostor** (certain) |
-| You saw X kill | X = **Impostor** |
-| You saw X complete a **visual** task with animation (MedBay scan, asteroids, shields, garbage chute, submit scan) and visual tasks are ON | X = **Crew** |
-| Ejection text "X was The Impostor" (confirm ejects ON) | X = Impostor, impostors-remaining − 1 |
-| Ejection text "X was not The Impostor" | X = Crew (and re-weight everyone who pushed that vote: see §4.5) |
-| Body found in room R at time t, X was continuously **with you** from before the kill-window until t | X = Crew for that kill (window clear) |
-| Kill cooldown math: body freshly found at t, impostor killed at t_k ≥ t − fresh_window; X was in your sight for all of [t_k − ε, t] | X cleared for that kill |
-| N impostors remain and N players are already certain impostors | everyone else = Crew |
-| N impostors remain, P alive, and (P − certain_crew) == N | all uncertain = Impostor |
+| You saw X vent (Engineers OFF) | X = **Impostor**. With Engineers ON: +2.5 soft (Engineers are crew and vent) |
+| You saw X kill | X = **Impostor**. With Shapeshifter ON the identity is marked shaky (could be a disguise) |
+| You saw X do a task that is **visual on this map** (`task.visual` in the map JSON; visuals ON) | X = **Crew**. Skeld: Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute; MIRA: Submit Scan only; Polus: Submit Scan, Clear Asteroids; Airship / Fungle: none. Never hard-code the list: read the map. A visual confirmation of a task that is not visual on this map is only a −0.3 soft clear; with no task id it stays hard but shaky |
+| You hard-cleared X (a mark) | X = **Crew** (a later round-clear does not undo it) |
+| Ejection "X was (not) The Impostor" | X = Impostor / Crew |
+| **1-impostor lobby**: X was with you (your own with-me toggle) through the **whole** kill window | X = **Crew** |
+| 2+ impostors: X was with you / a certain crewmate through the kill window | cleared **for that kill** (−3, or −2.1 one hop away along a confirmed alibi edge) |
+| N impostors remain, N already certain | everyone else = Crew |
+| N impostors remain and exactly N uncertain alive | all of them = Impostor |
 
-"Cleared for that kill" ≠ "cleared" when `impostors ≥ 2` — the engine tracks
-clears **per kill event**, then intersects. A player cleared for every kill so
-far is a *hard clear*; cleared for some is a *soft clear*.
+**Kill window** (`feasibility.killWindow`): `[max(t_body − 45 s, cooldown start), t_body]`. The
+cooldown restarts when a meeting ends (and pauses in vents / on cams, so it stays a lower bound);
+the first cooldown of the match is 10 s regardless of settings (game-knowledge §1.2). A body at
+0:50 in round 2 with a 30 s cooldown therefore has window [0:27, 0:50], not [0:05, 0:50].
+
+"Cleared for a kill" ≠ "cleared" with 2+ impostors: clears are tracked per kill and intersected.
+Cleared for every kill = verdict `hardClear`; for some = `softClear`.
 
 ---
 
-## 3. Soft evidence (weights)
+## 3. Soft evidence
 
-Score is log-odds, `s = Σ w_i`. Prior `w₀ = ln(N_imp / (N_alive − N_imp))`.
-Weights are **config, not code** (`src/data/tactics/weights.json`) so they can be
-tuned from real match logs later. Starting values (positive = more sus):
+### 3.0 How a score is built
 
-### 3.1 Movement / positioning
-| Evidence | w | Rationale |
-|---|---|---|
-| Last seen heading toward the body's room within the kill window, not with anyone | +1.2 | proximity + opportunity |
-| Seen leaving body room right before report | +1.5 | |
-| Reported the body while alone with no witness of arrival ("self-report" pattern) | +0.8 | classic; stronger if body was in a dead-end room |
-| Reported a body in a room they had no task reason to be in (per map task table) | +0.6 | |
-| "Stacking" — repeatedly near the same player who later dies | +0.7 per instance | |
-| Roamed without stopping at task stations (you watched them for ≥ 8 s) | +0.6 | impostors wander |
-| Stood at a task station noticeably longer/shorter than that task's known duration | +0.5 | duration mismatch (see map data `taskDurations`) |
-| Was out of sight for the entire round with no one vouching | +0.4 | unverifiable |
-| Walked with you toward a group then peeled off when more crew appeared | +0.4 | |
+```
+raw evidence (rules)                       weights.json
+  → annotate: round (from refs), decay = max(floor, 0.5^(age / halfLife[cat])), shaky × 0.5
+  → per-category sum, clamped to ±categoryCap[cat]     (one noisy source cannot dominate)
+  → + kill-window clears (category 'hard', not capped)
+  → L_i = Σ capped categories
+  → offset c so that Σ_unresolved sigmoid(L_i + c) = impostors still at large
+  → logOdds = L_i + c, probability = sigmoid(logOdds)
+```
 
-### 3.2 Task behavior
+With no evidence the offset equals the classic prior `ln(k / (n − k))`. With evidence it keeps
+the numbers honest: clearing three of five players makes the other two *more* likely.
+
+Two passes: pass 1 scores everything except social evidence; each player's pass-1 probability
+becomes their **credibility as a speaker**; pass 2 adds social evidence and recurrence.
+
+### 3.1 Decay (carry-over across rounds)
+
+Half-life in rounds (`weights.decay.halfLifeRounds`), floor 0.25: movement 2, social 2, sabotage 2,
+manual 3, meeting 4, task 5, structural never, hard never. Age = current round − the round the
+evidence is about. A lie caught in round 1 still counts at round 5, but a "seen alone near
+Electrical" from three rounds ago no longer outweighs today's evidence.
+
+### 3.2 Movement / positioning
+
 | Evidence | w |
 |---|---|
-| Claims a task that does not exist at the claimed location on this map | +2.0 (near-hard) |
-| Claims a **common task** that *you* don't have (common tasks are identical for all crew) | +2.5 (near-hard; impostors fake common tasks they weren't dealt) |
-| Claims "did wires" twice in the same panel, etc. (task-logic impossible) | +2.0 |
-| Task bar did not move while they "finished" a task in front of you (task bar = always) | +1.0 |
-| Task bar *did* move right as they finished in front of you | −1.0 |
-| Doing a visual task without the animation (visuals ON) | +3.0 (hard-ish) |
-| Fake-task animation mismatch (e.g. "medbay scan" claimed, no scan beam) | +3.0 |
+| Alone near / heading to the body room inside the kill window | +1.2 |
+| Seen leaving the body room ≤ 20 s before the report | +1.5 |
+| **Alone with the victim (just the two) inside the kill window** (`two_together_one_dies`) | +1.6 |
+| Last seen with the victim (otherwise) | +0.7 |
+| Self-reported alone (+0.4 in a dead end) | +0.8 |
+| At the body with only the reporter | +0.3 |
+| Nobody mentions them all round (kill round) | +0.4 |
+| Mentioned, but nobody places them in the kill window | +0.3 |
+| Could reach the body room in the window **only by vent** (my sightings, interval check) | +2.0 × margin trust |
+| **Could not** reach the body room in the window at all | −1.5 × margin trust |
+| Stood at a task far shorter/longer than its duration | +0.5 (shaky: durations unverified) |
 
-### 3.3 Meeting behavior
+**Feasibility** (`killFeasibility(m, player, body)` → `{feasible: yes|ventOnly|no|unknown, reason, refs, margin}`):
+every sighting of X (room S at t) rules out the kill instants X could not have walked from:
+`|t_kill − t| < travel(S, body)`. If no instant in the window survives on foot, it is vent-only or
+impossible. Travel uses `travelLowerBound(sec) = min(sec − 3, 0.7 × sec)` because map seconds are
+eyeballed; *margin trust* scales the weight by how many seconds the on-foot route misses by
+(0.5 s → ×0.25, ≥ 6 s → ×1). Unknown rooms / stub maps ⇒ `unknown` (never convict on missing data).
+
+### 3.3 Tasks
+
 | Evidence | w |
 |---|---|
-| Accuses someone with no stated evidence ("just vibes") | +0.4 |
-| Changes their story between meetings (contradiction engine) | +1.5 per contradiction |
-| Contradicted by a *hard-cleared* witness | +2.0 |
-| Pushes hard to vote a player who turns out crew (confirm ejects ON) | +0.9 |
-| Defends a player who turns out impostor | +0.8 |
-| Votes for a player who turns out impostor | −0.6 |
-| Immediately echoes the first accusation ("bandwagon") with nothing added | +0.3 |
-| Switches vote at the last second to the losing side's target | +0.5 |
-| Asks "where was everyone" rather than offering their own location first | +0.2 |
-| Gives a precise, falsifiable alibi that nobody disputes | −0.5 |
-| Gives a specific location + companion that the companion *confirms* | −1.0 (plus alibi edge) |
-| Silent in meetings where they were near the body | +0.5 |
-| Skips vote on a 2-impostor-remaining critical vote | +0.4 |
+| Common task I don't have (my list known) | +2.5 |
+| Task does not exist in the claimed room | +2.0 |
+| **Task does not exist on this map** (`task_not_on_map`) | +1.6 |
+| Visual task "done" with no animation (visuals ON) | +3.0 |
+| Task bar didn't move / moved as they finished (bar = Always) | +1.0 / −1.0 |
 
-### 3.4 Sabotage behavior
+### 3.4 Meeting behaviour (the player's own conduct)
+
 | Evidence | w |
 |---|---|
-| Lights off → body appears → X arrives at Electrical *after* lights fixed from an odd direction | +0.6 |
-| Reactor/O2 called, X did not head to fix and is unaccounted for | +0.5 |
-| Comms sabotaged right after a visual task was announced | +0.4 (whoever benefits) |
-| X was with you fixing a sabotage the whole time | −0.8 (per sabotage) |
+| Location claim contradicted by my sighting / companion claim contradicted | +2.0 |
+| Location claim contradicted by a **confirmed-crew** witness's sighting claim | +1.5 |
+| …by an unconfirmed witness (one of them lies: claimant +0.4, witness +0.2) | +0.4 |
+| Story changed (two location claims, same round, no time to walk) | +1.5 |
+| Said two rooms in one meeting (chat-nlu `locationChanges`) | +0.9 |
+| Flipped stance on a target within one meeting (chat-nlu `flips`) | +0.2 |
+| **Eyewitness lie**: "I saw X vent/kill" about a confirmed crewmate | +2.0 to the speaker |
+| Accused with no stated evidence / bandwagoned | +0.4 / +0.3 |
+| Pushed (accused) a crewmate who got ejected / only voted them out | +0.9 / +0.5 |
+| Defended / hard-cleared a confirmed impostor | +0.8 / +1.2 |
+| Voted out a confirmed impostor | −0.6 |
+| Skipped the vote that ejected an impostor | +0.4 |
+| Skipped on a critical vote (alive ≤ 2 × impostors + 1) | +0.4 |
+| Said nothing in a meeting where others talked (≥ 4 lines, ≥ 2 speakers; chat captured) | +0.25 |
+| Silent in the meeting after being near the body | +0.5 |
+| Location claim confirmed by my sighting / mutually confirmed companions | −0.5 / −1.0 |
 
-### 3.5 Structural (impostor-pair inference, 2+ impostors)
+Not modelled on purpose: **late bandwagon votes**: the vote screen shows no order or timing.
+
+### 3.5 Social evidence (what others say about the player): `chatEvidence.ts`
+
+```
+w = base(kind, reason) × strength × confidence × credibility(speaker)
+```
+
+| Kind | base |
+|---|---|
+| accuse (no reason / "sus") | +0.5 |
+| accuse with a reason, selfReport | +0.8 |
+| voteCall | +0.4 |
+| sawVent / sawKill (eyewitness) | +1.5 |
+| clear, sawTask | −0.6 |
+| clear citing a **valid** visual (visuals ON, task visual on this map) | −1.0 |
+| defense / unconfirmed "with me" / "with someone" | −0.3 / −0.3 / −0.2 |
+
+- **Credibility**: certain crew ×1.5; cleared for every kill ×1.25; otherwise
+  `max(0.15, 1 − excess)` where excess is how far the speaker's own probability sits above the
+  baseline; × chat consistency (`SpeakerProfile.consistency`, floor 0.5).
+- **Known impostor** speaking: their accusation is a mild clear (−0.3); their vouch is a
+  pair tell (+0.8) while another impostor is unaccounted for.
+- **Suspected** voucher (p ≥ max(0.5, 2 × baseline)) in a 2+-impostor lobby: the vouch counts less
+  *and* the vouched-for player takes +0.25 ("possible partner").
+- One speaker counts **once** per target and direction (their latest, strongest stance).
+  Independent speakers stack with **diminishing returns**: the i-th strongest × 0.7^i, so stacked
+  clears approach (≈ −2.4 for four visual vouches) but never reach a hard clear.
+- My own chat lines, junk/removed cards, superseded and info-only assertions are ignored.
+- **Double counting** with Claim records: chat lines the NLU read are skipped by
+  `claimsToAssertions`; until chat-nlu is merged, Claims of type accusation / clear / defense
+  are adapted into the same shape (one weighting path).
+- `dead_accuser`: X's accuser was killed the next round: +0.25 to X (low: can be a frame).
+
+### 3.6 User marks with reasons: `marks.ts`
+
+One click, one reason: each has its own weight (`weights.manual.reasons`) and its own "why" line.
+
+| Sus reason | w | Clear reason | w |
+|---|---|---|---|
+| Near the body | +1.0 | With me all round | −1.6 |
+| Unaccounted for | +0.5 | Saw a visual task | −2.5 |
+| Fake tasking | +1.6 | Task bar moved | −1.3 |
+| Followed me | +0.7 | Other | −0.8 |
+| Self report | +0.8 | | |
+| Lying in chat | +1.2 | | |
+| Vent sound / pop | +1.2 | | |
+| Acting strange | +0.6 | | |
+| Other (= no reason) | +0.8 | | |
+
+`neutral` wipes; switching direction replaces; same-direction marks with **different** reasons
+stack (manual cap 3.0); the same reason twice in one round counts once; a mark is about its
+round and decays (half-life 3).
+
+### 3.7 Sabotage
+
 | Evidence | w |
 |---|---|
-| Two players never vote for each other across ≥ 3 meetings while voting others | +0.4 each |
-| X hard-defended Y; Y later confirmed impostor | +1.2 for X |
-| Confirmed impostor's alibi was "with X" and X agreed at the time | +1.5 for X |
+| Fixed a sabotage with me | −0.4 (impostors can fix too: `fix_is_not_clear`) |
 
-Weights are capped per category so one noisy category can't swamp the rest.
+### 3.8 Structural (whole-game patterns)
+
+| Evidence | w |
+|---|---|
+| Suspicious (≥ 0.6 of non-social, non-manual evidence) in ≥ 2 separate rounds | +0.3 per extra round |
+| Voted out a crewmate in ≥ 2 meetings | +0.5 per extra |
+| 2-player minority vote bloc on the same target in ≥ 2 meetings (2+ impostors) | +0.35 each |
+| Never vote each other across ≥ 3 meetings | +0.4 each |
+| Alibi only each other in ≥ 2 rounds, nobody else saw them (`mutual_pair`, 2+ impostors) | +0.3 per extra round |
+| Confirmed impostor's alibi named them and they agreed | +1.5 |
+
+`impostorPairs(m)` / `suspectPairs(m)` rank candidate pairs (mutual alibis, vouching both ways,
+never accusing each other, voting together) for display only: those signals already score
+through their own rules, so the pair list never adds to the score again.
+
+### 3.9 Category caps (log-odds)
+
+movement 3 · task 4 · meeting 3 · social 2.5 · sabotage 2 · structural 2.5 · manual 3.
+Kill-window clears and hard facts are outside the caps.
 
 ---
 
 ## 4. Alibi graph
 
-Nodes = players. Edges = `(a, b, room, [t₀, t₁], source)` meaning "a and b were
-together". Your own sightings produce edges to **you** (highest trust). Claims
-produce *pending* edges that become *confirmed* when the other party agrees and
-*contradicted* when they don't.
+Nodes = players. Edges = `(a, b, room, [t₀, t₁], status)`. My with-me toggles and group sightings
+are `trusted`; companion claims are `pending` → `confirmed` when mirrored → `contradicted` when a
+trusted sighting makes them impossible (using `travelLowerBound`). Kill-window clears flow from
+anchors (me + certain crew) one hop, ×0.7 for the second hop.
 
-### 4.1 Propagation rules
-- **Kill-window clear:** for each death with estimated window `[t_k⁻, t_k⁺]`, any
-  player with a trusted edge to a hard-cleared player covering the window is
-  cleared for that kill.
-- **Chain of trust:** trust flows along confirmed edges from hard-cleared players,
-  decaying by 0.7 per hop and never exceeding 1 hop from an *uncleared* claimant.
-- **Contradiction:** `Claim(a: "was with b in R at t")` and `Sighting(b in R' ≠ R at t±ε)` by
-  a trusted source → contradiction event, +w to `a` (and a flag on `b` if `b`
-  *agreed*).
-- **Dead player's last known position** is a strong anchor: whoever you last saw
-  near them gets a proximity edge to the death.
+---
 
-### 4.2 Geometry (from map data)
-Each map JSON has rooms, adjacency with travel seconds (normal speed), vent
-networks, task locations, visual tasks, common tasks, task durations. Used for:
-- **Reachability:** could X physically reach the body room from where you saw
-  them within the window? If not → cleared for that kill *unless* a vent connects
-  the two (then flag "vent-reachable only").
-- **Vent-only explanations:** if the *only* way X could have gotten from A to B
-  in time is a vent → +2.0 (near-hard).
+## 4b. Carry-over across meetings and roster changes
+
+- **Trend**: `SuspectScore.trend = [{meeting, probability}…]`: one point per completed meeting
+  (the match *as known then*: `snapshotAtMeeting` drops later rounds / claims / votes / chat,
+  revives players who died later and forgets roles revealed later), then `now`.
+  `delta = now − last completed meeting`. Snapshot results are memoised (warm `scoreAll` ≈ 10 ms on a
+  15-player, 8-meeting game).
+- **Merges / renames / removals**: every rule keys on player ids and refs on observation / claim /
+  vote ids, so `mergePlayers` (which repoints every PlayerId field) gives the surviving card exactly
+  the score it would have had without the alias (tested). Self-referencing claims a merge can create
+  (X accuses X, X "with" X) and duplicate votes are dropped. Removed junk cards say nothing.
 
 ---
 
@@ -214,3 +326,20 @@ The engine is only as good as what gets logged in the first 60 s of a round. So:
   "insufficient info — skip" rather than inventing a suspect.
 - Weights will be wrong at first. Phase 5 adds a post-match review that compares
   predictions to revealed roles and nudges weights.
+
+---
+
+## 8. No information advantage: what is deliberately NOT used
+
+Everything above comes from the local player's own screen or typing: own sightings, the chat
+everyone sees, the vote screen (only when anonymous votes are off), ejection text (only with
+confirm ejects on), own task list. No memory reading, no packets, no other players' roles. Where a
+signal would need hidden information (vote order / timing, other players' task lists, positions
+I didn't see) it is left out and the rule says so.
+
+## 9. Calibration
+
+`src/engine/__fixtures__/sim.ts` scripts whole games with an answer key the engine never sees;
+`calibration.test.ts` asserts, at the last meeting of each game: every impostor still in play
+ranks top-2; hard-cleared players ≤ 0.2; unresolved probabilities sum to the impostors at large;
+every evidence item has refs. Add a game there whenever a real match fooled the engine.

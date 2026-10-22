@@ -3,10 +3,14 @@
  * One small function per rule; each returns EvidenceItem[] with refs to the
  * observations it used. Weights come from data/tactics/weights.json.
  */
-import type { MatchState, EvidenceItem, BodyFoundObs, SightingObs, PlayerId } from '../types/game';
+import type { MatchState, EvidenceItem, BodyFoundObs, SightingObs, PlayerId, MarkReason } from '../types/game';
 import weightsJson from '../data/tactics/weights.json';
-import { isDeadEnd, reachableOnFoot, ventConnected } from './map';
+import { isDeadEnd } from './map';
+import { killWindow } from './feasibility';
 import { ev, fmt } from './evidence';
+import { markHistory, markLabel, markWeight } from './marks';
+import { chatAssertions, chatPlaced } from './chatEvidence';
+import { roundOfMeeting } from './history';
 
 const W = weightsJson;
 const roomName = (m: MatchState, r: string) => m.map.rooms.find(x => x.id === r)?.name ?? r;
@@ -19,23 +23,26 @@ const isAlone = (s: SightingObs) => s.alone ?? (!s.withPlayers || s.withPlayers.
 // Manual
 // ---------------------------------------------------------------------------
 
-/** The user's latest mark per player wins (toggling sus → clear → neutral replaces, never stacks). */
-export function userMarks(m: MatchState): Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }> {
-  const out = new Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }>();
-  for (const o of m.observations) {
-    if (o.type !== 'manualMark') continue;
-    if (o.mark === 'neutral') out.delete(o.player); else out.set(o.player, { mark: o.mark, id: o.id, round: o.stamp.round });
+/** The user's latest mark per player (for the card's mark chip). Scoring uses every mark in force: `markHistory`. */
+export function userMarks(m: MatchState): Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number; reason?: MarkReason }> {
+  const out = new Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number; reason?: MarkReason }>();
+  for (const [player, list] of markHistory(m)) {
+    const last = list[list.length - 1];
+    out.set(player, { mark: last.mark, id: last.id, round: last.round, reason: last.reason });
   }
   return out;
 }
 
+/** Sus / round-clear marks, one item per distinct reason in force (hard clears are hard facts in suspicion.ts). */
 export function ruleManualMarks(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
-  for (const [player, { mark, id }] of userMarks(m)) {
-    if (mark === 'hardClear') continue; // handled as a hard fact in suspicion.ts
-    const o = m.observations.find(x => x.id === id);
-    const w = (o && o.type === 'manualMark' && o.weight) || (mark === 'sus' ? W.manual.sus : W.manual.clear);
-    out.push(ev(player, w, 'manual', mark === 'sus' ? 'Marked sus by you' : 'Round-cleared by you', [id]));
+  for (const [player, list] of markHistory(m)) {
+    for (const k of list) {
+      if (k.mark === 'hardClear') continue;
+      const e = ev(player, markWeight(k.mark, k.reason, k.weight), 'manual', markLabel(k.mark, k.reason), [k.id]);
+      e.round = k.round;
+      out.push(e);
+    }
   }
   return out;
 }
@@ -76,10 +83,7 @@ export function ruleProximityToKill(m: MatchState): EvidenceItem[] {
         out.push(ev(s.player, W.movement.leavingBodyRoomBeforeReport, 'movement', `Seen leaving ${roomName(m, b.room)} toward ${roomName(m, s.heading)} just before the report`, [s.id, b.id], false, 'body_in_dead_end',
           { P: pname(m, s.player), R: roomName(m, b.room), T: fmt(s.stamp.t), V: pname(m, b.victim) }));
       }
-      const onFoot = reachableOnFoot(m.map, s.room, b.room, s.stamp.t, b.stamp.t, m.settings.playerSpeed);
-      if (!onFoot && ventConnected(m.map, s.room, b.room)) {
-        out.push(ev(s.player, W.movement.ventOnlyReachable, 'movement', `Could only reach ${roomName(m, b.room)} from ${roomName(m, s.room)} by vent`, [s.id, b.id], !m.map._verified.vents));
-      }
+      // Vent-only / unreachable: feasibility.ts (interval check over every sighting, not just this one).
     }
   }
   return out;
@@ -101,10 +105,24 @@ export function ruleLastSeenWithVictim(m: MatchState): EvidenceItem[] {
       }
     }
     if (last) {
-      out.push(ev(last.who, W.movement.stackingNearVictim, 'movement', `Last seen with ${pname(m, b.victim)} in ${roomName(m, last.s.room)} at ${fmt(last.s.stamp.t)}`, [last.s.id, b.id], false, 'last_seen_with_victim',
+      // game-knowledge `two_together_one_dies`: just the two of them, inside the kill window → very strong.
+      const pair = new Set([last.s.player, ...(last.s.withPlayers ?? [])]).size === 2;
+      const inWindow = last.s.stamp.t >= killWindow(m, b)[0];
+      const strong = pair && inWindow;
+      out.push(ev(last.who, strong ? W.movement.aloneWithVictimInWindow : W.movement.stackingNearVictim, 'movement',
+        `${strong ? 'Alone with' : 'Last seen with'} ${pname(m, b.victim)} in ${roomName(m, last.s.room)} at ${fmt(last.s.stamp.t)}${strong ? ' (kill window)' : ''}`, [last.s.id, b.id], false, 'last_seen_with_victim',
         { P: pname(m, last.who), V: pname(m, b.victim), R: roomName(m, last.s.room), T: fmt(last.s.stamp.t) }));
     }
   }
+  return out;
+}
+
+/** Players the chat of the meeting(s) discussing `round` places somewhere (chat-nlu location / task / with / saw). */
+function chatPlacedInRound(m: MatchState, round: number): Set<PlayerId> {
+  const roundOf = roundOfMeeting(m);
+  const assertions = chatAssertions(m);
+  const out = new Set<PlayerId>();
+  for (const k of new Set(assertions.map(a => a.meeting))) if (roundOf(k) === round) for (const p of chatPlaced(assertions, k)) out.add(p);
   return out;
 }
 
@@ -123,10 +141,76 @@ export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
       if (o.type === 'sabotage') o.fixers?.forEach(p => mentioned.add(p));
     }
     for (const c of m.claims) if (c.stamp.round === round) { mentioned.add(c.by); if (c.about) mentioned.add(c.about); }
+    for (const p of chatPlacedInRound(m, round)) mentioned.add(p);
     const bodyIds = bodies(m).filter(b => b.stamp.round === round).map(b => b.id);
     for (const p of Object.values(m.players)) {
       if (p.isMe || p.status !== 'alive' || mentioned.has(p.id)) continue;
       out.push(ev(p.id, W.movement.unaccountedWholeRound, 'movement', `Nobody vouches for them in round ${round + 1}`, bodyIds));
+    }
+  }
+  return out;
+}
+
+/**
+ * Mentioned somewhere in the round, but nothing places them inside a kill window: no sighting,
+ * no with-me stretch, no task seen, not at the body, no location / companion claim covering it.
+ * (Players nobody mentioned at all already get ruleUnaccounted; this does not stack on that.)
+ */
+export function ruleUnaccountedKillWindow(m: MatchState): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const wholeRound = new Set(ruleUnaccounted(m).map(e => `${e.player}|${e.refs.join(',')}`));
+  for (const b of bodies(m)) {
+    const [w0, w1] = killWindow(m, b);
+    const overlaps = (a0: number, a1: number) => a0 <= w1 + 5 && a1 >= w0 - 5;
+    const placed = new Set<PlayerId>();
+    const open = new Map<PlayerId, number>();
+    for (const o of m.observations) {
+      if (o.stamp.round !== b.stamp.round) continue;
+      const t = o.stamp.t;
+      if (o.type === 'sighting' && overlaps(t, t)) { placed.add(o.player); o.withPlayers?.forEach(p => placed.add(p)); }
+      if (o.type === 'sawTask' && overlaps(t - (o.durationSec ?? 0), t)) placed.add(o.player);
+      if (o.type === 'withMe') {
+        if (o.on) open.set(o.player, t);
+        else { const t0 = open.get(o.player); if (t0 !== undefined && overlaps(t0, t)) placed.add(o.player); open.delete(o.player); }
+      }
+      if (o.type === 'sabotage' && overlaps(t, t)) o.fixers?.forEach(p => placed.add(p));
+    }
+    for (const [p, t0] of open) if (t0 <= w1 + 5) placed.add(p);
+    for (const p of chatPlacedInRound(m, b.stamp.round)) placed.add(p); // chat statements carry no time: whole round
+    if (b.reporter) placed.add(b.reporter);
+    b.present?.forEach(p => placed.add(p));
+    for (const c of m.claims) {
+      if (c.stamp.round !== b.stamp.round || (c.type !== 'location' && c.type !== 'companion' && c.type !== 'sighting')) continue;
+      const [a0, a1] = c.timeWindow ?? [0, 1e9];
+      if (!overlaps(a0, a1)) continue;
+      if (c.type === 'location' || c.type === 'companion') placed.add(c.by);
+      if ((c.type === 'companion' || c.type === 'sighting') && c.about) placed.add(c.about);
+    }
+    const roundBodies = bodies(m).filter(x => x.stamp.round === b.stamp.round).map(x => x.id).join(',');
+    for (const p of Object.values(m.players)) {
+      if (p.isMe || p.status !== 'alive' || placed.has(p.id) || p.id === b.victim) continue;
+      if (wholeRound.has(`${p.id}|${roundBodies}`)) continue;
+      const e = ev(p.id, W.movement.unaccountedKillWindow, 'movement', `Nobody places them during the ${roomName(m, b.room)} kill window (${fmt(w0)}–${fmt(w1)})`, [b.id]);
+      e.round = b.stamp.round;
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+/** At the body with only the reporter (2-person find): opportunity, mild. */
+export function rulePresentAtBody(m: MatchState): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  for (const b of bodies(m)) {
+    if (!b.reporter || !b.present) continue;
+    const group = new Set([b.reporter, ...b.present]);
+    group.delete(b.victim);
+    if (group.size !== 2) continue;
+    for (const p of group) {
+      if (p === b.reporter || p === m.me) continue;
+      const e = ev(p, W.movement.presentAtBodySmallGroup, 'movement', `At the ${roomName(m, b.room)} body with only ${pname(m, b.reporter)}`, [b.id]);
+      e.round = b.stamp.round;
+      out.push(e);
     }
   }
   return out;
@@ -139,8 +223,14 @@ export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
 export function ruleTaskObservations(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
   for (const o of m.observations) {
-    if (o.type !== 'sawTask' || o.visualConfirmed) continue;
+    if (o.type !== 'sawTask') continue;
     const task = o.taskId ? m.map.tasks.find(t => t.id === o.taskId) : undefined;
+    if (o.visualConfirmed) {
+      // Hard clear in suspicion.ts when the task is visual on THIS map (or unnamed). Otherwise it is only "seen at a task".
+      if (!m.settings.visualTasksOn || !task || task.visual) continue;
+      out.push(ev(o.player, W.task.sawNonVisualTask, 'task', `Seen at ${task.name} (not a visual task on ${m.map.name}: proves nothing hard)`, [o.id]));
+      continue;
+    }
     if (task && o.durationSec !== undefined) {
       const expected = task.stageDurationSec;
       const ratio = o.durationSec / Math.max(1, expected);
@@ -157,6 +247,16 @@ export function ruleTaskObservations(m: MatchState): EvidenceItem[] {
     }
   }
   return out;
+}
+
+/** With Engineers on, a vent is not proof (Engineers are crew and vent) — but it is still strong. */
+export function ruleVentWithEngineers(m: MatchState): EvidenceItem[] {
+  if (!m.settings.roles?.engineer) return [];
+  return m.observations.filter(o => o.type === 'sawVent').map(o => {
+    const e = ev((o as { player: PlayerId }).player, W.movement.sawVentEngineersOn, 'movement', `Seen venting in ${roomName(m, (o as { room: string }).room)} (Engineers are on: could be an Engineer)`, [o.id]);
+    e.round = o.stamp.round;
+    return e;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -195,5 +295,5 @@ export function ruleVotingPairs(m: MatchState): EvidenceItem[] {
 
 export const OBSERVATION_RULES: Array<(m: MatchState) => EvidenceItem[]> = [
   ruleManualMarks, ruleSelfReport, ruleProximityToKill, ruleLastSeenWithVictim, ruleUnaccounted,
-  ruleTaskObservations, ruleSabotage, ruleVotingPairs,
+  ruleTaskObservations, ruleSabotage, ruleVotingPairs, ruleUnaccountedKillWindow, rulePresentAtBody, ruleVentWithEngineers,
 ];

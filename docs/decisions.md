@@ -258,3 +258,47 @@ Consistency: once a full grid has set `rosterSize`, nothing can add a player, an
 instead of creating candidates.
 **Consequences:** a wrong user rename is also learned (fix it by renaming again: the
 latest typed spelling wins); the book forgets automatic names after 30 days.
+
+## ADR-024 — Suspicion is a whole-game, count-normalised, credibility-weighted score
+**Date:** 2026-10-22 (overnight session)
+**Status:** accepted (unit + calibration tested; not yet tuned on real match logs)
+**Why:** the old score reset its meaning every meeting, treated every chat accusation the same
+whoever said it, and showed probabilities that did not add up to anything. William wants a
+meter that is "intelligent and dynamic" and still explains every number.
+**Decision:** (1) two passes: pass 1 scores everything but chat; each player's pass-1
+probability becomes their credibility as a speaker; pass 2 adds social evidence
+(`chatEvidence.ts`, consuming chat-nlu's `ChatAssertion`) with diminishing returns across
+independent speakers. (2) Soft evidence decays per category (half-lives in `weights.json`;
+hard facts and structural patterns never). (3) A shared offset makes the probabilities of
+unresolved players sum to the impostors still at large (equals the classic prior when
+there is no evidence). (4) `SuspectScore` gains `trend` / `delta` (re-scoring the match as
+known at the end of each meeting, memoised), `summary`, `baseline`. (5) Impossible-travel
+verdicts use `travelLowerBound` (30 % / 3 s slack) and scale with the margin they miss by.
+**Consequences:** probabilities move when *other* players are cleared (correct, but the UI
+should show `baseline.label` so it is not surprising); a player's score can change when a
+speaker's credibility changes; snapshots make `scoreAll` ~10 ms warm / ~75 ms cold on a
+heavy 15-player game.
+
+## ADR-025 — Chat is read by a data-driven NLU into derived, confidence-weighted assertions
+**Date:** 2026-10-22 (session 5, chat-nlu agent)
+**Status:** accepted (Vitest: ~120 NLU fixtures; not yet watched on a live lobby)
+**Why:** the regex list in `chatClaims.ts` only understood clean, formulaic lines. Real
+chat is shorthand, misspelt, hedged and context-dependent ("White and Black" + "saw them
+do wires" is a clear, not an accusation). The suspicion engine also needs *how hard* and
+*how sure* each line is, and the UI must show the exact words behind every score.
+**Decision:** `src/engine/chatNlu/` (pure TS): `chatLexicon.json` (colours, per-map room
+and task aliases matched by room id OR name, verb classes, hedges/intensifiers, questions,
+noise, expansions) → tokenizer (longest phrase match, squashed letters, OCR digit fixes,
+capped OSA fuzzy: <=4 letters exact, 5-6 one edit, 7+ two, blocklist) → clause parser →
+meeting context (pronouns, "u", missing subjects, replies to who/where, bare mentions
+absorbed by later lines, agree lines, stance supersede). Output: `ChatAssertion` (game.ts)
+with polarity, strength, parse confidence, span/quote, why-trace and refs. Assertions are
+**computed on demand** from `MatchState.chat` (`parseMeetingChat`, `speakerProfiles`), never
+stored, so later lines can re-read earlier ambiguous ones and translations that arrive later
+are picked up automatically.
+`chatClaims.ts` keeps its API as a thin wrapper (claims are written once per line, so it
+only turns context-free readings with confidence >= 0.5 into Claims).
+**Consequences:** chat-derived Claims and assertions describe the same lines — consumers
+must not add both as evidence (see relay note from-chat-nlu.md). Mira/Airship/Fungle room
+ids in the lexicon are guesses matched by name; wrong names there make rooms unresolvable,
+never wrong.

@@ -9,6 +9,7 @@
  */
 import type { MatchState, PlayerId, RoomId, Claim, SightingObs } from '../types/game';
 import { walkSeconds } from './map';
+import { travelLowerBound } from './feasibility';
 
 export type EdgeStatus = 'trusted' | 'confirmed' | 'pending' | 'contradicted';
 
@@ -61,7 +62,7 @@ export function buildAlibiGraph(m: MatchState): AlibiEdge[] {
   }
 
   // 3. Companion claims → pending edges; mirrored claims confirm; trusted sightings contradict.
-  const companionClaims = m.claims.filter(c => c.type === 'companion' && c.about);
+  const companionClaims = m.claims.filter(c => c.type === 'companion' && c.about && c.about !== c.by); // a merge can fold a claim onto itself
   const roundOfClaim = (c: Claim) => c.stamp.round; // claims are made in the meeting that closes the round they describe
   for (const c of companionClaims) {
     const [t0, t1] = c.timeWindow ?? [0, ROUND_END];
@@ -90,7 +91,7 @@ export function contradictsTogether(m: MatchState, a: PlayerId, b: PlayerId, roo
       if (room && s.room !== room) {
         // Could they have walked from where I saw them to the claimed room within the window?
         const slack = Math.min(s.stamp.t - t0, t1 - s.stamp.t);
-        if (walkSeconds(m.map, s.room, room, m.settings.playerSpeed) > slack) return s.id;
+        if (travelLowerBound(walkSeconds(m.map, s.room, room, m.settings.playerSpeed)) > slack) return s.id;
       }
       // Seen alone while claiming company at that very moment.
       if (s.alone && (s.stamp.t >= t0 && s.stamp.t <= t1) && !room) return s.id;
@@ -101,7 +102,7 @@ export function contradictsTogether(m: MatchState, a: PlayerId, b: PlayerId, roo
     if (s.player !== a) continue;
     for (const u of sightings) {
       if (u.player !== b || Math.abs(u.stamp.t - s.stamp.t) > SIGHT_SLOP) continue;
-      if (s.room !== u.room && walkSeconds(m.map, s.room, u.room, m.settings.playerSpeed) > Math.abs(u.stamp.t - s.stamp.t) + 2) return s.id;
+      if (s.room !== u.room && travelLowerBound(walkSeconds(m.map, s.room, u.room, m.settings.playerSpeed)) > Math.abs(u.stamp.t - s.stamp.t)) return s.id;
     }
   }
   return null;

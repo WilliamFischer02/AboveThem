@@ -69,6 +69,11 @@ export interface LobbySettings {
   commonTasks: number;
   longTasks: number;
   shortTasks: number;
+  /**
+   * Special roles enabled in the lobby (all default off). They change what a sighting proves:
+   * Engineers (crew) can vent; a Shapeshifter can kill wearing someone else's look.
+   */
+  roles?: { engineer?: boolean; shapeshifter?: boolean; scientist?: boolean; guardianAngel?: boolean; tracker?: boolean; noisemaker?: boolean; phantom?: boolean };
 }
 
 // ---------------------------------------------------------------------------
@@ -168,9 +173,21 @@ export interface ManualMarkObs extends BaseObs {
   /** sus = soft suspicion; clear = round clear (soft); hardClear = you are certain (visual task, kill-window); neutral = unmark. */
   mark: 'sus' | 'clear' | 'hardClear' | 'neutral';
   weight?: number;
+  /** Why the user marked them (picked from SUS_REASONS / CLEAR_REASONS in engine/marks.ts). Each reason has its own weight. */
+  reason?: MarkReason;
 }
 
 export type UserMark = 'sus' | 'clear' | 'hardClear';
+
+/** Why a player is sus, as picked by the user in one click (labels + weights: engine/marks.ts, data/tactics/weights.json). */
+export type SusReason =
+  | 'proximityToBody' | 'unaccountedFor' | 'strangeBehavior' | 'followedMe' | 'fakeTasking'
+  | 'ventSound' | 'lyingInChat' | 'selfReport' | 'other';
+
+/** Why a player is (soft) clear, as picked by the user. */
+export type ClearReason = 'withMeWholeRound' | 'sawVisualTask' | 'taskBarMoved' | 'otherClear';
+
+export type MarkReason = SusReason | ClearReason;
 
 export type Observation =
   | SightingObs | WithMeObs | MyRoomObs | SawTaskObs | SawVentObs
@@ -345,7 +362,7 @@ export interface EvidenceItem {
   id: string;
   player: PlayerId;
   weight: number;           // log-odds contribution (+ = sus)
-  category: 'movement' | 'task' | 'meeting' | 'sabotage' | 'structural' | 'manual' | 'hard';
+  category: 'movement' | 'task' | 'meeting' | 'sabotage' | 'structural' | 'manual' | 'hard' | 'social';
   label: string;            // short human line
   refs: string[];           // observation/claim ids
   /** true if the rule depends on unverified map data */
@@ -354,6 +371,12 @@ export interface EvidenceItem {
   kind?: string;
   /** Template variables for that situation: P, R, T, W, V, TASK, P2, R2... */
   vars?: Record<string, string>;
+  /** Round this evidence is about (drives time decay). Derived from refs when the rule does not set it. */
+  round?: number;
+  /** Weight before time decay / shaky halving (set by scoreAll; `weight` is what was actually applied). */
+  baseWeight?: number;
+  /** 0..1 multiplier applied for age (1 = fresh; hard facts never decay). */
+  decay?: number;
 }
 
 export interface SuspectScore {
@@ -365,6 +388,14 @@ export interface SuspectScore {
   evidence: EvidenceItem[];
   /** Per-kill clears, for multi-impostor lobbies */
   clearedForKills: string[]; // bodyFound observation ids
+  /** Probability at the end of each completed meeting (oldest first), then `now`. For arrows / sparklines. */
+  trend?: { meeting: number; probability: number }[];
+  /** probability now − probability at the end of the last completed meeting (0 when there is none). */
+  delta?: number;
+  /** One line for the card: "2 accusations · alone near the Electrical body". */
+  summary?: string;
+  /** Where the score starts before evidence: impostors remaining among unresolved players. */
+  baseline?: { logOdds: number; label: string };
 }
 
 export interface MeetingQuestion {
@@ -498,4 +529,107 @@ export interface DoorLogReadObs extends BaseObs {
   entries: { player: PlayerId; t: number; sensor?: string }[];
   from: RoundTime;
   to: RoundTime;
+}
+
+// ---------------------------------------------------------------------------
+// Chat NLU (src/engine/chatNlu) — DERIVED from MatchState.chat on demand, never stored.
+// Owner: chat-nlu. Consumers: suspicion (evidence weights), UI (transcript badges).
+// ---------------------------------------------------------------------------
+
+export type ChatAssertionKind =
+  | 'accuse' | 'clear' | 'withMe' | 'sawTask' | 'sawVent' | 'sawKill' | 'location'
+  | 'selfReport' | 'bodyLocation' | 'voteCall' | 'skipCall' | 'question' | 'defense' | 'noise'
+  | 'sighting' | 'withOther' | 'task' | 'dead' | 'myColor';
+
+/** Why an accusation / clear was made, when the line says so. */
+export type ChatReason =
+  | 'sus' | 'vent' | 'kill' | 'selfReport' | 'followed' | 'fakeTask' | 'lying' | 'nearBody'
+  | 'leftBody' | 'stack' | 'its' | 'either' | 'bare' | 'visual' | 'scan' | 'task' | 'safe'
+  | 'withThem' | 'notSus' | 'notClear' | 'didnt';
+
+/** How the `about` players were found. */
+export type ChatResolution = 'direct' | 'fuzzy' | 'pronoun' | 'addressee' | 'context' | 'reply' | 'implicit';
+
+export interface ChatAssertion {
+  /** `${lineId}:${n}` — stable while the line exists. */
+  id: string;
+  /** ChatLine.id this assertion was read from. */
+  line: string;
+  meeting: number;
+  speaker: PlayerId;
+  kind: ChatAssertionKind;
+  /** Players the assertion is about (accused, cleared, sighted, companions). The speaker for self-defense / location / task. */
+  about: PlayerId[];
+  room?: RoomId;
+  taskId?: string;
+  /** sawKill only. */
+  victim?: PlayerId;
+  reason?: ChatReason;
+  /** Effect on `about`: +1 = more suspicious, -1 = less suspicious, 0 = information only. */
+  polarity: 1 | -1 | 0;
+  /** 0..1 how strongly the speaker means it ("kinda" lowers, "hard" / "100%" raises). */
+  strength: number;
+  /** 0..1 how sure the parser is about this reading (fuzzy matches, context guesses lower it). */
+  confidence: number;
+  /** skipCall: "dont skip". */
+  negated?: boolean;
+  /** question only. */
+  question?: 'where' | 'who' | 'why' | 'what' | 'proof' | 'how';
+  /** myColor only. */
+  color?: PlayerColor;
+  /** The text that was parsed (ChatLine.translated when present, else original). */
+  text: string;
+  /** Character span in `text` the assertion came from. */
+  span: [number, number];
+  /** text.slice(span[0], span[1]) — what the UI shows as "why". */
+  quote: string;
+  resolvedVia: ChatResolution;
+  /** Chat line ids this assertion depends on: its own line first, then context lines (pronoun antecedent, question answered). */
+  refs: string[];
+  /** Short human trace of the reading: "'them' = White, Black (prev line)", "kinda: strength x0.6". */
+  why: string[];
+  /** Set when a later line by the same speaker in the same meeting reversed this stance (id of that assertion). */
+  supersededBy?: string;
+}
+
+export interface StanceFlip {
+  target: PlayerId;
+  from: 1 | -1;
+  to: 1 | -1;
+  fromAssertion: string;
+  toAssertion: string;
+  fromMeeting: number;
+  toMeeting: number;
+  sameMeeting: boolean;
+}
+
+/** Per-speaker chat aggregates (src/engine/chatProfile.ts → speakerProfiles). */
+export interface SpeakerProfile {
+  player: PlayerId;
+  lines: number;
+  assertions: number;
+  /** Assertions with polarity +1 about someone else (accuse, voteCall, sawVent, sawKill, selfReport). */
+  accusations: number;
+  accused: PlayerId[];
+  /** Assertions with polarity -1 about someone else (clear, defense, sawTask, withMe). */
+  clears: number;
+  cleared: PlayerId[];
+  selfDefenses: number;
+  questions: number;
+  voteCalls: number;
+  skipCalls: number;
+  /** Other speakers who accused / cleared this player in chat. */
+  accusedBy: PlayerId[];
+  clearedBy: PlayerId[];
+  /** Times this speaker was the first to accuse a target in a meeting. */
+  firstAccusations: number;
+  /** Accusations made after >= 2 other speakers had already accused that target in the meeting. */
+  bandwagons: number;
+  flips: StanceFlip[];
+  /** Same meeting, own location stated as two different rooms. */
+  locationChanges: { meeting: number; rooms: RoomId[]; assertions: string[] }[];
+  /** 1 = never changed story; drops with in-meeting flips and location changes (cross-meeting flips count half). */
+  consistency: number;
+  /** Assertion ids everything above was computed from. */
+  refs: string[];
 }
