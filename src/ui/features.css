@@ -1,0 +1,50 @@
+/* Feature cards (src/ui/components/features/*). Additive and isolated: every rule is scoped
+   under .feat so it cannot collide with styles.css. Reuses the :root tokens from styles.css. */
+
+.feat { display: flex; flex-direction: column; gap: 6px; }
+.feat .feat-card {
+  background: var(--panel, #243244); border: 3px solid var(--ink, #0b0b0b); border-radius: var(--radius, 14px);
+  padding: 6px 9px; box-shadow: 0 3px 0 #000;
+}
+.feat details.feat-card > summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.feat details.feat-card > summary::-webkit-details-marker { display: none; }
+.feat details.feat-card > summary::before { content: '▸'; color: var(--muted, #9aa7bd); font-size: 12px; }
+.feat details.feat-card[open] > summary::before { content: '▾'; }
+.feat details.feat-card[open] > summary { margin-bottom: 6px; }
+.feat .feat-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted, #9aa7bd); }
+.feat .feat-line { font-size: 13px; line-height: 1.35; }
+.feat .feat-sub { font-size: 12px; color: var(--muted, #9aa7bd); }
+.feat .feat-big { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.feat .feat-ok { color: var(--ok, #2bd45a); }
+.feat .feat-warn { color: var(--warn, #F5B54B); }
+.feat .feat-bad { color: #ff5a5a; }
+.feat .feat-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.feat .feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 4px; }
+.feat .feat-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+  border: 2px solid var(--ink, #0b0b0b); font-size: 12px; font-weight: 700; background: var(--panel2, #1b2636);
+}
+.feat .feat-pill.ok { background: #1d5a33; }
+.feat .feat-pill.bad { background: #6a1717; }
+.feat .feat-pill.warn { background: #6b4a12; }
+.feat .feat-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink, #0b0b0b); display: inline-block; flex: none; }
+.feat .feat-meter { height: 8px; border-radius: 6px; background: #0f1626; border: 2px solid var(--ink, #0b0b0b); overflow: hidden; }
+.feat .feat-meter > i { display: block; height: 100%; background: linear-gradient(90deg, var(--ok, #2bd45a), var(--warn, #F5B54B), var(--danger, #C51111)); }
+.feat .feat-tap {
+  display: flex; align-items: center; gap: 4px; padding: 2px 5px; border-radius: 9px; cursor: pointer;
+  border: 2px solid var(--ink, #0b0b0b); background: var(--panel2, #1b2636); font-size: 12px; font-weight: 600;
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.feat .feat-tap:hover { filter: brightness(1.15); }
+.feat .feat-tap.on { outline: 2px solid var(--accent, #38FEDC); }
+.feat .feat-tap.dim { opacity: 0.5; }
+.feat .feat-tap .n { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent, #38FEDC); }
+.feat table.feat-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.feat table.feat-table th, .feat table.feat-table td { border: 1px solid var(--line, #3a4a60); padding: 2px 4px; text-align: left; }
+.feat table.feat-table th { color: var(--muted, #9aa7bd); font-weight: 600; }
+.feat .feat-stale-0 { opacity: 1; }
+.feat .feat-stale-1 { opacity: 0.85; }
+.feat .feat-stale-2 { opacity: 0.6; }
+.feat .feat-stale-3 { opacity: 0.4; }
+.feat ul.feat-list { margin: 0; padding-left: 16px; font-size: 13px; }
+.feat ul.feat-list li { margin: 1px 0; }
