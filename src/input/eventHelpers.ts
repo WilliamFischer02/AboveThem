@@ -81,6 +81,24 @@ export function watcherStalled(w: { running: boolean; last_frame_ms?: number; st
   return last > 0 && now - last > staleMs;
 }
 
+/**
+ * Settings for a match the auto layer creates. Special roles can't be read from the screen, so they come from
+ * the setup screen's presets: this lobby code's preset, else the most recently saved preset that has roles.
+ * Screen-read lobby settings (`pending`) override everything else but never touch `roles`.
+ */
+export function autoMatchSettings<S extends { map: string; roles?: Record<string, boolean | undefined> }>(
+  base: S, pending: Record<string, unknown>, map: string,
+  presets: Record<string, { savedAt: number; settings: { roles?: Record<string, boolean | undefined> } }>, code: string | null,
+): S {
+  const own = code ? presets[code]?.settings.roles : undefined;
+  const latest = Object.values(presets).filter(p => p.settings.roles && Object.values(p.settings.roles).some(Boolean))
+    .sort((a, b) => b.savedAt - a.savedAt)[0]?.settings.roles;
+  const roles = own ?? base.roles ?? latest;
+  const { roles: _drop, ...rest } = pending as Record<string, unknown> & { roles?: unknown };
+  void _drop;
+  return { ...base, ...rest, map, ...(roles ? { roles: { ...roles } } : {}) } as S;
+}
+
 /** "01:57" for the status line. */
 export function sinceLabel(ms: number): string {
   const d = new Date(ms);
