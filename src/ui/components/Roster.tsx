@@ -54,7 +54,8 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
   const settle = useCallback((commitPlain: boolean) => {
     const s = stripRef.current;
     if (!s) return;
-    if (commitPlain && s.plain) logMark(s.player, s.mode);
+    // The card may have been merged / removed (or the match rolled over) while the strip was open.
+    if (commitPlain && s.plain && useMatch.getState().match?.players[s.player]) logMark(s.player, s.mode);
     stripRef.current = null;
     setStrip(null);
   }, [logMark]);
@@ -67,6 +68,10 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
     stripRef.current = next;
     setStrip(next);
   }, [settle]);
+
+  // A new match (roll-over at a role card / lobby) drops a pending strip instead of committing it into the new game.
+  const matchId = useMatch(s => s.matchId);
+  useEffect(() => { stripRef.current = null; setStrip(null); }, [matchId]);
 
   // 3-second timeout → plain mark. Keyed on seq so a new strip restarts the clock.
   useEffect(() => {
