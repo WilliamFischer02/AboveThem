@@ -49,7 +49,7 @@ export function HeadlineBar({ h, scores, big = false, right, label, vote }: { h:
         <div className="hl-text">
           {label && <div className="hl-label">{label}</div>}
           <div className="hl-title">{h.title}</div>
-          {h.subtitle && <div className="hl-sub">{h.subtitle}</div>}
+          {h.subtitle && (!vote || h.kind === 'criticalVote' || h.kind === 'imDead') && <div className="hl-sub">{h.subtitle}</div>}
         </div>
         {right}
       </div>

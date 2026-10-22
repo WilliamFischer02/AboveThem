@@ -3,7 +3,7 @@ import type { MapData } from '../../types/game';
 import { mapChecks } from '../../engine/mapChecks';
 
 export function MapChecks({ map }: { map: MapData }) {
-  const checks = mapChecks(map, { button: true });
+  const checks = mapChecks(map, { maxCovers: 2 });
   if (checks.length === 0) return null;
   return (
     <div className="map-checks" title="What you can walk to and check on this map">
