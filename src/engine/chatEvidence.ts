@@ -84,10 +84,16 @@ export function claimsToAssertions(m: MatchState, skipLines: ReadonlySet<string>
 
 /** Every chat assertion the engine weighs: chat-nlu's reading, plus Claim records for lines it did not read. */
 export function chatAssertions(m: MatchState): ChatAssertion[] {
+  // Memoised on the chat / claims / players arrays (immutable per state): several rules ask per pass.
+  const hit = ASSERTION_CACHE.get(m.chat);
+  if (hit && hit.claims === m.claims && hit.players === m.players) return hit.out;
   const nlu = activeAssertions(parseAllChat(m));
   const readLines = new Set(nlu.map(a => a.line));
-  return [...nlu, ...claimsToAssertions(m, readLines)];
+  const out = [...nlu, ...claimsToAssertions(m, readLines)];
+  ASSERTION_CACHE.set(m.chat, { claims: m.claims, players: m.players, out });
+  return out;
 }
+const ASSERTION_CACHE = new WeakMap<object, { claims: unknown; players: unknown; out: ChatAssertion[] }>();
 
 /** Players a round's chat places somewhere (own location / task, "with X", "saw X in R"): used by the unaccounted rules. */
 export function chatPlaced(assertions: ChatAssertion[], meeting: number): Set<PlayerId> {

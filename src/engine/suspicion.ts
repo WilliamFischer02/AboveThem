@@ -26,6 +26,7 @@ import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
 import { assertionsToEvidence, chatAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
 import { speakerProfiles } from './chatProfile';
+import type { SpeakerProfile } from './chatNluTypes';
 import { aliveAtMeeting, completedMeetings, currentMeeting, deathOf, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
 import { impostorPairs, ruleMutualAlibiPair, type PairSignal } from './pairs';
 import { walkSeconds } from './map';
@@ -248,8 +249,7 @@ function combine(m: MatchState, hf: HardFacts, evidence: EvidenceItem[]): Combin
 // Social evidence, recurrence, witness contradictions
 // ---------------------------------------------------------------------------
 
-function credibilityFrom(m: MatchState, hf: HardFacts, pass1: Combined): (p: PlayerId) => SpeakerCred {
-  const profiles = speakerProfiles(m);
+function credibilityFrom(hf: HardFacts, pass1: Combined, profiles: Record<PlayerId, SpeakerProfile>): (p: PlayerId) => SpeakerCred {
   const byId = new Map(pass1.scores.map(s => [s.player, s]));
   return (p: PlayerId) => {
     if (hf.certainImpostors.has(p)) return speakerCredibility('certainImpostor', 1, pass1.baselineP);
@@ -328,7 +328,7 @@ function scoreCore(m: MatchState): SuspectScore[] {
   const knownAliveImp = Object.values(m.players).filter(p => p.status === 'alive' && hf.certainImpostors.has(p.id)).length;
   const social = annotate(m, [
     ...assertionsToEvidence(m, assertions, {
-      credibility: credibilityFrom(m, hf, pass1),
+      credibility: credibilityFrom(hf, pass1, profiles),
       certainCrew: hf.certainCrew,
       unknownImpostorsLeft: Math.max(0, hf.impostorsRemaining - knownAliveImp),
       profiles,
