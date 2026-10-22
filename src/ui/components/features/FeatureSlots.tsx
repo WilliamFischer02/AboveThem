@@ -11,6 +11,7 @@ import { MeetingMathCard } from './MeetingMathCard';
 import { LastSeenCard } from './LastSeenCard';
 import { SecurityCard } from './SecurityCard';
 import { AdminCheckCard } from './AdminCheckCard';
+import { VoteTracker } from './VoteTracker';
 import './shared';
 
 export function FeatureSlots() {
@@ -29,6 +30,7 @@ export function FeatureSlots() {
       {meeting && <KillWindowCard />}
       {meeting && <AdminCheckCard />}
       {(meeting || round) && <LastSeenCard open={meeting} />}
+      {(meeting || phase === 'ejection') && <VoteTracker open={phase === 'meetingVoting' || phase === 'ejection'} />}
     </div>
   );
 }
