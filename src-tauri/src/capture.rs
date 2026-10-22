@@ -101,7 +101,7 @@ pub mod win {
             let (width, height) = (fb.width(), fb.height());
             let data = fb.as_nopadding_buffer(&mut self.buf).to_vec();
             self.seq += 1;
-            *self.latest.lock().unwrap() = Some(Frame { width, height, bgra: data, t_wall_ms: now_ms(), seq: self.seq });
+            *self.latest.lock().unwrap_or_else(|e| e.into_inner()) = Some(Frame { width, height, bgra: data, t_wall_ms: now_ms(), seq: self.seq });
             Ok(())
         }
 
@@ -126,11 +126,18 @@ pub mod win {
 
     /// Start capturing the first window whose title contains `title_contains`.
     pub fn start(title_contains: &str, latest: Latest, min_interval_ms: u64) -> Result<Session, String> {
-        let window = Window::from_contains_name(title_contains).map_err(|e| format!("window '{title_contains}' not found: {e}"))?;
+        // The game's window is titled exactly "Among Us"; a browser tab or Discord window that merely contains
+        // the words must not win (from_contains_name takes the first match in Z-order).
+        let exact = Window::enumerate().ok().and_then(|ws| ws.into_iter().find(|w| w.title().map(|t| t == title_contains).unwrap_or(false)));
+        let window = match exact {
+            Some(w) => w,
+            None => Window::from_contains_name(title_contains).map_err(|e| format!("window '{title_contains}' not found: {e}"))?,
+        };
         let title = window.title().unwrap_or_else(|_| title_contains.to_string());
+        // UNVERIFIED: reusing the found handle (was a second lookup + expect(), which panicked if the window closed in between).
         let make = |border: DrawBorderSettings| {
             Settings::new(
-                Window::from_contains_name(title_contains).expect("window vanished"),
+                window,
                 CursorCaptureSettings::WithoutCursor,
                 border,
                 SecondaryWindowSettings::Default,
@@ -168,11 +175,11 @@ impl Default for CaptureState {
 
 impl CaptureState {
     pub fn status(&self) -> CaptureStatus {
-        let latest = self.latest.lock().unwrap();
+        let latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
         let (width, height, seq, age_ms) = latest.as_ref().map(|f| (f.width, f.height, f.seq, now_ms().saturating_sub(f.t_wall_ms))).unwrap_or((0, 0, 0, 0));
         #[cfg(windows)]
         let (running, title) = {
-            let s = self.session.lock().unwrap();
+            let s = self.session.lock().unwrap_or_else(|e| e.into_inner());
             (s.as_ref().map(|s| !s.is_finished()).unwrap_or(false), s.as_ref().map(|s| s.title.clone()))
         };
         #[cfg(not(windows))]
@@ -183,9 +190,9 @@ impl CaptureState {
     pub fn start(&self, title_contains: &str, min_interval_ms: u64) -> Result<CaptureStatus, String> {
         #[cfg(windows)]
         {
-            let mut s = self.session.lock().unwrap();
+            let mut s = self.session.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(old) = s.take() { old.stop(); }
-            *self.latest.lock().unwrap() = None;
+            *self.latest.lock().unwrap_or_else(|e| e.into_inner()) = None;
             *s = Some(win::start(title_contains, self.latest.clone(), min_interval_ms)?);
             drop(s);
             Ok(self.status())
@@ -200,12 +207,12 @@ impl CaptureState {
     pub fn stop(&self) {
         #[cfg(windows)]
         {
-            if let Some(old) = self.session.lock().unwrap().take() { old.stop(); }
+            if let Some(old) = self.session.lock().unwrap_or_else(|e| e.into_inner()).take() { old.stop(); }
         }
     }
 
     pub fn latest_frame(&self) -> Option<Frame> {
-        self.latest.lock().unwrap().clone()
+        self.latest.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

@@ -140,6 +140,17 @@ const MARKER_REGIONS: &[&str] = &["task_bar", "role_card", "meeting_header", "ej
 /// Nothing recognisable for this long (main menu, alt-tabbed, map open for ages) => treat as the lobby.
 const UNKNOWN_TO_LOBBY: Duration = Duration::from_secs(120);
 
+/// Ejection text gone and no meeting for this long => the next round is running (handoff #7: a round
+/// after an ejection was missed once, probably because neither the task bar nor REPORT was readable).
+const EJECTION_TO_ROUND: Duration = Duration::from_secs(5);
+
+/// The phase to assume when nothing positive was read this frame. UNVERIFIED live (needs a dead-player round).
+pub fn fallback_phase(current: Option<Phase>, eject_gone_for: Option<Duration>, unknown_for: Option<Duration>) -> Option<Phase> {
+    if current == Some(Phase::Ejection) && eject_gone_for.map(|d| d >= EJECTION_TO_ROUND).unwrap_or(false) { return Some(Phase::Round); }
+    if unknown_for.map(|d| d > UNKNOWN_TO_LOBBY).unwrap_or(false) && current != Some(Phase::Lobby) { return Some(Phase::Lobby); }
+    None
+}
+
 struct RegionTrack { hash: u64, stable: u32, text: String, dirty: bool }
 
 fn ocr_rect(f: &Frame, r: Rect, scale: u32) -> String {
@@ -205,14 +216,24 @@ pub fn start<R: Runtime>(app: AppHandle<R>, state: &WatcherState, latest: Latest
     if state.running.swap(true, Ordering::SeqCst) { return; }
     let running = state.running.clone();
     let shared = state.shared.clone();
-    let handle = std::thread::spawn(move || run_loop(app, running, shared, latest));
-    *state.handle.lock().unwrap() = Some(handle);
+    let handle = std::thread::spawn(move || {
+        // A panic anywhere in the loop (odd frame size, OCR surprise) must not leave `running` stuck at true:
+        // the frontend restarts a stopped watcher every 8 s, but never a "running" dead one.
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_loop(app, running.clone(), shared.clone(), latest)));
+        if let Err(e) = r {
+            let msg = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
+            eprintln!("watcher thread panicked: {msg}");
+        }
+        running.store(false, Ordering::SeqCst);
+        shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = false;
+    });
+    *state.handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
 }
 
 pub fn stop(state: &WatcherState) {
     state.running.store(false, Ordering::SeqCst);
-    if let Some(h) = state.handle.lock().unwrap().take() { let _ = h.join(); }
-    let mut s = state.shared.lock().unwrap();
+    if let Some(h) = state.handle.lock().unwrap_or_else(|e| e.into_inner()).take() { let _ = h.join(); }
+    let mut s = state.shared.lock().unwrap_or_else(|e| e.into_inner());
     s.status.running = false;
 }
 
@@ -245,13 +266,14 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut unreadable_pending: Vec<(String, u64)> = Vec::new();
     let mut me_dead_meeting: Option<u32> = None;
     let mut unknown_since: Option<Instant> = None;
+    let mut eject_gone_since: Option<Instant> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
-    { shared.lock().unwrap().status.running = true; }
+    { shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = true; }
 
     while running.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(200));
-        let Some(frame) = latest.lock().unwrap().clone() else { continue };
+        let Some(frame) = latest.lock().unwrap_or_else(|e| e.into_inner()).clone() else { continue };
         if frame.seq == last_seq { continue; }
         last_seq = frame.seq;
         let regions = Regions::default().for_frame(frame.width, frame.height);
@@ -355,7 +377,11 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             Some(_) => unknown_since = None,
             None => { if unknown_since.is_none() { unknown_since = Some(Instant::now()); } }
         }
-        let next = next.or_else(|| if unknown_since.map(|t| t.elapsed() > UNKNOWN_TO_LOBBY).unwrap_or(false) && detector.current != Some(Phase::Lobby) { Some(Phase::Lobby) } else { None });
+        // Ejection screen over (text gone, no meeting / lobby / role / end screen): start the clock for the round fallback.
+        if detector.current == Some(Phase::Ejection) && eject.is_none() && !meeting && !in_lobby && !role_card && !game_over {
+            eject_gone_since.get_or_insert_with(Instant::now);
+        } else { eject_gone_since = None; }
+        let next = next.or_else(|| fallback_phase(detector.current, eject_gone_since.map(|t| t.elapsed()), unknown_since.map(|t| t.elapsed())));
         if let Some(next) = next {
             if candidate == Some(next) { candidate_count += 1; } else { candidate = Some(next); candidate_count = 0; }
             // Leaving a meeting, the task bar shows for a moment before the ejection text: a round
@@ -403,7 +429,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 6. Lobby code.
         if let Some(code) = &lobby_code {
-            let mut s = shared.lock().unwrap();
+            let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
             if s.status.lobby_code.as_deref() != Some(code) {
                 s.status.lobby_code = Some(code.clone());
                 drop(s);
@@ -447,7 +473,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
         if let Some(room) = room_label_of(&text("room_label")) {
             if room != last_room && stable("room_label", 1) {
                 last_room = room.clone();
-                shared.lock().unwrap().status.room = Some(room.clone());
+                shared.lock().unwrap_or_else(|e| e.into_inner()).status.room = Some(room.clone());
                 let _ = app.emit(EV_ROOM, room);
             }
         } else { last_room.clear(); }
@@ -468,7 +494,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if !chat_open && since.elapsed() > Duration::from_millis(1200) && last_roster_read.elapsed() > Duration::from_secs(4)
                 && (last_roster.len() > 0 || brightness_factor(&frame) < 1.12 || since.elapsed() > Duration::from_secs(6)) {
                 last_roster_read = Instant::now();
-                let known = shared.lock().unwrap().known_names.clone();
+                let known = shared.lock().unwrap_or_else(|e| e.into_inner()).known_names.clone();
                 if let Ok(r) = read_vote_grid(&frame, &known) {
                     ocr_calls += r.entries.len() as u64;
                     if r.entries.len() >= 3 && r.entries != last_roster {
@@ -511,7 +537,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if changed {
                 last_chat_read = Instant::now();
                 if let Some((_, t)) = tracks.iter_mut().find(|(k, _)| k == "chat_panel") { t.dirty = false; }
-                let known = shared.lock().unwrap().known_names.clone();
+                let known = shared.lock().unwrap_or_else(|e| e.into_inner()).known_names.clone();
                 let t0 = Instant::now();
                 if let Ok(read) = read_chat_detailed(&frame, &known) {
                     ocr_calls += 1;
@@ -544,7 +570,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
 
         // 8. Status for the UI.
         {
-            let mut s = shared.lock().unwrap();
+            let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
             s.status.phase = detector.current.map(|p| phase_name(p).to_string());
             s.status.round = detector.round;
             s.status.meeting = detector.meeting;
@@ -558,7 +584,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             }
         }
     }
-    shared.lock().unwrap().status.running = false;
+    shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = false;
 }
 
 fn phase_name(p: Phase) -> &'static str {
@@ -630,6 +656,22 @@ mod tests {
         let f = load_fixture("round_cafeteria");
         let t = ocr_rect(&f, r.lobby_button, 2).to_uppercase();
         assert!(!(t.contains("WAITING") || t.contains("START")), "round frame must not look like the lobby: {t:?}");
+    }
+
+    #[test]
+    fn ejection_without_a_readable_round_marker_becomes_a_round_after_5s() {
+        let s = Duration::from_secs;
+        assert_eq!(fallback_phase(Some(Phase::Ejection), Some(s(6)), Some(s(6))), Some(Phase::Round));
+        assert_eq!(fallback_phase(Some(Phase::Ejection), Some(s(2)), Some(s(2))), None);
+        assert_eq!(fallback_phase(Some(Phase::MeetingDiscussion), Some(s(9)), None), None);
+        assert_eq!(fallback_phase(Some(Phase::Round), None, Some(s(121))), Some(Phase::Lobby));
+        assert_eq!(fallback_phase(Some(Phase::Lobby), None, Some(s(500))), None);
+        // A round entered this way counts: Ejection → Round increments the round number.
+        let mut d = PhaseDetector::default();
+        d.step(false, true, false, false, false);
+        d.step(false, false, true, false, false);
+        assert_eq!(d.step(false, false, false, false, true), Some(Phase::Round));
+        assert_eq!(d.round, 1);
     }
 
     #[test]

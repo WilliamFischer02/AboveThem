@@ -119,23 +119,23 @@ pub async fn read_roster(state: State<'_, CaptureState>, known_names: Option<Vec
 #[tauri::command]
 pub fn watcher_start(app: tauri::AppHandle, cap: State<CaptureState>, w: State<crate::watcher::WatcherState>) -> crate::watcher::WatcherStatus {
     crate::watcher::start(app, &w, cap.latest.clone());
-    w.shared.lock().unwrap().status.clone()
+    w.shared.lock().unwrap_or_else(|e| e.into_inner()).status.clone()
 }
 
 #[tauri::command]
 pub fn watcher_stop(w: State<crate::watcher::WatcherState>) -> crate::watcher::WatcherStatus {
     crate::watcher::stop(&w);
-    w.shared.lock().unwrap().status.clone()
+    w.shared.lock().unwrap_or_else(|e| e.into_inner()).status.clone()
 }
 
 #[tauri::command]
 pub fn watcher_status(w: State<crate::watcher::WatcherState>) -> crate::watcher::WatcherStatus {
-    w.shared.lock().unwrap().status.clone()
+    w.shared.lock().unwrap_or_else(|e| e.into_inner()).status.clone()
 }
 
 #[tauri::command]
 pub fn watcher_set_names(w: State<crate::watcher::WatcherState>, names: Vec<String>) {
-    w.shared.lock().unwrap().known_names = names;
+    w.shared.lock().unwrap_or_else(|e| e.into_inner()).known_names = names;
 }
 
 /// User set a colour by hand: remember the measured body pixels as an exact reference (persisted).
