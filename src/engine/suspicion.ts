@@ -24,7 +24,7 @@ import { VOTING_RULES } from './voting';
 import { killWindow, ruleKillFeasibility, travelLowerBound, vitalsReads } from './feasibility';
 import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
-import { assertionsToEvidence, chatAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
+import { assertionsToEvidence, chatAssertions, primeSnapshotChat, rawChat, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
 import { speakerProfiles } from './chatProfile';
 import type { SpeakerProfile } from './chatNluTypes';
 import { aliveAtMeeting, completedMeetings, currentMeeting, deathOf, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
@@ -337,7 +337,7 @@ function scoreCore(m: MatchState): SuspectScore[] {
 
   const roundOf = roundOfMeeting(m);
   const assertions = chatAssertions(m);
-  const profiles = speakerProfiles(m);
+  const profiles = speakerProfiles(m, rawChat(m));
   const knownAliveImp = Object.values(m.players).filter(p => p.status === 'alive' && hf.certainImpostors.has(p.id)).length;
   const social = annotate(m, [
     ...assertionsToEvidence(m, assertions, {
@@ -364,12 +364,16 @@ function scoreCore(m: MatchState): SuspectScore[] {
 const SNAP_CACHE = new Map<string, Map<PlayerId, number>>();
 function snapshotSignature(s: MatchState, k: number): string {
   const last = <T extends { id?: string }>(xs: T[]) => `${xs.length}:${xs.length ? (xs[xs.length - 1].id ?? '') : ''}`;
-  const roster = Object.values(s.players).map(p => `${p.id}/${p.name}/${p.status}/${p.knownRole}/${p.isPartner ? 1 : 0}/${p.isMe ? 1 : 0}`).sort().join(',');
+  // Names are left out on purpose (OCR re-spells them constantly; scores don't depend on them): the chat
+  // reading they influence is in the key instead.
+  const roster = Object.values(s.players).map(p => `${p.id}/${p.status}/${p.knownRole}/${p.isPartner ? 1 : 0}/${p.isMe ? 1 : 0}`).sort().join(',');
+  const chat = chatAssertions(s).map(a => `${a.id}:${a.kind}:${a.about.join('+')}:${a.polarity}`).join(',');
   return [s.id, k, s.me, s.myRole, JSON.stringify(s.settings), s.map.id, last(s.observations), last(s.claims), last(s.chat),
-    JSON.stringify(s.votes), JSON.stringify(s.ejections), roster, JSON.stringify(s.myTasks ?? [])].join('|');
+    JSON.stringify(s.votes), JSON.stringify(s.ejections), roster, chat, JSON.stringify(s.myTasks ?? [])].join('|');
 }
 function snapshotProbabilities(m: MatchState, k: number): Map<PlayerId, number> {
   const snap = snapshotAtMeeting(m, k);
+  primeSnapshotChat(snap, m, k);
   const sig = snapshotSignature(snap, k);
   const hit = SNAP_CACHE.get(sig);
   if (hit) return hit;

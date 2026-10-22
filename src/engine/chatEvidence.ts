@@ -24,7 +24,7 @@ import type { Claim, EvidenceItem, MatchState, PlayerId } from '../types/game';
 import type { ChatAssertion, ChatReason, SpeakerProfile } from './chatNluTypes';
 import weightsJson from '../data/tactics/weights.json';
 import { ev } from './evidence';
-import { activeAssertions, parseAllChat } from './chatNlu';
+import { activeAssertions, parseMeetingChat } from './chatNlu';
 
 const S = weightsJson.social;
 
@@ -87,13 +87,48 @@ export function chatAssertions(m: MatchState): ChatAssertion[] {
   // Memoised on the chat / claims / players arrays (immutable per state): several rules ask per pass.
   const hit = ASSERTION_CACHE.get(m.chat);
   if (hit && hit.claims === m.claims && hit.players === m.players) return hit.out;
-  const nlu = activeAssertions(parseAllChat(m));
-  const readLines = new Set(nlu.map(a => a.line));
+  const raw = rawChat(m);
+  const nlu = activeAssertions(raw);
+  // Claims carry chatLineId: a claim read from a line the NLU also read is the same statement (count once).
+  const readLines = new Set(raw.map(a => a.line));
   const out = [...nlu, ...claimsToAssertions(m, readLines)];
   ASSERTION_CACHE.set(m.chat, { claims: m.claims, players: m.players, out });
   return out;
 }
 const ASSERTION_CACHE = new WeakMap<object, { claims: unknown; players: unknown; out: ChatAssertion[] }>();
+
+/** chat-nlu's full reading (superseded / questions included), memoised per chat array + roster. */
+export function rawChat(m: MatchState): ChatAssertion[] {
+  const hit = RAW_CACHE.get(m.chat);
+  if (hit && hit.players === m.players) return hit.raw;
+  // parseAllChat = parseMeetingChat per meeting, independent of each other. A new chat line only changes the
+  // current meeting, so the others come from a content-keyed cache (lines + translations + the roster names /
+  // colours the parser resolves against). Real logs: ~40 ms → ~1 ms per new line late in a game.
+  const roster = Object.values(m.players).map(p => `${p.id}/${p.name}/${p.color}/${p.status}`).sort().join(',');
+  const meetings = [...new Set(m.chat.map(l => l.meeting))].sort((a, b) => a - b);
+  const raw = meetings.flatMap(k => {
+    const lines = m.chat.filter(l => l.meeting === k);
+    const key = `${m.map.id}|${m.me}|${roster}|${k}|${lines.map(l => `${l.id}:${l.sender}:${l.original}:${l.translated ?? ''}`).join('\u0001')}`;
+    const cached = MEETING_CACHE.get(key);
+    if (cached) return cached;
+    const parsed = parseMeetingChat(m, k);
+    if (MEETING_CACHE.size > 200) MEETING_CACHE.delete(MEETING_CACHE.keys().next().value!);
+    MEETING_CACHE.set(key, parsed);
+    return parsed;
+  });
+  RAW_CACHE.set(m.chat, { players: m.players, raw });
+  return raw;
+}
+const RAW_CACHE = new WeakMap<object, { players: unknown; raw: ChatAssertion[] }>();
+const MEETING_CACHE = new Map<string, ChatAssertion[]>();
+
+/**
+ * A snapshot of an earlier meeting has the same chat lines for meetings ≤ k: reuse the full state's reading
+ * instead of re-parsing (chat parsing dominates scoring cost on real logs).
+ */
+export function primeSnapshotChat(snap: MatchState, full: MatchState, k: number): void {
+  RAW_CACHE.set(snap.chat, { players: snap.players, raw: rawChat(full).filter(a => a.meeting <= k) });
+}
 
 /** Players a round's chat places somewhere (own location / task, "with X", "saw X in R"): used by the unaccounted rules. */
 export function chatPlaced(assertions: ChatAssertion[], meeting: number): Set<PlayerId> {
@@ -350,9 +385,13 @@ export function ruleSilentInMeeting(m: MatchState, aliveAt: (p: PlayerId, meetin
     if (!closed.has(k)) continue;
     const speakers = new Set(lines.map(l => l.sender));
     if (lines.length < 4 || speakers.size < 2) continue;
-    for (const p of Object.values(m.players)) {
-      if (p.isMe || speakers.has(p.id) || !aliveAt(p.id, k)) continue;
-      if (m.claims.some((c: Claim) => c.by === p.id && c.meeting === k)) continue;
+    const silent = Object.values(m.players).filter(p => !p.isMe && !speakers.has(p.id) && aliveAt(p.id, k)
+      && !m.claims.some((c: Claim) => c.by === p.id && c.meeting === k));
+    const alive = Object.values(m.players).filter(p => !p.isMe && aliveAt(p.id, k)).length;
+    // Base-rate gate (real logs): OCR misses lines and misattributes senders, so when many are "silent"
+    // the capture is the problem, not the players. Only a silence that stands out (≤ 1/3 of the lobby) counts.
+    if (silent.length > Math.max(1, Math.floor(alive / 3))) continue;
+    for (const p of silent) {
       const e = ev(p.id, weightsJson.meeting.silentInMeeting, 'meeting', `Said nothing in meeting ${k + 1} while others talked`, lines.slice(0, 3).map(l => l.id));
       e.round = roundOf(k); out.push(e);
     }
