@@ -122,7 +122,7 @@ export function ruleCommonTaskClaims(m: MatchState): EvidenceItem[] {
 export function ruleAccusations(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
   const byMeeting = new Map<number, Claim[]>();
-  for (const c of m.claims) if (c.type === 'accusation' && c.about) (byMeeting.get(c.meeting) ?? byMeeting.set(c.meeting, []).get(c.meeting)!).push(c);
+  for (const c of m.claims) if (c.type === 'accusation' && c.about && c.about !== c.by) (byMeeting.get(c.meeting) ?? byMeeting.set(c.meeting, []).get(c.meeting)!).push(c);
   for (const [, list] of byMeeting) {
     const sorted = [...list].sort((a, b) => a.stamp.wall - b.stamp.wall);
     for (let i = 0; i < sorted.length; i++) {
@@ -146,7 +146,12 @@ export function ruleEjectionFeedback(m: MatchState): EvidenceItem[] {
     const voters = new Set(m.votes.filter(v => v.meeting === e.meeting && v.known && v.target === e.player).map(v => v.voter));
     const defenders = m.claims.filter(c => c.meeting <= e.meeting && (c.type === 'clear' || c.type === 'defense') && c.about === e.player);
     if (e.wasImpostor === false) {
-      for (const p of new Set([...accusers, ...voters])) if (p !== e.player) out.push(ev(p, W.meeting.pushedVoteOnCrew, 'meeting', `Pushed the vote on ${pname(m, e.player)}, who was crew`, [`ej${e.meeting}`]));
+      // Accusing (pushing) is a choice; voting along is weaker. One item per player, the stronger one.
+      for (const p of new Set([...accusers, ...voters])) {
+        if (p === e.player || p === m.me) continue;
+        if (accusers.has(p)) out.push(ev(p, W.meeting.pushedVoteOnCrew, 'meeting', `Pushed the vote on ${pname(m, e.player)}, who was crew`, [`ej${e.meeting}`]));
+        else out.push(ev(p, W.meeting.votedOffCrew, 'meeting', `Voted out ${pname(m, e.player)}, who was crew`, [`ej${e.meeting}`, `votes${e.meeting}`]));
+      }
     } else {
       for (const p of voters) if (p !== e.player) out.push(ev(p, W.meeting.votedImpostor, 'meeting', `Voted out ${pname(m, e.player)}, a confirmed impostor`, [`ej${e.meeting}`]));
       for (const d of defenders) {

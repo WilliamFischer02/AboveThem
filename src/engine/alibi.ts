@@ -61,7 +61,7 @@ export function buildAlibiGraph(m: MatchState): AlibiEdge[] {
   }
 
   // 3. Companion claims → pending edges; mirrored claims confirm; trusted sightings contradict.
-  const companionClaims = m.claims.filter(c => c.type === 'companion' && c.about);
+  const companionClaims = m.claims.filter(c => c.type === 'companion' && c.about && c.about !== c.by); // a merge can fold a claim onto itself
   const roundOfClaim = (c: Claim) => c.stamp.round; // claims are made in the meeting that closes the round they describe
   for (const c of companionClaims) {
     const [t0, t1] = c.timeWindow ?? [0, ROUND_END];

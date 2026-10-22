@@ -5,7 +5,8 @@
  */
 import type { MatchState, EvidenceItem, BodyFoundObs, SightingObs, PlayerId, MarkReason } from '../types/game';
 import weightsJson from '../data/tactics/weights.json';
-import { isDeadEnd, reachableOnFoot, ventConnected } from './map';
+import { isDeadEnd } from './map';
+import { killWindow } from './feasibility';
 import { ev, fmt } from './evidence';
 import { markHistory, markLabel, markWeight } from './marks';
 
@@ -80,10 +81,7 @@ export function ruleProximityToKill(m: MatchState): EvidenceItem[] {
         out.push(ev(s.player, W.movement.leavingBodyRoomBeforeReport, 'movement', `Seen leaving ${roomName(m, b.room)} toward ${roomName(m, s.heading)} just before the report`, [s.id, b.id], false, 'body_in_dead_end',
           { P: pname(m, s.player), R: roomName(m, b.room), T: fmt(s.stamp.t), V: pname(m, b.victim) }));
       }
-      const onFoot = reachableOnFoot(m.map, s.room, b.room, s.stamp.t, b.stamp.t, m.settings.playerSpeed);
-      if (!onFoot && ventConnected(m.map, s.room, b.room)) {
-        out.push(ev(s.player, W.movement.ventOnlyReachable, 'movement', `Could only reach ${roomName(m, b.room)} from ${roomName(m, s.room)} by vent`, [s.id, b.id], !m.map._verified.vents));
-      }
+      // Vent-only / unreachable: feasibility.ts (interval check over every sighting, not just this one).
     }
   }
   return out;
@@ -131,6 +129,70 @@ export function ruleUnaccounted(m: MatchState): EvidenceItem[] {
     for (const p of Object.values(m.players)) {
       if (p.isMe || p.status !== 'alive' || mentioned.has(p.id)) continue;
       out.push(ev(p.id, W.movement.unaccountedWholeRound, 'movement', `Nobody vouches for them in round ${round + 1}`, bodyIds));
+    }
+  }
+  return out;
+}
+
+/**
+ * Mentioned somewhere in the round, but nothing places them inside a kill window: no sighting,
+ * no with-me stretch, no task seen, not at the body, no location / companion claim covering it.
+ * (Players nobody mentioned at all already get ruleUnaccounted; this does not stack on that.)
+ */
+export function ruleUnaccountedKillWindow(m: MatchState): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const wholeRound = new Set(ruleUnaccounted(m).map(e => `${e.player}|${e.refs.join(',')}`));
+  for (const b of bodies(m)) {
+    const [w0, w1] = killWindow(m, b);
+    const overlaps = (a0: number, a1: number) => a0 <= w1 + 5 && a1 >= w0 - 5;
+    const placed = new Set<PlayerId>();
+    const open = new Map<PlayerId, number>();
+    for (const o of m.observations) {
+      if (o.stamp.round !== b.stamp.round) continue;
+      const t = o.stamp.t;
+      if (o.type === 'sighting' && overlaps(t, t)) { placed.add(o.player); o.withPlayers?.forEach(p => placed.add(p)); }
+      if (o.type === 'sawTask' && overlaps(t - (o.durationSec ?? 0), t)) placed.add(o.player);
+      if (o.type === 'withMe') {
+        if (o.on) open.set(o.player, t);
+        else { const t0 = open.get(o.player); if (t0 !== undefined && overlaps(t0, t)) placed.add(o.player); open.delete(o.player); }
+      }
+      if (o.type === 'sabotage' && overlaps(t, t)) o.fixers?.forEach(p => placed.add(p));
+    }
+    for (const [p, t0] of open) if (t0 <= w1 + 5) placed.add(p);
+    if (b.reporter) placed.add(b.reporter);
+    b.present?.forEach(p => placed.add(p));
+    for (const c of m.claims) {
+      if (c.stamp.round !== b.stamp.round || (c.type !== 'location' && c.type !== 'companion' && c.type !== 'sighting')) continue;
+      const [a0, a1] = c.timeWindow ?? [0, 1e9];
+      if (!overlaps(a0, a1)) continue;
+      if (c.type === 'location' || c.type === 'companion') placed.add(c.by);
+      if ((c.type === 'companion' || c.type === 'sighting') && c.about) placed.add(c.about);
+    }
+    const roundBodies = bodies(m).filter(x => x.stamp.round === b.stamp.round).map(x => x.id).join(',');
+    for (const p of Object.values(m.players)) {
+      if (p.isMe || p.status !== 'alive' || placed.has(p.id) || p.id === b.victim) continue;
+      if (wholeRound.has(`${p.id}|${roundBodies}`)) continue;
+      const e = ev(p.id, W.movement.unaccountedKillWindow, 'movement', `Nobody places them during the ${roomName(m, b.room)} kill window (${fmt(w0)}–${fmt(w1)})`, [b.id]);
+      e.round = b.stamp.round;
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+/** At the body with only the reporter (2-person find): opportunity, mild. */
+export function rulePresentAtBody(m: MatchState): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  for (const b of bodies(m)) {
+    if (!b.reporter || !b.present) continue;
+    const group = new Set([b.reporter, ...b.present]);
+    group.delete(b.victim);
+    if (group.size !== 2) continue;
+    for (const p of group) {
+      if (p === b.reporter || p === m.me) continue;
+      const e = ev(p, W.movement.presentAtBodySmallGroup, 'movement', `At the ${roomName(m, b.room)} body with only ${pname(m, b.reporter)}`, [b.id]);
+      e.round = b.stamp.round;
+      out.push(e);
     }
   }
   return out;
@@ -199,5 +261,5 @@ export function ruleVotingPairs(m: MatchState): EvidenceItem[] {
 
 export const OBSERVATION_RULES: Array<(m: MatchState) => EvidenceItem[]> = [
   ruleManualMarks, ruleSelfReport, ruleProximityToKill, ruleLastSeenWithVictim, ruleUnaccounted,
-  ruleTaskObservations, ruleSabotage, ruleVotingPairs,
+  ruleTaskObservations, ruleSabotage, ruleVotingPairs, ruleUnaccountedKillWindow, rulePresentAtBody,
 ];

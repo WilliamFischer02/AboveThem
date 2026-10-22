@@ -22,7 +22,8 @@
     "peeledOffFromGroup": 0.4,
     "ventOnlyReachable": 2.0,
     "unaccountedKillWindow": 0.3,
-    "couldNotReachBody": -1.5
+    "couldNotReachBody": -1.5,
+    "presentAtBodySmallGroup": 0.3
   },
   "task": {
     "taskNotAtClaimedLocation": 2.0,
@@ -114,7 +115,15 @@
     "credibilityHardCleared": 1.5,
     "credibilityFloor": 0.15,
     "impostorAccusesThem": -0.3,
-    "clearFromSuspect": 0.25
+    "clearFromSuspect": 0.25,
+    "voteCall": 0.4,
+    "eyewitness": 1.5,
+    "clearVisual": -1.0,
+    "sawTask": -0.6,
+    "withOther": -0.2,
+    "falseEyewitness": 2.0,
+    "vouchedByImpostor": 0.8,
+    "consistencyFloor": 0.5
   },
   "decay": {
     "_doc": "Soft evidence loses weight with age: weight x max(floor, 0.5^(rounds old / halfLife)). Hard facts never decay; a 0 half-life means never decays.",
