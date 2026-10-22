@@ -68,7 +68,7 @@ export function applyAction(a: ChordAction): void {
   const id = resolveTarget(m, a.target);
   if (!id) { s.showToast(`${targetLabel(a.target)} is not in this lobby`); return; }
   const who = pname(a.target);
-  const room = myRoomNow(m) ?? m.map.rooms[0]?.id ?? 'unknown';
+  const room = myRoomNow(m) ?? 'unknown'; // never invent a room (was rooms[0] = Cafeteria): 'unknown' fails soft in the engine
   switch (a.kind) {
     case 'sighting': s.observe({ type: 'sighting', player: id, room: a.room }, `${who} in ${roomName(m, a.room)}`); return;
     case 'withMe': {

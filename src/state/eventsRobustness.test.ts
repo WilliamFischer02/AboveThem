@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replay, parseLines, lastUndoable, type MatchEvent, type InitPayload } from './events';
+import { replay, parseLines, lastUndoable, repoint, type MatchEvent, type InitPayload } from './events';
 import { fixture } from '../engine/__fixtures__/skeld_match_01';
 
 const init: InitPayload = {
@@ -17,6 +17,19 @@ describe('event log robustness (resume after restart / newer builds)', () => {
     const m = replay(log);
     expect(m).not.toBeNull();
     expect(m!.observations).toHaveLength(1);
+  });
+
+  it('repoint follows door-log style arrays of objects, never mutates the input, and survives cycles', () => {
+    const obs = { type: 'doorLogRead', entries: [{ player: 'red', t: 3 }, { player: 'blue', t: 4 }], from: 0, to: 9 };
+    const frozen = JSON.parse(JSON.stringify(obs));
+    const out = repoint(obs, 'red', 'maroon');
+    expect(out.entries[0].player).toBe('maroon');
+    expect(out.entries[1]).toBe(obs.entries[1]); // untouched elements are shared, not copied
+    expect(obs).toEqual(frozen);                 // the input (shared log state) is unchanged
+    const cyc: Record<string, unknown> = { player: 'red' };
+    cyc.self = cyc;
+    expect(() => repoint(cyc, 'red', 'maroon')).not.toThrow();
+    expect(repoint(cyc, 'red', 'maroon').player).toBe('maroon');
   });
 
   it('parseLines skips null / number / half-written lines', () => {

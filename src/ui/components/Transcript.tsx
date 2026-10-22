@@ -46,7 +46,8 @@ export function Transcript() {
             </div>
             {mine.map(l => (
               <div key={l.id} className="tx-line">
-                <span className="msg">{l.translated ?? l.original}</span>
+                {/* A translation made from a look-alike guess is not a quote: show the original, the guess marked ≈. */}
+                <span className="msg">{l.translated && !l.xlatGuess ? l.translated : l.original}{l.translated && l.xlatGuess ? <span className="muted"> ≈ {l.translated}</span> : null}</span>
                 {(byLine.get(l.id) ?? []).filter(a => stance(a) && a.about.length).map(a => (
                   <span key={a.id} className={`tx-badge ${stance(a)} ${a.supersededBy ? 'gone' : ''}`} title={[a.quote ? `"${a.quote}"` : '', ...a.why].filter(Boolean).join(' · ')}>
                     {stance(a) === 'acc' ? '⚠' : '✔'} {a.about.map(name).join(', ')}

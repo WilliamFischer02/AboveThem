@@ -23,10 +23,20 @@ export interface VoteMatrix {
   tally: TallyResult;
 }
 
+/**
+ * Who could vote in `meeting`: everyone alive now plus whoever that meeting ejected. The results screen is read
+ * during / after the ejection, when the ejected player is no longer 'alive' — without them the tracker could
+ * neither record their vote nor the votes cast against them.
+ */
+export function meetingVoters(m: MatchState, meeting: number): PlayerId[] {
+  const ejected = new Set(m.ejections.filter(e => e.meeting === meeting && e.player).map(e => e.player as PlayerId));
+  return Object.values(m.players).filter(p => p.status === 'alive' || ejected.has(p.id)).map(p => p.id);
+}
+
 export function voteMatrix(m: MatchState, meeting: number, voters?: PlayerId[]): VoteMatrix {
   const votes = meetingVotes(m, meeting);
   const rows = [...votes.entries()].map(([voter, target]) => ({ voter, target }));
-  const pool = voters ?? Object.values(m.players).filter(p => p.status === 'alive').map(p => p.id);
+  const pool = voters ?? meetingVoters(m, meeting);
   return { meeting, rows, missing: pool.filter(p => !votes.has(p)), tally: tally(rows) };
 }
 

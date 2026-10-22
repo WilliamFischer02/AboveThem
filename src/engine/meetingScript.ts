@@ -74,8 +74,10 @@ export function buildMeetingScript(m: MatchState, scores: SuspectScore[], meetin
   const impRemaining = impostorsRemaining(m);
   const crewAlive = alive - impRemaining;
   // Critical: after one more kill the impostors could win (crew ≤ imp + 1), or it's already parity.
-  const critical = impRemaining > 0 && crewAlive <= impRemaining + 2;
-  const endgame = impRemaining > 0 && crewAlive <= impRemaining + 1;
+  // crewAlive > impRemaining: a roster that is not filled yet (only "me") must not read as the endgame.
+  const live = impRemaining > 0 && crewAlive > impRemaining;
+  const critical = live && crewAlive <= impRemaining + 2;
+  const endgame = live && crewAlive <= impRemaining + 1;
 
   // 1. Hard clears first — the most valuable thing you can say.
   const clears = scores.filter(s => s.verdict === 'certainCrew' || s.verdict === 'hardClear');

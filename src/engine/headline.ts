@@ -67,16 +67,18 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
   }
 
   const ranked = scores
-    .filter(s => s.verdict !== 'certainCrew' && s.verdict !== 'hardClear')
+    .filter(s => s.verdict !== 'certainCrew' && s.verdict !== 'hardClear' && Number.isFinite(s.probability))
     .filter(s => m.players[s.player]?.status === 'alive' && !m.players[s.player]?.isMe && s.player !== m.me)
     .sort((a, b) => b.probability - a.probability || b.logOdds - a.logOdds);
   const whyOf = (ss: SuspectScore[]) => ss.flatMap(s => [...s.evidence].filter(e => e.weight > 0).sort((a, b) => b.weight - a.weight).slice(0, 2).map(e => e.id));
   const topLabel = (s: SuspectScore) => [...s.evidence].filter(e => e.weight > 0).sort((a, b) => b.weight - a.weight)[0]?.label;
   const withPct = (s: SuspectScore) => `${name(s.player)} (${pct(s.probability)})`;
 
-  const { imp, margin } = voteMargin(m);
-  const critical = imp > 0 && margin <= 2;
-  const lastVote = imp > 0 && margin <= 1;
+  const { imp, crew, margin } = voteMargin(m);
+  // crew > imp: otherwise the game is already over — or, far more often, the roster is not filled yet
+  // (provisional match with only "me": alive 1, imp 2 → margin −3 read as "critical").
+  const critical = imp > 0 && crew > imp && margin <= 2;
+  const lastVote = critical && margin <= 1;
 
   let base: Headline;
   const confirmed = ranked.filter(s => s.verdict === 'certainImpostor');

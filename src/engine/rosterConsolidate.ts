@@ -81,10 +81,20 @@ export function sameIdentity(a: ConsolidatePlayer, b: ConsolidatePlayer): { same
   if (a.colorLocked && b.colorLocked && a.color !== b.color) return { same: false, why: 'colours set by hand' };
   const hd = hashDistance(a.iconHash, b.iconHash);
   if (hd <= 10) return { same: true, why: 'same headshot' };
+  const na = norm(a.name), nb = norm(b.name);
+  // Before the first vote grid, "Bob" / "Bobby" (one clean name inside another) can be two real people:
+  // merging on the name alone then loses a player. Require a second signal (the same known colour); OCR
+  // substitutions ("BigBihgis" / "BigBingus") are not containment and still merge on the name.
+  const preGrid = a.slot === undefined && b.slot === undefined;
+  // Real nested names share the start ("Bob"/"Bobby", "Alex"/"Alexander"); a lobby label whose start was hidden
+  // ("ymidland" for "Raymidland") is a suffix and still merges. A right-cut fragment waits for the grid (size cap holds it).
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  const contained = shorter.length >= 2 && longer.length - shorter.length >= 2 && longer.startsWith(shorter);
+  const knownSameColour = a.color === b.color && a.color !== 'unknown' && a.color !== 'gray';
+  if (preGrid && contained && nameQuality(a.name) >= 1 && nameQuality(b.name) >= 1 && !knownSameColour) return { same: false, why: 'names nest; wait for the vote grid' };
   const ns = nameScore(a.name, b.name);
   if (ns >= 0.6) return { same: true, why: `name ${a.name} ≈ ${b.name}` };
   // A short OCR fragment of a longer name ("ymidland" / "Raymidland", "tamin m" / "vitamin D").
-  const na = norm(a.name), nb = norm(b.name);
   if (na.length >= 4 && nb.length >= 4 && (nb.includes(na.slice(0, 4)) || na.includes(nb.slice(0, 4))) && similarity(na, nb) >= 0.45) return { same: true, why: `fragment ${a.name} ~ ${b.name}` };
   // Same known colour, never seen on the grid together: the same person when one card is nameless
   // ("(Black)", "#4"), one name is OCR noise ("eobältfÖ*" for "Gobaltfox"), or the names half-agree.

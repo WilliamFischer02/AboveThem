@@ -39,7 +39,8 @@ export function SusMeter({ score, hasEvidence }: { score?: SuspectScore; hasEvid
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const v = score?.verdict;
-  const p = score?.probability ?? 0;
+  const raw = score?.probability ?? 0;
+  const p = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0; // NaN / out-of-range must not render "NaN%"
   const trend = trendOf(score);
   let cls = '', label: string, fill: number, color: string;
   if (v === 'certainImpostor') { cls = 'imp'; label = '🔪 IMPOSTOR'; fill = 1; color = '#d8232a'; }
