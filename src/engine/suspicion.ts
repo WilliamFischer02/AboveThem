@@ -24,7 +24,7 @@ import { VOTING_RULES } from './voting';
 import { killWindow, ruleKillFeasibility, travelLowerBound, vitalsReads } from './feasibility';
 import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
-import { assertionsToEvidence, chatAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
+import { assertionsToEvidence, chatAssertions, primeSnapshotChat, rawChat, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
 import { speakerProfiles } from './chatProfile';
 import type { SpeakerProfile } from './chatNluTypes';
 import { aliveAtMeeting, completedMeetings, currentMeeting, deathOf, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
@@ -111,6 +111,13 @@ export function hardFacts(m: MatchState): HardFacts {
   const anchors = new Set<PlayerId>([m.me, ...crew]);
   const bodies = m.observations.filter((o): o is BodyFoundObs => o.type === 'bodyFound');
   const soloImpostor = m.settings.impostorCount === 1;
+  /** Was I dead by this round? (died that round or earlier; dead with no known time counts as dead: conservative.) */
+  const meDeadBy = (round: number): boolean => {
+    const d = deathOf(m, m.me);
+    if (d.diedRound !== undefined) return d.diedRound <= round;
+    if (d.ejectedMeeting !== undefined) return d.ejectedMeeting < round;
+    return m.players[m.me]?.status !== undefined && m.players[m.me]?.status !== 'alive';
+  };
   for (const b of bodies) {
     const [windowStart, windowEnd] = killWindow(m, b);
     const vitalsRefs = vitalsReads(m).filter(v => v.stamp.round === b.stamp.round && v.stamp.t <= b.stamp.t && (v.alive?.includes(b.victim) || v.dead?.includes(b.victim))).map(v => v.id);
@@ -120,13 +127,16 @@ export function hardFacts(m: MatchState): HardFacts {
       cleared.add(c.player);
       const via = c.via === m.me ? 'me' : pname(c.via);
       // One impostor in the lobby + with me (my own eyes) through the whole window = they did not kill = crew.
-      if (soloImpostor && c.hops === 1 && c.via === m.me && m.myRole !== 'impostor' && !imp.has(c.player)) {
+      // Only when the user CLOSED the with-me stretch after the window (an explicit "left me") and was alive:
+      // a toggle left on may be stale (they wandered off and nobody pressed the key), so that stays soft.
+      if (soloImpostor && c.hops === 1 && c.via === m.me && m.myRole !== 'impostor' && !imp.has(c.player) && !c.openEnded && !meDeadBy(b.stamp.round)) {
         crew.add(c.player);
         evidence.push(ev(c.player, -HARD, 'hard', `With me through the whole kill window for ${pname(b.victim)} (only 1 impostor)`, [...c.refs, b.id, ...vitalsRefs]));
         continue;
       }
       const w = c.hops === 1 ? -3 : -3 * 0.7;
-      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})`, [...c.refs, b.id, ...vitalsRefs]));
+      const stale = c.openEnded && c.via === m.me ? ' (toggle still on)' : c.openEnded ? ' (a with-me toggle still on)' : '';
+      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})${stale}`, [...c.refs, b.id, ...vitalsRefs]));
     }
     clearedForKill.set(b.id, cleared);
   }
@@ -337,7 +347,7 @@ function scoreCore(m: MatchState): SuspectScore[] {
 
   const roundOf = roundOfMeeting(m);
   const assertions = chatAssertions(m);
-  const profiles = speakerProfiles(m);
+  const profiles = speakerProfiles(m, rawChat(m));
   const knownAliveImp = Object.values(m.players).filter(p => p.status === 'alive' && hf.certainImpostors.has(p.id)).length;
   const social = annotate(m, [
     ...assertionsToEvidence(m, assertions, {
@@ -364,12 +374,16 @@ function scoreCore(m: MatchState): SuspectScore[] {
 const SNAP_CACHE = new Map<string, Map<PlayerId, number>>();
 function snapshotSignature(s: MatchState, k: number): string {
   const last = <T extends { id?: string }>(xs: T[]) => `${xs.length}:${xs.length ? (xs[xs.length - 1].id ?? '') : ''}`;
-  const roster = Object.values(s.players).map(p => `${p.id}/${p.name}/${p.status}/${p.knownRole}/${p.isPartner ? 1 : 0}/${p.isMe ? 1 : 0}`).sort().join(',');
+  // Names are left out on purpose (OCR re-spells them constantly; scores don't depend on them): the chat
+  // reading they influence is in the key instead.
+  const roster = Object.values(s.players).map(p => `${p.id}/${p.status}/${p.knownRole}/${p.isPartner ? 1 : 0}/${p.isMe ? 1 : 0}`).sort().join(',');
+  const chat = chatAssertions(s).map(a => `${a.id}:${a.kind}:${a.about.join('+')}:${a.polarity}`).join(',');
   return [s.id, k, s.me, s.myRole, JSON.stringify(s.settings), s.map.id, last(s.observations), last(s.claims), last(s.chat),
-    JSON.stringify(s.votes), JSON.stringify(s.ejections), roster, JSON.stringify(s.myTasks ?? [])].join('|');
+    JSON.stringify(s.votes), JSON.stringify(s.ejections), roster, chat, JSON.stringify(s.myTasks ?? [])].join('|');
 }
 function snapshotProbabilities(m: MatchState, k: number): Map<PlayerId, number> {
   const snap = snapshotAtMeeting(m, k);
+  primeSnapshotChat(snap, m, k);
   const sig = snapshotSignature(snap, k);
   const hit = SNAP_CACHE.get(sig);
   if (hit) return hit;

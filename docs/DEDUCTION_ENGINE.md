@@ -59,7 +59,7 @@ Code map (all pure TypeScript in `src/engine/`, Vitest-covered):
 | You saw X do a task that is **visual on this map** (`task.visual` in the map JSON; visuals ON) | X = **Crew**. Skeld: Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute; MIRA: Submit Scan only; Polus: Submit Scan, Clear Asteroids; Airship / Fungle: none. Never hard-code the list: read the map. A visual confirmation of a task that is not visual on this map is only a −0.3 soft clear; with no task id it stays hard but shaky |
 | You hard-cleared X (a mark) | X = **Crew** (a later round-clear does not undo it) |
 | Ejection "X was (not) The Impostor" | X = Impostor / Crew |
-| **1-impostor lobby**: X was with you (your own with-me toggle) through the **whole** kill window | X = **Crew** |
+| **1-impostor lobby**: X was with you through the **whole** kill window, you **turned the toggle off** after it ("left me"), and you were alive | X = **Crew**. A toggle still on at the report may be stale (they wandered off, nobody pressed the key): soft −3, labelled "(toggle still on)" |
 | 2+ impostors: X was with you / a certain crewmate through the kill window | cleared **for that kill** (−3, or −2.1 one hop away along a confirmed alibi edge) |
 | N impostors remain, N already certain | everyone else = Crew |
 | N impostors remain and exactly N uncertain alive | all of them = Impostor |
@@ -111,8 +111,8 @@ Electrical" from three rounds ago no longer outweighs today's evidence.
 | Last seen with the victim (otherwise) | +0.7 |
 | Self-reported alone (+0.4 in a dead end) | +0.8 |
 | At the body with only the reporter | +0.3 |
-| Nobody mentions them all round (kill round) | +0.4 |
-| Mentioned, but nobody places them in the kill window | +0.3 |
+| Nobody mentions them all round (kill round; **only if ≤ ½ of the lobby is unmentioned**) | +0.4 |
+| Mentioned, but nobody places them in the kill window (same gate) | +0.3 |
 | Could reach the body room in the window **only by vent** (my sightings, interval check) | +2.0 × margin trust |
 | **Could not** reach the body room in the window at all | −1.5 × margin trust |
 | Stood at a task far shorter/longer than its duration | +0.5 (shaky: durations unverified) |
@@ -151,7 +151,7 @@ eyeballed; *margin trust* scales the weight by how many seconds the on-foot rout
 | Voted out a confirmed impostor | −0.6 |
 | Skipped the vote that ejected an impostor | +0.4 |
 | Skipped on a critical vote (alive ≤ 2 × impostors + 1) | +0.4 |
-| Said nothing in a meeting where others talked (≥ 4 lines, ≥ 2 speakers; chat captured) | +0.25 |
+| Said nothing in a meeting where others talked (≥ 4 lines, ≥ 2 speakers; chat captured; **only if ≤ ⅓ of the lobby was silent**) | +0.25 |
 | Silent in the meeting after being near the body | +0.5 |
 | Location claim confirmed by my sighting / mutually confirmed companions | −0.5 / −1.0 |
 
@@ -343,3 +343,8 @@ I didn't see) it is left out and the rule says so.
 `calibration.test.ts` asserts, at the last meeting of each game: every impostor still in play
 ranks top-2; hard-cleared players ≤ 0.2; unresolved probabilities sum to the impostors at large;
 every evidence item has refs. Add a game there whenever a real match fooled the engine.
+
+**Real logs.** `__fixtures__/replayLogs.test.ts` replays every `%APPDATA%\AboveThem\matches\*.ndjson` (skipped when absent),
+scoring after every event: no throw, no NaN, probabilities in [0, 1], refs on every item, warm `scoreAll` < 50 ms
+(77 logs / 3,448 events: worst 38 ms, all of it chat-nlu re-parsing the current meeting). `REPLAY_DUMP=1` prints final rankings.
+The base-rate gates above came from this: on real OCR-driven games "silent" and "unaccounted" fired for most of the lobby.

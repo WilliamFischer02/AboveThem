@@ -108,7 +108,11 @@ export function contradictsTogether(m: MatchState, a: PlayerId, b: PlayerId, roo
   return null;
 }
 
-export interface KillClear { player: PlayerId; via: PlayerId; hops: number; refs: string[] }
+export interface KillClear {
+  player: PlayerId; via: PlayerId; hops: number; refs: string[];
+  /** The covering edge has no end: a "with me" toggle that was never turned off (could be stale). */
+  openEnded?: boolean;
+}
 
 /**
  * Who is cleared for a kill at (round, [wStart, wEnd])? Anyone with a trusted or
@@ -120,14 +124,14 @@ export function killWindowClears(edges: AlibiEdge[], anchors: Set<PlayerId>, rou
   const out = new Map<PlayerId, KillClear>();
   for (const e of covering) {
     for (const [p, q] of [[e.a, e.b], [e.b, e.a]] as const) {
-      if (anchors.has(q) && p !== q && !out.has(p)) out.set(p, { player: p, via: q, hops: 1, refs: e.refs });
+      if (anchors.has(q) && p !== q && !out.has(p)) out.set(p, { player: p, via: q, hops: 1, refs: e.refs, openEnded: e.t1 >= ROUND_END });
     }
   }
   // One extra hop through players cleared at hop 1, confirmed/trusted edges only.
   for (const e of covering) {
     for (const [p, q] of [[e.a, e.b], [e.b, e.a]] as const) {
       const viaClear = out.get(q);
-      if (viaClear && viaClear.hops === 1 && p !== q && !anchors.has(p) && !out.has(p)) out.set(p, { player: p, via: q, hops: 2, refs: [...viaClear.refs, ...e.refs] });
+      if (viaClear && viaClear.hops === 1 && p !== q && !anchors.has(p) && !out.has(p)) out.set(p, { player: p, via: q, hops: 2, refs: [...viaClear.refs, ...e.refs], openEnded: viaClear.openEnded || e.t1 >= ROUND_END });
     }
   }
   return [...out.values()];

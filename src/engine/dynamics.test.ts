@@ -5,6 +5,7 @@ import type { ChatAssertion } from './chatNluTypes';
 import { killFeasibility, killWindow, ventAssistedSeconds } from './feasibility';
 import { ruleRepeatedCrewEjections, ruleSkipWhenImpostorFound, ruleMinorityVoteBloc, ruleSkipOnCriticalVote } from './voting';
 import { snapshotAtMeeting, completedMeetings, currentMeeting, aliveAtMeeting } from './history';
+import { ruleUnaccounted } from './rules';
 import { reduce } from '../state/events';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { fixture2 } from './__fixtures__/skeld_match_02_two_imp';
@@ -78,11 +79,22 @@ describe('chat evidence (ChatAssertion contract v1)', () => {
   });
 
   it('silence: only judged when chat was captured and others talked', () => {
-    const lines = ['blue', 'white', 'blue', 'white'].map((s, i) => ({ id: `ch${i}`, meeting: 0, stamp: { round: 0, t: 60, wall: i }, sender: s, original: 'x', source: 'ocr' as const }));
-    const m: MatchState = { ...fixture3, chat: lines, ejections: [{ meeting: 0, player: null, wasImpostor: null }] };
+    const chat = (senders: string[]) => senders.map((s, i) => ({ id: `ch${i}`, meeting: 0, stamp: { round: 0, t: 60, wall: i }, sender: s, original: 'x', source: 'ocr' as const }));
+    const m: MatchState = { ...fixture3, chat: chat(['blue', 'white', 'green', 'white']), ejections: [{ meeting: 0, player: null, wasImpostor: null }] };
     const ev = ruleSilentInMeeting(m, (p, k2) => aliveAtMeeting(m, p, k2));
-    expect(ev.map(e => e.player).sort()).toEqual(['green', 'purple']);
+    expect(ev.map(e => e.player)).toEqual(['purple']); // the one quiet player among four
+    // Half the lobby "silent" = the capture missed lines, not evidence (base-rate gate from real logs).
+    const patchy: MatchState = { ...m, chat: chat(['blue', 'white', 'blue', 'white']) };
+    expect(ruleSilentInMeeting(patchy, (p, k2) => aliveAtMeeting(patchy, p, k2))).toHaveLength(0);
     expect(ruleSilentInMeeting(fixture3, () => true)).toHaveLength(0); // no chat → fail soft
+  });
+});
+
+describe('base-rate gates (from real logs)', () => {
+  it('"nobody vouches" only when it is a minority of the lobby', () => {
+    expect(ruleUnaccounted(fixture3).map(e => e.player)).toEqual(['purple']);
+    const bare: MatchState = { ...fixture3, observations: [fixture3.observations[0], { ...fixture3.observations[1], reporter: 'cyan', present: [] } as Observation] };
+    expect(ruleUnaccounted(bare)).toHaveLength(0); // I logged nothing: everyone "unaccounted" says nothing
   });
 });
 
