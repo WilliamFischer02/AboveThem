@@ -1,59 +1,170 @@
-import { useRef, useState } from 'react';
-import type { Player, PlayerColor, PlayerId, RoomId, SuspectScore } from '../../types/game';
+/**
+ * Roster: one horizontal card per living player (like the game's vote grid), sorted by
+ * suspicion or by grid order (toggle, remembered). Each card:
+ *   headshot · name + mark badge · suspicion meter (tap = why) · SUS / CLR / 👁 here / 👥 with me
+ * SUS and CLR open a 3-second "why?" strip: pick a reason (1 click), or click the same
+ * button again / press Enter / wait, and the plain mark is logged. Esc cancels.
+ * Clicking the card body opens the full menu (room grid, task, vent, kill, rename…).
+ * Dead / ejected / disconnected players collapse to a strip of small chips at the bottom.
+ * Keyboard: ↑/↓ move between cards, Enter opens the card menu, Esc closes it.
+ */
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { ManualMarkObs, Player, PlayerId, SuspectScore, UserMark } from '../../types/game';
 import { useMatch } from '../../state/store';
-import { Crewmate, PlayerIcon } from './Crewmate';
+import { PlayerIcon } from './Crewmate';
 import { Popover } from './Popover';
+import { CardMenu } from './CardMenu';
+import { SusMeter } from './SusMeter';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
-import { PALETTE, COLOR_IDS } from '../palette';
+import { PALETTE } from '../palette';
 import { useAuto } from '../App';
-import { isTauri } from '../../state/persist';
 import { userMarks } from '../../engine/rules';
-import type { UserMark } from '../../types/game';
+// MERGE: suspicion-core ships the real src/engine/marks.ts (same exports); this branch has a stub.
+import { CLEAR_REASONS, SUS_REASONS, markObservation, markToast, reasonInfo } from '../../engine/marks';
+import { usePref } from '../prefs';
 
-type MenuMode = 'main' | 'seen' | 'victim' | 'kill' | 'color' | 'rename';
+type SusId = (typeof SUS_REASONS)[number]['id'];
+type ClearId = (typeof CLEAR_REASONS)[number]['id'];
+type Reason = SusId | ClearId;
+type StripMode = 'sus' | 'clear';
+interface Strip { player: PlayerId; mode: StripMode; plain: boolean; seq: number }
+
+export const STRIP_MS = 3000;
+export type RosterSort = 'sus' | 'grid';
 
 export function Roster({ scores }: { scores: SuspectScore[] }) {
   const match = useMatch(s => s.match);
   const dispatch = useMatch(s => s.dispatch);
+  const observe = useMatch(s => s.observe);
   const auto = useAuto();
   const [open, setOpen] = useState<PlayerId | null>(null);
+  const [sort, setSort] = usePref<RosterSort>('rosterSort', 'sus');
+  const [strip, setStrip] = useState<Strip | null>(null);
+  const stripRef = useRef<Strip | null>(null);
+  stripRef.current = strip;
+  const seq = useRef(0);
+
+  const logMark = useCallback((player: PlayerId, mark: UserMark | 'neutral', reason?: Reason) => {
+    const m = useMatch.getState().match;
+    const name = m?.players[player]?.name ?? player;
+    observe(markObservation(player, mark, reason) as Parameters<typeof observe>[0], markToast(name, mark, reason));
+  }, [observe]);
+
+  /** Close the strip; if it was a pending plain mark, log it. */
+  const settle = useCallback((commitPlain: boolean) => {
+    const s = stripRef.current;
+    if (!s) return;
+    if (commitPlain && s.plain) logMark(s.player, s.mode);
+    stripRef.current = null;
+    setStrip(null);
+  }, [logMark]);
+
+  const openStrip = useCallback((player: PlayerId, mode: StripMode, plain: boolean) => {
+    const cur = stripRef.current;
+    if (cur && cur.player === player && cur.mode === mode) { settle(true); return; } // same button again = plain mark
+    if (cur) settle(true); // a different card/button: the previous pending mark still counts
+    const next = { player, mode, plain, seq: ++seq.current };
+    stripRef.current = next;
+    setStrip(next);
+  }, [settle]);
+
+  // 3-second timeout → plain mark. Keyed on seq so a new strip restarts the clock.
+  useEffect(() => {
+    if (!strip) return;
+    const t = setTimeout(() => settle(true), STRIP_MS);
+    return () => clearTimeout(t);
+  }, [strip?.seq, settle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Enter = plain mark now; Esc = cancel; 1-9 = pick that reason.
+  useEffect(() => {
+    if (!strip) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (e.key === 'Enter') { e.preventDefault(); settle(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); settle(false); }
+      else if (/^[1-9]$/.test(e.key)) {
+        const list = strip.mode === 'sus' ? SUS_REASONS : CLEAR_REASONS;
+        const r = list[Number(e.key) - 1];
+        if (r) { e.preventDefault(); stripRef.current = null; setStrip(null); logMark(strip.player, strip.mode, r.id); }
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [strip, settle, logMark]);
+
   if (!match) return null;
+
   if (auto?.meGuessed) {
     const pick = (id: PlayerId) => { dispatch({ kind: 'me', payload: { id } }); if (id !== 'me' && match.players['me']) dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); auto.setMeGuessed(false); };
     return (
       <section className="panel">
         <h3>Which crewmate is you?</h3>
-        <div className="roster">
+        <div className="gone-strip pick">
           {Object.values(match.players).filter(p => p.id !== 'me').map(p => (
-            <div key={p.id} className="chip" onClick={() => pick(p.id)}>
-              <PlayerIcon id={p.id} color={p.color} size={46} state={p.status === 'alive' ? 'alive' : 'dead'} />
-              <div className="name">{p.name}</div>
-            </div>
+            <button key={p.id} className="gone-chip big" onClick={() => pick(p.id)}>
+              <PlayerIcon id={p.id} color={p.color} size={40} state={p.status === 'alive' ? 'alive' : 'dead'} />
+              <span className="n">{p.name}</span>
+            </button>
           ))}
         </div>
       </section>
     );
   }
+
   const byId = Object.fromEntries(scores.map(s => [s.player, s]));
-  const rank = (p: Player) => (p.isMe ? -1e9 : p.status !== 'alive' ? 1e9 : -(byId[p.id]?.logOdds ?? 0));
-  const players = Object.values(match.players).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const all = Object.values(match.players);
+  const alive = all.filter(p => p.status === 'alive');
+  const gone = all.filter(p => p.status !== 'alive');
+  const susRank = (p: Player) => (p.isMe ? -1e9 : -(byId[p.id]?.logOdds ?? -50));
+  const gridRank = (p: Player) => (p.slot ?? 99);
+  const ordered = [...alive].sort((a, b) =>
+    (sort === 'sus' ? susRank(a) - susRank(b) : gridRank(a) - gridRank(b)) || a.name.localeCompare(b.name));
   const prime = scores.find(s => s.verdict === 'unknown' || s.verdict === 'softClear');
-  const primeId = prime && prime.evidence.some(e => e.weight > 0) ? prime.player : null;
+  const primeId = prime && prime.evidence.some(e => e.weight > 0) && prime.probability >= 0.45 ? prime.player : null;
   const lastObs = match.observations[match.observations.length - 1];
   const marks = userMarks(match);
+  const flashFor = (id: PlayerId) => (lastObs && 'player' in lastObs && lastObs.player === id ? lastObs.id : lastObs && lastObs.type === 'sawKill' && lastObs.killer === id ? lastObs.id : null);
+  const toggle = (id: PlayerId) => setOpen(o => (o === id ? null : id));
+  const close = () => setOpen(null);
+
   return (
-    <section className="panel">
-      <div className="row" style={{ marginBottom: 6 }}>
-        <h3>Roster<ConfidenceDot /></h3>
-        {match.rosterSize ? <span className="muted small" title={`${match.rosterSize} players on screen (${match.rosterSizeSource === 'grid' ? 'vote grid' : 'lobby counter'})`}>{Object.values(match.players).filter(p => p.status !== 'disconnected').length}/{match.rosterSize}</span> : null}
-        <button className="btn xs ghost right" title="Wrong people carried over: keep only me, refill from the lobby / next meeting" onClick={() => auto?.resetRoster()}>⟲ reset</button>
+    <section className="panel roster-panel">
+      <div className="roster-head">
+        <h3>Crew<ConfidenceDot /></h3>
+        <span className="muted small" title={match.rosterSize ? `${match.rosterSize} players on screen (${match.rosterSizeSource === 'grid' ? 'vote grid' : 'lobby counter'})` : 'alive players'}>
+          {alive.length} alive{match.rosterSize ? ` · ${all.filter(p => p.status !== 'disconnected').length}/${match.rosterSize}` : ''}
+        </span>
+        <button className="btn xs ghost right sort-btn" title={sort === 'sus' ? 'Sorted by suspicion — click for vote-grid order' : 'Vote-grid order — click to sort by suspicion'}
+          onClick={() => setSort(sort === 'sus' ? 'grid' : 'sus')}>{sort === 'sus' ? '⇅ most sus' : '⇅ grid'}</button>
       </div>
-      <div className="roster">
-        {players.map(p => (
-          <Chip key={p.id} p={p} score={byId[p.id]} mark={marks.get(p.id)?.mark} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onClose={() => setOpen(null)}
-            prime={p.id === primeId} flashKey={lastObs && 'player' in lastObs && lastObs.player === p.id ? lastObs.id : lastObs && lastObs.type === 'sawKill' && lastObs.killer === p.id ? lastObs.id : null} />
-        ))}
+      <div className="roster2" role="list">
+        {ordered.map(p => {
+          const mk = marks.get(p.id);
+          const obs = mk ? (match.observations.find(o => o.id === mk.id) as (ManualMarkObs & { reason?: string }) | undefined) : undefined;
+          return (
+            <Card key={p.id} p={p} score={byId[p.id]} mark={mk?.mark} reason={obs?.reason}
+              open={open === p.id} onToggle={() => toggle(p.id)} onClose={close}
+              prime={p.id === primeId} flashKey={flashFor(p.id)}
+              strip={strip && strip.player === p.id ? strip : null}
+              onMarkButton={(mode) => {
+                const cur = mk?.mark;
+                const already = mode === 'sus' ? cur === 'sus' : cur === 'clear' || cur === 'hardClear';
+                openStrip(p.id, mode, !already);
+              }}
+              onReason={(r) => { const s = stripRef.current; stripRef.current = null; setStrip(null); if (s) logMark(s.player, s.mode, r); }}
+              onHard={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'hardClear'); }}
+              onUnmark={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'neutral'); }}
+            />
+          );
+        })}
       </div>
+      {gone.length > 0 && (
+        <div className="gone-strip">
+          {gone.map(p => <GoneChip key={p.id} p={p} open={open === p.id} onToggle={() => toggle(p.id)} onClose={close} />)}
+        </div>
+      )}
     </section>
   );
 }
@@ -66,224 +177,105 @@ function ConfidenceDot() {
   return <span className={`conf-dot ${cls}`} title={title} />;
 }
 
-function Chip({ p, score, mark, open, onToggle, onClose, prime, flashKey }: { p: Player; score?: SuspectScore; mark?: UserMark; open: boolean; onToggle: () => void; onClose: () => void; prime?: boolean; flashKey?: string | null }) {
+function focusSibling(el: HTMLElement, dir: 1 | -1) {
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('.pcard'));
+  const i = cards.indexOf(el);
+  cards[i + dir]?.focus();
+}
+
+function Card({ p, score, mark, reason, open, onToggle, onClose, prime, flashKey, strip, onMarkButton, onReason, onHard, onUnmark }: {
+  p: Player; score?: SuspectScore; mark?: UserMark; reason?: string; open: boolean; onToggle: () => void; onClose: () => void;
+  prime?: boolean; flashKey?: string | null; strip: Strip | null;
+  onMarkButton: (mode: StripMode) => void; onReason: (r: Reason) => void; onHard: () => void; onUnmark: () => void;
+}) {
   const match = useMatch(s => s.match)!;
+  const observe = useMatch(s => s.observe);
   const ref = useRef<HTMLDivElement>(null);
-
   const withMe = !p.isMe && withMeNow(match, p.id);
-  const verdict = p.isMe ? null : score?.verdict ?? (p.status === 'alive' ? 'unknown' : null);
-  const hasEvidence = !!score && score.evidence.some(e => e.category !== 'hard' || e.weight < -50 || e.weight > 50);
-  const pct = score && hasEvidence ? Math.round(score.probability * 100) : null;
+  const verdict = p.isMe ? null : score?.verdict ?? 'unknown';
+  const hasEvidence = !!score && score.evidence.some(e => e.category !== 'hard' || Math.abs(e.weight) > 50 || e.weight < 0);
   const cleared = verdict === 'certainCrew' || verdict === 'hardClear' || p.knownRole === 'crew';
-  const state = p.status === 'alive' ? 'alive' : p.status === 'dead' ? 'dead' : p.status === 'ejected' ? 'ejected' : 'disconnected';
-  const markCls = mark === 'sus' ? 'mark-sus' : mark === 'clear' ? 'mark-clear' : mark === 'hardClear' ? 'mark-hard' : '';
-  return (
-    <div ref={ref} className={`chip ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${p.status !== 'alive' ? 'dead' : ''} ${prime && p.status === 'alive' && !mark ? 'prime' : ''} ${cleared && !p.isMe && p.status === 'alive' && !mark ? 'cleared' : ''} ${markCls}`} onClick={onToggle} title={PALETTE[p.color as keyof typeof PALETTE]?.label}>
-      {flashKey && <span className="flash" key={flashKey} />}
-      <PlayerIcon id={p.id} color={p.color} size={46} state={state} />
-      <div style={{ minWidth: 0 }}>
-        <div className={`name ${p.name.length > 16 ? 'vlong' : p.name.length > 11 ? 'long' : ''} ${(p.isMe && match.myRole === 'impostor') || p.isPartner ? 'red-name' : ''}`} title={p.name}>{p.name}{p.isMe && <span className="muted small"> (me)</span>}</div>
-        <div className="meta">
-          {p.status !== 'alive' && <span className="badge dim">{p.status}</span>}
-          {mark === 'sus' && <span className="badge sus">SUS</span>}
-          {mark === 'clear' && <span className="badge rclear">ROUND CLEAR</span>}
-          {mark === 'hardClear' && <span className="badge hclear">HARD CLEAR</span>}
-          {p.isPartner && <span className="badge imp">PARTNER</span>}
-          {p.knownRole === 'impostor' && !p.isPartner && <span className="badge imp">IMPOSTOR</span>}
-          {p.knownRole === 'crew' && !p.isMe && <span className="badge crew">CREW</span>}
-          {verdict === 'certainImpostor' && p.knownRole !== 'impostor' && <span className="badge imp">IMPOSTOR</span>}
-          {verdict === 'certainCrew' && p.knownRole !== 'crew' && <span className="badge crew">CLEAR</span>}
-          {verdict === 'hardClear' && <span className="badge crew">CLEAR</span>}
-          {verdict === 'softClear' && <span className="badge soft">SOFT</span>}
-          {withMe && <span className="badge with">WITH ME</span>}
-          {pct !== null && verdict !== 'certainCrew' && verdict !== 'certainImpostor' && <span className="pct">{pct}%</span>}
-          {!p.isMe && <span className="key" title="hotkey: prefix + this key, then room">{p.slot !== undefined ? p.slot % 10 : PALETTE[p.color as keyof typeof PALETTE]?.key}</span>}
-        </div>
-      </div>
-      {pct !== null && p.status === 'alive' && (
-        <div className="bar"><i style={{ width: `${verdict === 'certainImpostor' ? 100 : verdict === 'certainCrew' || verdict === 'hardClear' ? 0 : pct}%` }} /></div>
-      )}
-      {!p.isMe && p.status === 'alive' && <QuickActions p={p} />}
-      {!p.isMe && <MarkToggles p={p} mark={mark} />}
-      {open && <Popover anchorRef={ref} onClose={onClose}><ChipMenu p={p} onClose={onClose} /></Popover>}
-    </div>
-  );
-}
-
-/** One-click actions that cover ~80 % of what gets logged in a round. */
-function QuickActions({ p }: { p: Player }) {
-  const match = useMatch(s => s.match)!;
-  const observe = useMatch(s => s.observe);
   const here = myRoomNow(match);
-  const stop = (e: React.MouseEvent) => { e.stopPropagation(); };
-  const withMe = withMeNow(match, p.id);
-  return (
-    <div className="quick" onClick={stop} onMouseDown={stop}>
-      <button className="btn xs" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first (prefix + / + room)'} disabled={!here}
-        onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁 here</button>
-      <button className={`btn xs ${withMe ? 'primary' : ''}`} onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0]?.id ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>{withMe ? '✓ with me' : 'with me'}</button>
-    </div>
-  );
-}
-
-/** Your verdict on the card: sus / round clear / hard clear. Click again to unmark. Stays until the game ends. */
-function MarkToggles({ p, mark }: { p: Player; mark?: UserMark }) {
-  const observe = useMatch(s => s.observe);
-  const stop = (e: React.MouseEvent) => { e.stopPropagation(); };
-  const set = (m: UserMark) => {
-    if (mark === m) observe({ type: 'manualMark', player: p.id, mark: 'neutral' }, `${p.name} unmarked`);
-    else observe({ type: 'manualMark', player: p.id, mark: m }, `${p.name}: ${m === 'sus' ? 'sus' : m === 'clear' ? 'round clear' : 'hard clear'}`);
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const markCls = mark === 'sus' ? 'mark-sus' : mark === 'clear' ? 'mark-clear' : mark === 'hardClear' ? 'mark-hard' : '';
+  const nameCls = p.name.length > 12 ? 'vlong' : p.name.length > 9 ? 'long' : '';
+  const red = (p.isMe && match.myRole === 'impostor') || p.isPartner;
+  const rInfo = reasonInfo(reason as Reason | undefined);
+  const onKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusSibling(e.currentTarget, 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusSibling(e.currentTarget, -1); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
   };
+
   return (
-    <div className="marks" onClick={stop} onMouseDown={stop}>
-      <button className={`btn xs ${mark === 'sus' ? 'on-sus' : ''}`} title="Suspicious (soft evidence)" onClick={() => set('sus')}>sus</button>
-      <button className={`btn xs ${mark === 'clear' ? 'on-clear' : ''}`} title="Cleared for this round (soft)" onClick={() => set('clear')}>clear</button>
-      <button className={`btn xs ${mark === 'hardClear' ? 'on-hard' : ''}`} title="Hard clear: you are certain (visual task, kill window)" onClick={() => set('hardClear')}>hard</button>
-    </div>
-  );
-}
-
-/** Adjust a player's colour (OCR guesses warm colours badly). Swaps with whoever already has it. */
-function ColorPicker({ p, onDone }: { p: Player; onDone: () => void }) {
-  const match = useMatch(s => s.match)!;
-  const dispatch = useMatch(s => s.dispatch);
-  const showToast = useMatch(s => s.showToast);
-  const pick = (color: PlayerColor) => {
-    if (color === p.color) { onDone(); return; }
-    const other = Object.values(match.players).find(o => o.color === color && o.id !== p.id);
-    if (other) dispatch({ kind: 'player', payload: { id: other.id, color: p.color, colorLocked: true } });
-    dispatch({ kind: 'player', payload: { id: p.id, color, colorLocked: true } });
-    // Teach the detector: this player's measured body pixels now mean `color`.
-    const sample = useMatch.getState().bodySamples[p.id];
-    if (sample && isTauri()) import('@tauri-apps/api/core').then(({ invoke }) => invoke('calibrate_color', { color, rgb: sample, lift: true })).then(() => showToast(`Colour detector calibrated: ${PALETTE[color as keyof typeof PALETTE].label}`)).catch(() => {});
-    showToast(`${p.name} is ${PALETTE[color as keyof typeof PALETTE].label}${other ? `, ${other.name} is ${PALETTE[p.color as keyof typeof PALETTE]?.label ?? p.color}` : ''}`, true);
-    onDone();
-  };
-  return (
-    <div className="col" style={{ gap: 4 }}>
-      <div className="muted small">{p.name}'s colour</div>
-      <div className="colors" style={{ gridTemplateColumns: 'repeat(9, 1fr)' }}>
-        {COLOR_IDS.map(c => (
-          <div key={c} className={`color-pick ${p.color === c ? 'on' : ''}`} title={PALETTE[c].label} onClick={() => pick(c)} style={{ padding: 2 }}>
-            <Crewmate color={c} size={24} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
-  const match = useMatch(s => s.match)!;
-  const auto = useAuto();
-  const observe = useMatch(s => s.observe);
-  const dispatch = useMatch(s => s.dispatch);
-  const [mode, setMode] = useState<MenuMode>('main');
-  const [alone, setAlone] = useState(false);
-  const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
-  const done = () => { setMode('main'); onClose(); };
-  const others = Object.values(match.players).filter(o => o.id !== p.id && o.status === 'alive');
-
-  const rooms = (onPick: (r: RoomId) => void) => (
-    <div className="grid">
-      {match.map.rooms.map(r => (
-        <button key={r.id} className="btn sm" onClick={() => onPick(r.id)}><span className="key">{r.key}</span>{r.name}</button>
-      ))}
-    </div>
-  );
-
-  if (p.isMe) {
-    return (
-      <div className="menu-body">
-        <div className="muted small">Where am I?</div>
-        {rooms(r => { observe({ type: 'myRoom', room: r }, `Me → ${roomName(match, r)}`); done(); })}
-        <div className="row">
-          <button className="btn sm" onClick={() => { dispatch({ kind: 'myRole', payload: { role: match.myRole === 'impostor' ? 'crew' : 'impostor', locked: true } }); done(); }}>
-            I am {match.myRole === 'impostor' ? 'crew' : 'impostor'} this game
-          </button>
+    <div ref={ref} role="listitem" tabIndex={0} onKeyDown={onKey}
+      className={`pcard ${p.isMe ? 'me' : ''} ${open ? 'menu-open' : ''} ${prime && !mark ? 'prime' : ''} ${cleared && !p.isMe && !mark ? 'cleared' : ''} ${markCls} ${verdict === 'certainImpostor' ? 'imp' : ''}`}
+      onClick={onToggle} title={`${PALETTE[p.color as keyof typeof PALETTE]?.label ?? ''} — click for more`}>
+      {flashKey && <span className="flash" key={flashKey} />}
+      <span className="pc-icon"><PlayerIcon id={p.id} color={p.color} size={34} /></span>
+      <div className="pc-mid">
+        <div className={`pc-name ${nameCls} ${red ? 'red-name' : ''}`} title={p.name}>
+          {p.name}
+          {p.isMe && <span className="me-tag">YOU</span>}
         </div>
-        <ColorPicker p={p} onDone={done} />
+        {p.isMe ? (
+          <div className="pc-sub">📍 {here ? roomName(match, here) : <span className="muted">tap to set your room</span>}</div>
+        ) : (
+          <div className="pc-sub">
+            <SusMeter score={score} hasEvidence={hasEvidence} />
+            {mark === 'sus' && <span className="badge sus" title={rInfo?.evidence}>SUS{rInfo && rInfo.id !== 'other' ? ' · ' + rInfo.label : ''}</span>}
+            {mark === 'clear' && <span className="badge rclear" title={rInfo?.evidence}>CLR{rInfo && rInfo.id !== 'otherClear' ? ' · ' + rInfo.label : ''}</span>}
+            {mark === 'hardClear' && <span className="badge hclear">HARD</span>}
+            {p.isPartner && <span className="badge imp">PARTNER</span>}
+            {p.knownRole === 'impostor' && !p.isPartner && <span className="badge imp">IMP</span>}
+            {withMe && <span className="badge with">WITH ME</span>}
+          </div>
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div className="menu-body">
-      {mode === 'main' && (
-        <>
-          <div className="muted small">{p.name} seen in… <label className="check small" style={{ marginLeft: 8 }}><input type="checkbox" checked={alone} onChange={e => setAlone(e.target.checked)} /> alone</label></div>
-          {rooms(r => { observe({ type: 'sighting', player: p.id, room: r, alone }, `${p.name} in ${roomName(match, r)}${alone ? ' (alone)' : ''}`); done(); })}
-          <div className="row">
-            <button className="btn sm" onClick={() => { observe({ type: 'sawTask', player: p.id, room: here, visualConfirmed: true }, `${p.name} VISUAL task in ${roomName(match, here)}`); done(); }}>Saw visual task</button>
-            <button className="btn sm" onClick={() => { observe({ type: 'sawTask', player: p.id, room: here, visualConfirmed: false }, `${p.name} at a task in ${roomName(match, here)}`); done(); }}>At a task</button>
-          </div>
-          <div className="row">
-            <button className="btn sm danger" onClick={() => { observe({ type: 'sawVent', player: p.id, room: here }, `${p.name} VENTED`); done(); }}>Saw vent</button>
-            <button className="btn sm danger" onClick={() => setMode('kill')}>Saw kill…</button>
-          </div>
-          {(p.isPartner || p.knownRole === 'impostor' || match.myRole === 'impostor') && (
-            <div className="row">
-              {p.isPartner || p.knownRole === 'impostor'
-                ? <button className="btn sm primary" title="The read was wrong: this player is not an impostor" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, isPartner: false, knownRole: match.myRole === 'impostor' ? 'crew' : 'unknown', roleLocked: true } }); done(); }}>{p.isPartner ? 'Not my partner — crew' : 'Not an impostor'}</button>
-                : <button className="btn sm danger" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, isPartner: true, knownRole: 'impostor', roleLocked: true } }); done(); }}>This is my partner</button>}
-            </div>
-          )}
-          <div className="row">
-            {p.status === 'alive' && <button className="btn sm ghost" onClick={() => setMode('victim')}>Found dead…</button>}
-            {p.status === 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'disconnected' } }); done(); }}>Disconnected</button>}
-            {p.status !== 'alive' && <button className="btn sm ghost" onClick={() => { dispatch({ kind: 'player', payload: { id: p.id, status: 'alive' } }); done(); }}>Mark alive</button>}
-            <button className="btn sm ghost" onClick={() => setMode('color')}><Crewmate color={p.color} size={16} /> colour…</button>
-            <button className="btn sm ghost" onClick={() => setMode('rename')}>✎ rename</button>
-            <button className="btn sm ghost" title="Not a real player (OCR junk): never add this name again" onClick={() => { auto?.learnRemoved(p.name); dispatch({ kind: 'removePlayer', payload: { id: p.id } }); done(); }}>✕ remove</button>
-          </div>
-          <div className="row">
-            <span className="muted small">Chord: prefix + <span className="key">{PALETTE[p.color as keyof typeof PALETTE]?.key}</span> then room</span>
-          </div>
-        </>
+      {!p.isMe && (
+        <div className="pc-acts" onClick={stop} onMouseDown={stop}>
+          <button className={`act sus ${mark === 'sus' ? 'on' : ''} ${strip?.mode === 'sus' ? 'pending' : ''}`} title="Mark sus (then optionally say why)" onClick={() => onMarkButton('sus')}>SUS</button>
+          <button className={`act clr ${mark === 'clear' || mark === 'hardClear' ? 'on' : ''} ${strip?.mode === 'clear' ? 'pending' : ''}`} title="Mark clear (then optionally why / hard clear)" onClick={() => onMarkButton('clear')}>{mark === 'hardClear' ? 'HARD' : 'CLR'}</button>
+          <button className="act" title={here ? `Seen in ${roomName(match, here)} (my room)` : 'Set your room first: click your own card'} disabled={!here}
+            onClick={() => here && observe({ type: 'sighting', player: p.id, room: here }, `${p.name} in ${roomName(match, here)}`)}>👁</button>
+          <button className={`act ${withMe ? 'on-with' : ''}`} title={withMe ? 'With me — click when they leave' : 'With me'}
+            onClick={() => observe({ type: 'withMe', player: p.id, room: here ?? match.map.rooms[0]?.id ?? 'unknown', on: !withMe }, !withMe ? `${p.name} with me` : `${p.name} left me`)}>👥</button>
+        </div>
       )}
-      {mode === 'seen' && (
-        <>
-          <div className="muted small">{p.name} seen in…</div>
-          {rooms(r => { observe({ type: 'sighting', player: p.id, room: r, alone }, `${p.name} in ${roomName(match, r)}${alone ? ' (alone)' : ''}`); done(); })}
-          <div className="row">
-            <label className="check small"><input type="checkbox" checked={alone} onChange={e => setAlone(e.target.checked)} /> alone</label>
-            <button className="btn xs right" onClick={() => setMode('main')}>back</button>
-          </div>
-        </>
-      )}
-      {mode === 'victim' && (
-        <>
-          <div className="muted small">Body of {p.name} found in…</div>
-          {rooms(r => { observe({ type: 'bodyFound', victim: p.id, room: r }, `Body: ${p.name} in ${roomName(match, r)}`); done(); })}
-          <button className="btn xs" onClick={() => setMode('main')}>back</button>
-        </>
-      )}
-      {mode === 'rename' && (
-        <form className="row" onSubmit={e => { e.preventDefault(); const v = (new FormData(e.currentTarget).get('n') as string).trim(); if (v && v !== p.name) { dispatch({ kind: 'player', payload: { id: p.id, name: v, nameLocked: true } }); auto?.learnRename(p.name, v); } done(); }}>
-          <input className="input" name="n" defaultValue={p.name} autoFocus />
-          <button className="btn sm primary" type="submit">Save</button>
-          <button className="btn xs" type="button" onClick={() => setMode('main')}>back</button>
-        </form>
-      )}
-      {mode === 'color' && (
-        <>
-          <ColorPicker p={p} onDone={done} />
-          <button className="btn xs" onClick={() => setMode('main')}>back</button>
-        </>
-      )}
-      {mode === 'kill' && (
-        <>
-          <div className="muted small">{p.name} killed whom? (in {roomName(match, here)})</div>
-          <div className="grid">
-            {others.map(o => (
-              <button key={o.id} className="btn sm" onClick={() => { observe({ type: 'sawKill', killer: p.id, victim: o.id, room: here }, `${p.name} KILLED ${o.name}`); done(); }}>
-                <Crewmate color={o.color} size={18} /> {o.name}
-              </button>
-            ))}
-          </div>
-          <button className="btn xs" onClick={() => setMode('main')}>back</button>
-        </>
-      )}
+      {strip && <ReasonStrip key={strip.seq} strip={strip} mark={mark} onReason={onReason} onHard={onHard} onUnmark={onUnmark} />}
+      {open && <Popover anchorRef={ref} onClose={onClose}><CardMenu p={p} onClose={onClose} /></Popover>}
     </div>
+  );
+}
+
+function ReasonStrip({ strip, mark, onReason, onHard, onUnmark }: { strip: Strip; mark?: UserMark; onReason: (r: Reason) => void; onHard: () => void; onUnmark: () => void }) {
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const list = strip.mode === 'sus' ? SUS_REASONS : CLEAR_REASONS;
+  const marked = strip.mode === 'sus' ? mark === 'sus' : mark === 'clear' || mark === 'hardClear';
+  return (
+    <div className={`reason-strip ${strip.mode}`} onClick={stop} onMouseDown={stop}>
+      <span className="rs-q">{strip.plain ? 'Why?' : 'Add why:'}</span>
+      {list.map((r, i) => (
+        <button key={r.id} className="rs-btn" title={`${r.evidence} (key ${i + 1})`} onClick={() => onReason(r.id)}>{r.label}</button>
+      ))}
+      {strip.mode === 'clear' && mark !== 'hardClear' && <button className="rs-btn hard" title="You are certain (visual task, kill window)" onClick={onHard}>🛡 HARD</button>}
+      {marked && <button className="rs-btn un" title="Remove the mark" onClick={onUnmark}>✕ unmark</button>}
+      {strip.plain && <span className="rs-timer" style={{ animationDuration: `${STRIP_MS}ms` }} title="Logs a plain mark when this runs out (or press Enter)" />}
+    </div>
+  );
+}
+
+function GoneChip({ p, open, onToggle, onClose }: { p: Player; open: boolean; onToggle: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const state = p.status === 'alive' ? 'alive' : p.status === 'dead' ? 'dead' : p.status === 'ejected' ? 'ejected' : 'disconnected';
+  return (
+    <>
+      <button ref={ref} className={`gone-chip ${open ? 'menu-open' : ''}`} title={`${p.name} — ${p.status}`} onClick={onToggle}>
+        <PlayerIcon id={p.id} color={p.color} size={24} state={state} />
+        <span className="n">{p.name}</span>
+      </button>
+      {open && <Popover anchorRef={ref} onClose={onClose}><CardMenu p={p} onClose={onClose} /></Popover>}
+    </>
   );
 }
