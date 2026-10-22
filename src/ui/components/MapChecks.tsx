@@ -1,6 +1,6 @@
 /** Compact "what you can check on this map" chips (engine/mapChecks.ts). Hidden when the map has no info. */
 import type { MapData } from '../../types/game';
-import { mapChecks } from '../../engine/mapChecks';
+import { mapChecks } from '../../engine/mapLookouts';
 
 export function MapChecks({ map }: { map: MapData }) {
   const checks = mapChecks(map, { maxCovers: 2 });

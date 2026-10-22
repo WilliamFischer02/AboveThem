@@ -260,6 +260,31 @@ export function inferMapFromLabels(labels: string[], maps: MapData[]): MapGuess 
   return { map: top, score: s1, runnerUp: s2, hits };
 }
 
+/** Rooms on the fastest walking route from `from` to `to`, both ends included ([] if unknown / unreachable). */
+export function walkPath(map: MapData, from: RoomId, to: RoomId): RoomId[] {
+  const ids = new Set(map.rooms.map(r => r.id));
+  if (!ids.has(from) || !ids.has(to)) return [];
+  if (from === to) return [from];
+  const dist = new Map<RoomId, number>([[from, 0]]);
+  const prev = new Map<RoomId, RoomId>();
+  const done = new Set<RoomId>();
+  while (done.size < ids.size) {
+    let cur: RoomId | null = null; let best = Infinity;
+    for (const [r, d] of dist) if (!done.has(r) && d < best) { best = d; cur = r; }
+    if (cur === null) break;
+    done.add(cur);
+    if (cur === to) break;
+    for (const adj of map.rooms.find(r => r.id === cur)!.adjacent) {
+      const nd = best + adj.sec;
+      if (nd < (dist.get(adj.room) ?? Infinity)) { dist.set(adj.room, nd); prev.set(adj.room, cur); }
+    }
+  }
+  if (!prev.has(to)) return [];
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev.get(path[0])!);
+  return path;
+}
+
 /** Structural problems in a map file (empty array = valid). Used by the data tests; cheap enough for a debug panel. */
 export function validateMap(map: MapData): string[] {
   const errs: string[] = [];
