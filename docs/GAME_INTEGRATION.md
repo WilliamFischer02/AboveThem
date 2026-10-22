@@ -154,3 +154,52 @@ OCR gives us chat, roster, phase, own tasks, ejections. It cannot give us
 built around logging that in ≤ 2 keypresses (see `UI_SPEC.md`). The payoff is in
 meetings, where the app turns 6–10 half-remembered sightings into a ranked list
 of questions.
+
+---
+
+## 6. Per-map: what is detectable where
+
+The screen-reading layer (watcher regions, vote grid, chat, role card, eject text, lobby panel)
+is **map-independent**: every region is anchored to the HUD, not the map. What changes per map is
+the *data* the engine reasons with (`src/data/maps/<map>.json`) and which on-screen monitors exist.
+All 20 real-frame fixtures are Skeld/lobby frames; nothing map-specific has been captured on
+MIRA HQ, Polus, Airship or Fungle yet.
+
+### 6.1 How the map is known (in order of trust)
+1. **Lobby panel logo** (`map_name` region under "ROOM SETTINGS") → `game://map`. Rust `map_id_of`
+   (watcher.rs) searches the text for SKELD / MIRA(HQ) / POLUS / AIRSHIP / FUNGLE with OCR swaps
+   (0→O, 1→I, Q→O) and falls back to a per-line fuzzy match. TS mirror: `mapIdFromText` (engine/map.ts).
+2. **Lobby announcement** "Map set to …" (if the game prints one) → `game://settings`.
+3. **Inference from labels** — room-name popups (`game://room`) and task-list lines (`game://tasks`):
+   `inferMapFromLabels` scores names that exist on some maps but not all; it switches the match map only
+   when the leader is ≥ 1 point ahead and the lobby panel did not already say otherwise. Two or three
+   unique labels ("Laboratory: Fix Weather Node", "Launchpad") are enough.
+4. Otherwise the preset / default (Skeld). A detected map with no room data is still used (room rules
+   stand down) — the app never silently swaps in Skeld rooms for a known other map.
+
+### 6.2 Monitors and features per map (`MapData.info`)
+
+| Map | Admin | Cameras / view | Vitals | Doorlog | Visual tasks | Movement extras | Critical sabotage |
+|---|---|---|---|---|---|---|---|
+| The Skeld | Admin | Security (4 hallway cams) | — | — | Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute (Storage stage) | — | Reactor, O2 |
+| MIRA HQ | Admin | **none** | — | **Communications** (3 Hallway sensors) | **Submit Scan only** | Decontamination doors; ONE vent network (11 vents) | Reactor, O2 (Greenhouse + corridor S of Locker Room) |
+| Polus | Admin | Security (6 cams, mostly outdoors) | Office | — | Submit Scan, Clear Asteroids | Decontamination; silent vents | Seismic Stabilizers |
+| The Airship | Cockpit, Records | Security (7 cams) | Medical | — | **none** | Ladders, moving platform (Gap Room), spawn choice | Avert Crash Course (Gap Room) |
+| The Fungle | **none** | Lookout binoculars (Beach + Jungle, works during Comms) | Laboratory | — | **none** | Ladders, zipline (Storage ↔ Communications), Mushroom Mixup | Reactor |
+
+What the app can read from these: nothing automatically yet — Admin/cams/vitals/doorlog are screens the
+local player opens; reading them is a future OCR job (each is on the player's own screen, so it is
+legitimate). Until then they are **context for the meeting script** (which questions are worth asking:
+"who checked doorlog?" only makes sense on MIRA) and for rules (a visual-task clear is impossible on
+Airship/Fungle; on MIRA only Submit Scan clears).
+
+### 6.3 Map-specific caveats for detection
+- **Room-name popup** (`room_label`): outdoor zones are split in the data (Polus Outside Left/Right/Lava,
+  Airship's two balconies) but the game shows just "Outside" — those rooms carry `aliases: ["Outside"]`
+  and the popup can only narrow it to one of them.
+- **Fungle Mushroom Mixup**: colours and names on screen are randomised for ~10 s — sightings and
+  colour reads during it must not be trusted (no automatic detection of the mixup yet).
+- **Airship**: players choose their spawn after each meeting, so the first sightings of a round cluster
+  in `info.spawn.afterMeeting` rooms and say little about the previous round.
+- **MIRA**: every vent room reaches every other vent room — travel-time alibis must use
+  `couldReach(..., { vents: true })` for impostor checks.
