@@ -17,6 +17,7 @@ import { AutoStatus } from '../components/AutoStatus';
 import { useAuto } from '../App';
 import { GhostPanel } from '../components/GhostPanel';
 import { ImpostorPanel } from '../components/ImpostorPanel';
+import { FeatureSlots } from '../components/features/FeatureSlots'; // features
 
 function useNow(ms = 500) {
   const [, setTick] = useState(0);
@@ -82,6 +83,7 @@ export function MatchScreen() {
         {impostor && !ghost && <ImpostorPanel scores={scores} inMeeting={inMeeting} />}
         {script && !impostor && <MeetingPanel script={script} scores={scores} ghost={ghost} />}
         {script && impostor && !ghost && <details className="fold panel tight"><summary>What the crew engine sees (their likely vote)</summary><MeetingPanel script={script} scores={scores} ghost={true} /></details>}
+        {/* features */}<FeatureSlots />
         <Roster scores={scores} />
         <details className="fold panel tight"><summary>Timeline</summary><Timeline /></details>
         <details className="fold panel tight"><summary>Controls</summary>
