@@ -895,6 +895,7 @@
       "ask": "Admin had {N} in {R} at {T}. Who else was there?",
       "caveats": [
         "Admin is anonymous and updates as people move; allow +-5 s.",
+        "Admin icons include dead bodies until the next meeting.",
         "No admin observation type in the model yet."
       ],
       "wiredIn": null,

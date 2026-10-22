@@ -6,6 +6,9 @@ import { describe, it, expect } from 'vitest';
 import lie from './lieChecks.json';
 import crew from './crew.json';
 import impostor from './impostor.json';
+import slang from '../chatSlang.seed.json';
+import skeld from '../maps/skeld.json';
+import polus from '../maps/polus.json';
 
 const CONFIDENCE = ['hard', 'high', 'med', 'low'];
 const EFFECT = ['suspect', 'clear', 'invalidateClear', 'constraint'];
@@ -78,6 +81,34 @@ describe('crew.json situations', () => {
       const lines = mq[map] as string[];
       expect(Array.isArray(lines) && lines.length >= 5, map).toBe(true);
       for (const l of lines) expect(l.length, l).toBeLessThanOrEqual(70);
+    }
+  });
+});
+
+describe('chatSlang.seed.json', () => {
+  const COLORS = ['red', 'blue', 'green', 'pink', 'orange', 'yellow', 'black', 'white', 'purple', 'brown', 'cyan', 'lime', 'maroon', 'rose', 'banana', 'gray', 'tan', 'coral'];
+  const LANGS = ['en', 'es', 'pt', 'ru', 'fil', 'id'];
+
+  it('covers all 18 colours in every language', () => {
+    const colors = slang.colors as unknown as Record<string, Record<string, string[]>>;
+    for (const c of COLORS) for (const l of LANGS) expect(colors[c]?.[l]?.length, `${c}/${l}`).toBeGreaterThan(0);
+  });
+
+  it('skeld/polus room ids exist in the map data (edge: unknown id would never resolve)', () => {
+    const rooms = slang.rooms as unknown as Record<string, Record<string, string[]>>;
+    for (const [mapId, map] of [['skeld', skeld], ['polus', polus]] as const) {
+      const ids = new Set(map.rooms.map(r => r.id));
+      for (const id of Object.keys(rooms[mapId])) expect(ids.has(id), `${mapId}.${id}`).toBe(true);
+    }
+  });
+
+  it('every intent has an English list and lower-case surface forms', () => {
+    for (const [k, v] of Object.entries(slang.intents as Record<string, Record<string, string | string[]>>)) {
+      expect(Array.isArray(v.en) && v.en.length > 0, k).toBe(true);
+      for (const [lang, list] of Object.entries(v)) {
+        if (lang === 'src') continue;
+        for (const s of list as string[]) expect(s, `${k}/${lang}`).toBe(s.toLowerCase());
+      }
     }
   });
 });

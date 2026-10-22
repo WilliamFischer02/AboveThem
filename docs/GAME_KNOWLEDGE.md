@@ -59,7 +59,7 @@ Wiki pages were pulled on 2026-10-22 through the MediaWiki API (`api.php?action=
 | Setting | Range / steps | Default | Tag | Source |
 |---|---|---|---|---|
 | # Impostors | 1 / 2 / 3 | none (host picks) | F1 | [W:Options](https://among-us.fandom.com/wiki/Options) |
-| Max impostors by lobby size | 4–6 players: 1; 7–8: 2; 9+: 3 (game blocks higher) | — | **U** (from memory of decompiled `GameOptionsData`; not found in a fetched source) | — |
+| Max impostors by lobby size | 1 impostor needs ≥ 4 players, 2 need ≥ 7, 3 need ≥ 9 | — | F1 (wiki options screenshot, marked outdated; matches decompiled `GameOptionsData` from memory) | https://among-us.fandom.com/wiki/File:Options_screenshot_outdated.png |
 | Kill cooldown | 10 s – 60 s in 2.5 s steps | 45 s on the wiki options table; the `Core Settings` preset value is not documented | F1 / **U** (default) | [W:Options](https://among-us.fandom.com/wiki/Options), [W:Kill](https://among-us.fandom.com/wiki/Kill) |
 | Kill distance | Short / Medium / Long | Medium | F1 | W:Options |
 | Kill distance in world units | Short 1.0, Medium 1.8, Long 2.5 | — | **U** (decompiled-code folklore, no fetched source) | — |
@@ -223,7 +223,7 @@ General (F: [W:Vent](https://among-us.fandom.com/wiki/Vent), [W:Vent object](htt
 Sources: [W:Admin](https://among-us.fandom.com/wiki/Admin_(ability)), [W:Security](https://among-us.fandom.com/wiki/Security_(ability)), [W:Camera](https://among-us.fandom.com/wiki/Camera), [W:Vitals](https://among-us.fandom.com/wiki/Vitals), [W:Doorlog](https://among-us.fandom.com/wiki/Doorlog), [W:Binoculars](https://among-us.fandom.com/wiki/Binoculars).
 
 Monitor rules:
-- **Admin** shows grey, anonymous icons per room for living players (vent occupants included); no exact positions, no hallways. Killed players vanish from it. **Bodies on admin: U** — the Admin page says the victim "disappears from the map entirely", the Ghost page says ghosts see "living players, and dead bodies"; the brief assumed bodies show. Do not build a rule on body icons until verified in-game. A room's icons "glitching" signals a kill (F1).
+- **Admin** shows grey, anonymous icons per room (vent occupants included); no exact positions, no hallways, no Polus Outside. **Dead bodies still show as icons at the place of death until the next meeting** (F: [Dead body](https://among-us.fandom.com/wiki/Dead_body) + [W:Ghost](https://among-us.fandom.com/wiki/Ghost); the Admin page's "victim disappears" line is the minority reading). ⇒ an admin count of N in a room can include bodies. The old "kill flash" (a victim's icon blinking at the moment of the kill) was **removed in the March 2021 update** — a kill no longer changes the icons (F1: https://automaton-media.com/articles/newsjp/20210306-154125/; the Admin wiki page still describes the old blink, treat that as outdated).
 - **Cameras**: while a **living** player watches, every camera blinks red (Skeld: light on top; Polus/Airship: inside the dome) — visible to anyone near a camera. Ghost viewers don't trigger it. On Polus/Airship a player can stand in front of a camera to hide the blink. Rapid in/out of Security can avoid the blink; sometimes no blink during lights (F1). Watchers cannot see their own surroundings or report; impostors on cams cannot kill/sabotage and their kill cooldown pauses.
 - **Vitals**: OK = alive; **DED = killed since the last meeting and the body is still on the map** (reportable); **D/C = no body: killed before the last meeting, ejected, or disconnected** (a victim who then quits also shows D/C). Listed in join order; the heartbeat speed is meaningless (F: W:Vitals).
 - Comms disables all monitors except Fungle binoculars (F).
@@ -541,9 +541,9 @@ Each map: rooms, dead-ends, choke points, kill spots (H), vents (§1.7), visuals
 ## 5. Open uncertainties (do not hard-code; verify in-game)
 
 1. **Default kill cooldown**: wiki table marks 45 s; `src/state/presets.ts` defaults to 30 s; Core Settings preset value unknown. Read it from the lobby screen.
-2. **Max impostors by lobby size** (1/2/3 for 4–6/7–8/9+): from memory of game code only.
+2. **Max impostors by lobby size** (1/2/3 need 4/7/9 players): only an outdated wiki screenshot + code memory. Read it from the lobby.
 3. **Kill distance units** (1.0/1.8/2.5) and walking speed in world units: no fetched source.
-4. **Bodies on Admin**: wiki pages disagree (§1.8).
+4. **Bodies on Admin**: resolved to "bodies show" (2 wiki pages); confirm once in-game since admin counts feed `admin_count_mismatch`.
 5. **Fungle vent edges** (Communications vs. The Cliffs; Jungle internal links).
 6. **MIRA Locker Room–Decontamination** vent edge (only on the vent page).
 7. **Airship / Fungle door rooms** (Kitchen vs. Vault; Greenhouse) — pages disagree.
