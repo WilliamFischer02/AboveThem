@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../state/store';
 import { isTauri, persist } from '../state/persist';
-import { loadSettings, type AppSettings } from '../state/settings';
+import { loadSettings, DEFAULT_APP_SETTINGS, type AppSettings } from '../state/settings';
 import { loadPresets, DEFAULT_SETTINGS } from '../state/presets';
 import { COLOR_IDS } from '../ui/palette';
 import { MAPS } from '../data/maps';
@@ -99,8 +99,12 @@ export function useGameEvents() {
     persist.readJson<NameBook>('names.json').then(b => { if (b && b.version === 1) bookRef.current = prune(b, Date.now()); }).catch(() => {});
   }, []);
   useEffect(() => { lobbyRef.current = lobbyCode; }, [lobbyCode]);
+  /** Latest settings for the event wiring (typing your name must not re-register every listener). */
+  const settingsRef = useRef<AppSettings | null>(null);
+  settingsRef.current = settings;
+  const settingsLoaded = settings !== null;
 
-  useEffect(() => { loadSettings().then(setSettings); }, []);
+  useEffect(() => { loadSettings().catch(() => ({ ...DEFAULT_APP_SETTINGS })).then(setSettings); }, []);
 
   // Resume the most recent match after a restart/reload (logs persist; memory doesn't).
   useEffect(() => {
@@ -113,7 +117,7 @@ export function useGameEvents() {
         if (!newest || Date.now() - newest.modified_ms > 20 * 60_000) return;
         const ok = await useMatch.getState().loadMatch(newest.id);
         if (ok) useMatch.getState().showToast(`Resumed match ${newest.id}`);
-      } finally { resumeDone.current = true; }
+      } catch { /* unreadable log: start fresh (fail soft) */ } finally { resumeDone.current = true; }
     })();
   }, []);
 
@@ -179,7 +183,7 @@ export function useGameEvents() {
 
     /** Game ended (or a new one started without us seeing the end): keep the lobby, wipe the slate.
      *  `keepRoster = false` (new room code, Reset roster) keeps only me. */
-    const rollOver = (why: string, keepRoster = true, code: string | null = lobbyCode) => {
+    const rollOver = (why: string, keepRoster = true, code: string | null = lobbyRef.current) => {
       const st = useMatch.getState();
       const cur = st.match;
       if (!cur) return;
@@ -284,6 +288,7 @@ export function useGameEvents() {
 
       guard(await listen<string>('game://lobby', async e => {
         setLobbyCode(e.payload);
+        lobbyRef.current = e.payload;
         const cur = useMatch.getState().match;
         // A different room code means different people: start over with just me.
         if (cur && cur.lobbyCode && cur.lobbyCode !== e.payload) { rollOver(`New lobby ${e.payload}`, false, e.payload); return; }
@@ -334,14 +339,15 @@ export function useGameEvents() {
           creating = true;
           const presets = await loadPresets();
           if (useMatch.getState().match) { creating = false; return; }
-          const preset = lobbyCode ? presets[lobbyCode] : undefined;
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, 0);
+          const code = lobbyRef.current;
+          const preset = code ? presets[code] : undefined;
+          const { players, me, meGuessed } = playersFromRoster(entries, settingsRef.current?.myName ?? '', 0);
           setMeGuessed(meGuessed);
           if (fromLobby && players.filter(p => plausibleName(p.name)).length < 2) { creating = false; return; }
           const ps = (fromLobby ? players.map(p => ({ ...p, slot: undefined, slotMeeting: undefined })) : players).filter(p => !fromLobby || plausibleName(p.name));
           const baseSettings = preset?.settings ?? DEFAULT_SETTINGS;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : baseSettings.map;
-          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyCode ?? undefined });
+          s.newMatch({ settings: { ...baseSettings, ...pendingSettings, map: mapId }, map: mapId, me, myRole: freshRole(), players: ps, lobbyCode: lobbyRef.current ?? undefined });
           if (!fromLobby) {
             for (const en of entries) { const p = ps.find(x => x.slot === en.index + 1); if (p && en.avatar_png && !en.dead) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.body_rgb && !en.dead) useMatch.getState().setBodySample(p.id, en.body_rgb); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
             useMatch.getState().setPhase('meetingDiscussion', { reason: bannerReason ?? 'body' });
@@ -357,7 +363,7 @@ export function useGameEvents() {
         if (fromLobby && m.phase.phase !== 'lobby') return; // floating names mid-game are partial; ignore
         if (m.players['me'] && !fromLobby) {
           // Provisional match: add everyone from the grid, then point "me" at my name (or ask).
-          const { players, me, meGuessed } = playersFromRoster(entries, settings.myName, meetingNow);
+          const { players, me, meGuessed } = playersFromRoster(entries, settingsRef.current?.myName ?? '', meetingNow);
           for (const p of players) if (!useMatch.getState().match!.players[p.id]) s.dispatch({ kind: 'addPlayer', payload: { ...p, isMe: false } });
           for (const en of entries) { const p = players.find(x => x.slot === en.index + 1); if (p && en.avatar_png) useMatch.getState().setAvatar(p.id, `data:image/png;base64,${en.avatar_png}`); if (p && en.icon_hash) useMatch.getState().setIconHash(p.id, en.icon_hash); }
           if (!meGuessed) { s.dispatch({ kind: 'me', payload: { id: me } }); s.dispatch({ kind: 'removePlayer', payload: { id: 'me' } }); }
@@ -441,7 +447,7 @@ export function useGameEvents() {
             nameVotes.set(p.id, v);
             const best = bestReading(v, p.name, p.nameLocked);
             if (best !== p.name) { s.dispatch({ kind: 'player', payload: { id: p.id, name: best } }); learn(b => learnAlias(b, p.name, best, Date.now(), 'grid')); }
-            else if (v[en.name] >= 2 && en.name === p.name) learn(b => learnName(b, p.name, 'grid', Date.now(), lobbyCode ?? undefined));
+            else if (v[en.name] >= 2 && en.name === p.name) learn(b => learnName(b, p.name, 'grid', Date.now(), lobbyRef.current ?? undefined));
           }
           // First grid sighting of a lobby/chat-created player: take the grid colour straight away when ours is a placeholder.
           if (!p.colorLocked && (p.color === 'gray' || p.color === 'unknown') && en.color !== 'unknown' && en.color !== 'gray' && !Object.values(useMatch.getState().match!.players).some(x => x.id !== p.id && x.color === en.color)) {
@@ -498,8 +504,8 @@ export function useGameEvents() {
           if (creating || !resumeDone.current) return;
           creating = true;
           const mapId = pendingMap && MAPS[pendingMap].rooms.length > 0 ? pendingMap : DEFAULT_SETTINGS.map;
-          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyCode ?? undefined,
-            players: [{ id: 'me', name: settings.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
+          s.newMatch({ settings: { ...DEFAULT_SETTINGS, ...pendingSettings, map: mapId }, map: mapId, me: 'me', myRole: freshRole(), lobbyCode: lobbyRef.current ?? undefined,
+            players: [{ id: 'me', name: settingsRef.current?.myName || 'You', color: 'gray', isMe: true, status: 'alive', knownRole: freshRole() }] });
           creating = false;
           useMatch.getState().showToast('Game in progress detected — roster fills at the next meeting');
         }
@@ -761,7 +767,9 @@ export function useGameEvents() {
       }));
     })();
     return () => { cancelled = true; unlisten.forEach(u => u()); };
-  }, [settings, lobbyCode]);
+    // Deliberately not keyed on lobbyCode (read through lobbyRef): re-registering every listener on a new room
+    // code dropped events in the gap and wiped the closures' state (role, pending map/settings, votes).
+  }, [settingsLoaded]);
 
   const rescanNames = async (): Promise<string> => {
     if (!isTauri()) return 'needs the Tauri window';
