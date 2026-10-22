@@ -38,11 +38,17 @@ export function MatchScreen() {
   const [focus, setFocus] = usePref<boolean>('focusMode', false);
   useNow();
 
-  const scores = useMemo(() => scoreAll(match), [match]);
+  // Fail soft: an engine exception must never blank the window. Manual logging keeps working.
+  const [scores, engineError] = useMemo((): [ReturnType<typeof scoreAll>, string | null] => {
+    try { return [scoreAll(match), null]; } catch (e) { console.error('scoreAll failed', e); return [[], String(e)]; }
+  }, [match]);
   const hl = useMemo(() => headline(match, scores), [match, scores]);
   const meeting = match.phase.meeting ?? 0;
   const inMeeting = match.phase.phase === 'meetingDiscussion' || match.phase.phase === 'meetingVoting';
-  const script = useMemo(() => (inMeeting ? buildMeetingScript(match, scores, meeting) : null), [match, scores, meeting, inMeeting]);
+  const script = useMemo(() => {
+    if (!inMeeting) return null;
+    try { return buildMeetingScript(match, scores, meeting); } catch (e) { console.error('buildMeetingScript failed', e); return null; }
+  }, [match, scores, meeting, inMeeting]);
   const st = stamp();
   const phase = match.phase.phase;
   const ghost = match.players[match.me]?.status !== 'alive';
@@ -81,6 +87,7 @@ export function MatchScreen() {
         <div className="area-status">
           {auto && (auto.captureOk === false || auto.meGuessed) && <AutoStatus />}
           {diskError && <div className="status-line">disk: {diskError}</div>}
+          {engineError && <div className="status-line" title={engineError}>Suspect engine hit an error — scores are off; logging still works.</div>}
           {hk.error && <div className="status-line">hotkeys: {hk.error}</div>}
           {ov.error && <div className="status-line">overlay: {ov.error}</div>}
           {!focus && match.myTasks && match.myTasks.length > 0 && !ghost && (
