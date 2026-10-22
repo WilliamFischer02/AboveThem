@@ -9,15 +9,16 @@ import { copyText } from '../clipboard';
 import { headline } from '../../engine/headline';
 import { HeadlineBar } from './HeadlineBar';
 
-function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceItem> }) {
+function Why({ ids, evidence, note }: { ids: string[]; evidence: Map<string, EvidenceItem>; note?: string }) {
   const [open, setOpen] = useState(false);
   const items = ids.map(id => evidence.get(id)).filter((e): e is EvidenceItem => !!e);
-  if (items.length === 0) return null;
+  if (items.length === 0 && !note) return null;
   return (
     <>
       <button className="why-btn" onClick={() => setOpen(o => !o)}>{open ? '▾ why' : '▸ why'}</button>
       {open && (
         <div className="why">
+          {note && <span>🗺 {note}</span>}
           {items.map(e => <span key={e.id}>{e.weight > 0 ? '+' : ''}{e.weight === 99 ? '∞' : e.weight === -99 ? '−∞' : e.weight.toFixed(1)} · {e.label}{e.shaky ? ' (unverified map data)' : ''}</span>)}
         </div>
       )}
@@ -38,12 +39,12 @@ export function CopyButton({ text }: { text: string }) {
 }
 
 /** One suggested line: the sentence, a copy button, and (optionally) who it is aimed at + why. */
-function Line({ text, to, why, evidence }: { text: string; to?: string; why: string[]; evidence: Map<string, EvidenceItem> }) {
+function Line({ text, to, why, evidence, note }: { text: string; to?: string; why: string[]; evidence: Map<string, EvidenceItem>; note?: string }) {
   return (
     <div className="script-line">
       <div className="col">
         <span className="text">{to && <span className="to">{to}</span>}{text}</span>
-        <Why ids={why} evidence={evidence} />
+        <Why ids={why} evidence={evidence} note={note} />
       </div>
       <CopyButton text={text} />
     </div>
@@ -65,7 +66,7 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
         {script.say.length > 0 && <h3>Say</h3>}
         {script.say.map((s, i) => <Line key={'s' + i} text={s.text} why={s.why} evidence={evidence} />)}
         {script.ask.length > 0 && <h3>Ask</h3>}
-        {script.ask.map((q, i) => <Line key={'a' + i} text={q.text} to={q.to === 'all' ? undefined : name(q.to)} why={q.why} evidence={evidence} />)}
+        {script.ask.map((q, i) => <Line key={'a' + i} text={q.text} to={q.to === 'all' ? undefined : name(q.to)} why={q.why} evidence={evidence} note={q.note} />)}
         {script.watch.length > 0 && (
           <details className="fold"><summary>Watch for</summary>
             {script.watch.map((w, i) => <div key={i} className="script-line"><span className="text small">{w}</span></div>)}

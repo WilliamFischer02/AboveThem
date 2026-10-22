@@ -371,6 +371,8 @@ export interface MeetingQuestion {
   text: string;
   why: string[];            // evidence ids
   expectedGain: number;
+  /** Plain-text reason when the line is not backed by evidence ids (e.g. per-map questions). */
+  note?: string;
 }
 
 export interface MeetingScript {
