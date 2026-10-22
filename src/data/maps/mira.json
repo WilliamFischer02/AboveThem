@@ -1,9 +1,704 @@
 {
   "id": "mira",
-  "name": "TODO",
-  "_verified": { "rooms": false, "vents": false, "tasks": false, "durations": false },
-  "_note": "Stub. Fill from the live game in Phase 5 using skeld.json as the template. The engine refuses to use a map whose rooms are empty.",
-  "rooms": [],
-  "vents": [],
-  "tasks": []
+  "name": "MIRA HQ",
+  "_verified": {
+    "rooms": true,
+    "vents": true,
+    "tasks": true,
+    "durations": false
+  },
+  "_note": "Rooms, vents and the task table were checked on 2026-10-22 against among-us.fandom.com (MIRA_HQ, Vent_(object), Tasks list table, Visual_tasks, Doorlog, Run_Diagnostics, Process_Data) and cross-checked with GameWith / Pocket Tactics / PC Gamer map guides (11 vents, ONE connected network, only visual task = Submit Scan). The vent links are the union of the wiki vent table (directional lists that do not quite agree with each other) and the MIRA HQ page list; every vent is reachable from every other, so the network is modelled as one system with per-hop links. VISUAL TASKS: only Submit Scan - Clear Asteroids, Prime Shields and Empty Garbage exist on MIRA but are NOT visual here (wiki Visual_tasks table). ADJACENCY is my reading of the wiki map image: the unnamed light corridor between Locker Room and the Y-hallway (Communications and MedBay open onto it) is folded into the edges Locker Room/Communications/MedBay/Hallway; the red corridor south of Locker Room (O2 keypad) is folded into Launchpad-Locker Room / Launchpad-MedBay. Decontamination edges include ~3 s of door/spray wait. Travel seconds are eyeballed at speed 1.0x and unverified. Keys: o = Locker Room, n = Decontamination, f = Office, p = Launchpad, q = Communications (same as other maps).",
+  "info": {
+    "admin": [
+      "admin"
+    ],
+    "security": null,
+    "vitals": null,
+    "doorLog": {
+      "room": "communications",
+      "sensors": [
+        "Hallway (top: Office/Admin/Greenhouse side)",
+        "Hallway (left: Locker Room / Communications side)",
+        "Hallway (right: Cafeteria / Storage side)"
+      ]
+    },
+    "emergencyButton": "cafeteria",
+    "sabotages": [
+      "lights",
+      "comms",
+      "reactor",
+      "o2"
+    ],
+    "sabotageRooms": {
+      "lights": [
+        "office"
+      ],
+      "comms": [
+        "communications",
+        "office"
+      ],
+      "reactor": [
+        "reactor"
+      ],
+      "o2": [
+        "greenhouse",
+        "lockerRoom"
+      ]
+    },
+    "doors": false,
+    "features": [
+      "doorLog",
+      "decontamination",
+      "oneVentNetwork"
+    ],
+    "spawn": {
+      "start": [
+        "launchpad"
+      ],
+      "afterMeeting": [
+        "cafeteria"
+      ],
+      "_note": "Game start at Launchpad, after meetings around the Cafeteria table (after-meeting spawn UNVERIFIED in-game)."
+    },
+    "_note": "No cameras and no vitals on MIRA HQ; the Doorlog (Communications, top-right computer) lists living players who crossed the three Hallway sensors and is disabled by Comms Sabotaged. No sabotageable doors. O2 is fixed at Greenhouse and the keypad in the corridor south of Locker Room (filed under lockerRoom)."
+  },
+  "rooms": [
+    {
+      "id": "launchpad",
+      "name": "Launchpad",
+      "key": "p",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "lockerRoom",
+          "sec": 9
+        },
+        {
+          "room": "medbay",
+          "sec": 11
+        },
+        {
+          "room": "communications",
+          "sec": 12
+        }
+      ],
+      "_note": "Spawn point; one exit along the walkway to the corridor south of Locker Room."
+    },
+    {
+      "id": "lockerRoom",
+      "name": "Locker Room",
+      "key": "o",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "launchpad",
+          "sec": 9
+        },
+        {
+          "room": "decontamination",
+          "sec": 3
+        },
+        {
+          "room": "communications",
+          "sec": 4
+        },
+        {
+          "room": "medbay",
+          "sec": 4
+        },
+        {
+          "room": "hallway",
+          "sec": 6
+        }
+      ]
+    },
+    {
+      "id": "decontamination",
+      "name": "Decontamination",
+      "key": "n",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "lockerRoom",
+          "sec": 3
+        },
+        {
+          "room": "reactor",
+          "sec": 6
+        },
+        {
+          "room": "laboratory",
+          "sec": 6
+        }
+      ],
+      "_note": "Corridor between Locker Room and the Reactor/Laboratory junction; doors on both ends with a decontamination spray (~3 s) before they open."
+    },
+    {
+      "id": "reactor",
+      "name": "Reactor",
+      "key": "r",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "decontamination",
+          "sec": 6
+        },
+        {
+          "room": "laboratory",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "laboratory",
+      "name": "Laboratory",
+      "key": "l",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "decontamination",
+          "sec": 6
+        },
+        {
+          "room": "reactor",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "communications",
+      "name": "Communications",
+      "key": "q",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "launchpad",
+          "sec": 12
+        },
+        {
+          "room": "lockerRoom",
+          "sec": 4
+        },
+        {
+          "room": "medbay",
+          "sec": 3
+        },
+        {
+          "room": "hallway",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "medbay",
+      "name": "MedBay",
+      "key": "m",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "launchpad",
+          "sec": 11
+        },
+        {
+          "room": "lockerRoom",
+          "sec": 4
+        },
+        {
+          "room": "communications",
+          "sec": 3
+        },
+        {
+          "room": "hallway",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "hallway",
+      "name": "Hallway",
+      "key": "h",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "lockerRoom",
+          "sec": 6
+        },
+        {
+          "room": "communications",
+          "sec": 4
+        },
+        {
+          "room": "medbay",
+          "sec": 5
+        },
+        {
+          "room": "office",
+          "sec": 6
+        },
+        {
+          "room": "admin",
+          "sec": 6
+        },
+        {
+          "room": "greenhouse",
+          "sec": 7
+        },
+        {
+          "room": "cafeteria",
+          "sec": 5
+        },
+        {
+          "room": "storage",
+          "sec": 5
+        }
+      ],
+      "_note": "The upside-down Y corridor; its three ends carry the Doorlog sensors."
+    },
+    {
+      "id": "office",
+      "name": "Office",
+      "key": "f",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "hallway",
+          "sec": 6
+        },
+        {
+          "room": "admin",
+          "sec": 3
+        },
+        {
+          "room": "greenhouse",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "admin",
+      "name": "Admin",
+      "key": "a",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "hallway",
+          "sec": 6
+        },
+        {
+          "room": "office",
+          "sec": 3
+        },
+        {
+          "room": "greenhouse",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "key": "g",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "hallway",
+          "sec": 7
+        },
+        {
+          "room": "office",
+          "sec": 4
+        },
+        {
+          "room": "admin",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "cafeteria",
+      "name": "Cafeteria",
+      "key": "c",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "hallway",
+          "sec": 5
+        },
+        {
+          "room": "storage",
+          "sec": 3
+        },
+        {
+          "room": "balcony",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "name": "Storage",
+      "key": "t",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "hallway",
+          "sec": 5
+        },
+        {
+          "room": "cafeteria",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "balcony",
+      "name": "Balcony",
+      "key": "b",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "cafeteria",
+          "sec": 5
+        }
+      ],
+      "_note": "Reached through the two automatic glass doors from Cafeteria; sprites on the doors are visible regardless of vision."
+    }
+  ],
+  "vents": [
+    {
+      "id": "mira-all",
+      "rooms": [
+        "greenhouse",
+        "office",
+        "admin",
+        "hallway",
+        "balcony",
+        "medbay",
+        "lockerRoom",
+        "launchpad",
+        "reactor",
+        "laboratory",
+        "decontamination"
+      ],
+      "links": [
+        [
+          "greenhouse",
+          "office"
+        ],
+        [
+          "greenhouse",
+          "admin"
+        ],
+        [
+          "office",
+          "admin"
+        ],
+        [
+          "admin",
+          "hallway"
+        ],
+        [
+          "hallway",
+          "balcony"
+        ],
+        [
+          "balcony",
+          "medbay"
+        ],
+        [
+          "medbay",
+          "lockerRoom"
+        ],
+        [
+          "lockerRoom",
+          "launchpad"
+        ],
+        [
+          "launchpad",
+          "reactor"
+        ],
+        [
+          "reactor",
+          "laboratory"
+        ],
+        [
+          "reactor",
+          "decontamination"
+        ],
+        [
+          "laboratory",
+          "decontamination"
+        ],
+        [
+          "laboratory",
+          "office"
+        ],
+        [
+          "decontamination",
+          "launchpad"
+        ],
+        [
+          "lockerRoom",
+          "decontamination"
+        ]
+      ],
+      "_note": "One vent per room in 11 rooms; all connected (one system). links = single vent hops; the last two come only from the wiki vent table rows for Decontamination / Locker Room and disagree with the MIRA HQ page - unverified."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "enterIdCode",
+      "name": "Enter Id Code",
+      "rooms": [
+        "admin"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "fixWiring",
+      "name": "Fix Wiring",
+      "rooms": [
+        "storage",
+        "hallway",
+        "lockerRoom",
+        "greenhouse",
+        "laboratory"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 3,
+      "stageDurationSec": 4,
+      "_note": "Three of five panels in this fixed order: Storage > Hallway > Locker Room > Greenhouse > Laboratory."
+    },
+    {
+      "id": "assembleArtifact",
+      "name": "Assemble Artifact",
+      "rooms": [
+        "laboratory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "buyBeverage",
+      "name": "Buy Beverage",
+      "rooms": [
+        "cafeteria"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "chartCourse",
+      "name": "Chart Course",
+      "rooms": [
+        "admin"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4
+    },
+    {
+      "id": "cleanO2Filter",
+      "name": "Clean O2 Filter",
+      "rooms": [
+        "greenhouse"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "cleanVent",
+      "name": "Clean Vent",
+      "rooms": [
+        "launchpad",
+        "medbay",
+        "lockerRoom",
+        "decontamination",
+        "reactor",
+        "laboratory",
+        "hallway",
+        "office",
+        "admin",
+        "greenhouse",
+        "balcony"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Any vent. Duration unsourced."
+    },
+    {
+      "id": "clearAsteroids",
+      "name": "Clear Asteroids",
+      "rooms": [
+        "balcony"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 12,
+      "_note": "Long on MIRA HQ and NOT visual here (wiki Tasks + Visual_tasks)."
+    },
+    {
+      "id": "divertPower",
+      "name": "Divert Power",
+      "rooms": [
+        "reactor",
+        "admin",
+        "cafeteria",
+        "communications",
+        "greenhouse",
+        "laboratory",
+        "launchpad",
+        "medbay",
+        "office"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 3,
+      "_note": "Reactor, then Accept Diverted Power in one of the other rooms. Wiki: long, short when the target is Laboratory."
+    },
+    {
+      "id": "emptyGarbage",
+      "name": "Empty Garbage",
+      "rooms": [
+        "cafeteria"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "One stage, NOT visual on MIRA HQ."
+    },
+    {
+      "id": "fuelEngines",
+      "name": "Fuel Engines",
+      "rooms": [
+        "launchpad"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Short on MIRA HQ (Launchpad only). Stage count unverified."
+    },
+    {
+      "id": "measureWeather",
+      "name": "Measure Weather",
+      "rooms": [
+        "balcony"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "primeShields",
+      "name": "Prime Shields",
+      "rooms": [
+        "admin"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 4,
+      "_note": "NOT visual on MIRA HQ."
+    },
+    {
+      "id": "processData",
+      "name": "Process Data",
+      "rooms": [
+        "office"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 12,
+      "_note": "About 12 s (wiki)."
+    },
+    {
+      "id": "runDiagnostics",
+      "name": "Run Diagnostics",
+      "rooms": [
+        "launchpad"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 90,
+      "_note": "Start, wait 90 s (timer keeps running when away), return. Wiki lists it as Short."
+    },
+    {
+      "id": "sortSamples",
+      "name": "Sort Samples",
+      "rooms": [
+        "laboratory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "startReactor",
+      "name": "Start Reactor",
+      "rooms": [
+        "reactor"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 20
+    },
+    {
+      "id": "submitScan",
+      "name": "Submit Scan",
+      "rooms": [
+        "medbay"
+      ],
+      "kind": "long",
+      "visual": true,
+      "stages": 1,
+      "stageDurationSec": 10,
+      "_note": "The only visual task on MIRA HQ."
+    },
+    {
+      "id": "unlockManifolds",
+      "name": "Unlock Manifolds",
+      "rooms": [
+        "reactor"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "waterPlants",
+      "name": "Water Plants",
+      "rooms": [
+        "storage",
+        "greenhouse"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 4,
+      "_note": "Watering can in Storage, then Greenhouse."
+    }
+  ]
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { roundPlan, startRoom } from './roundPlan';
 import { build, o } from './__fixtures__/build';
+import { MAPS } from '../../data/maps';
 
 describe('round plan', () => {
   it('starts in the meeting room and puts reachable dead-end tasks inside the safe window', () => {
@@ -31,7 +32,7 @@ describe('round plan', () => {
     expect(p.stops.map(s => s.taskId)).toEqual(['startReactor']);
     expect(p.stops[0].arrive).toBe(0);
     const a = build();
-    a.map = { ...a.map, id: 'airship' };
+    a.map = MAPS.airship; // spawn: pick one of six rooms ⇒ no default start
     expect(startRoom(a, 1)).toBeNull();
     a.myTasks = [{ id: 'chartCourse', name: 'Chart Course', matched: true }];
     expect(roundPlan(a, 1).tips[0]).toMatch(/Log your room/);

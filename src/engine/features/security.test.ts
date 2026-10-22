@@ -4,8 +4,16 @@ import { build, o, st } from './__fixtures__/build';
 import { repoint } from '../../state/events';
 
 describe('security availability', () => {
-  it('uses the fallback table and marks it unverified', () => {
+  it('real Skeld map.info: labelled hallway cams that match covered rooms, then the other covered rooms', () => {
+    const s = securityFor(build());
+    expect(s).toMatchObject({ admin: true, vitals: false, doorLog: false, _verified: true });
+    const ids = (s.cams as { id: string }[]).map(x => x.id);
+    expect(ids.slice(0, 3)).toEqual(['nav', 'admin', 'medbay']);
+    expect(ids).toContain('storage');
+  });
+  it('uses the fallback table when map.info is absent and marks it unverified', () => {
     const m = build();
+    m.map = { ...m.map, info: undefined };
     const s = securityFor(m);
     expect(s.admin).toBe(true);
     expect(Array.isArray(s.cams) && s.cams.length).toBe(4);
@@ -15,7 +23,7 @@ describe('security availability', () => {
   });
   it('prefers map.info (maps agent shape) and keeps labelled spots that match covered rooms', () => {
     const m = build();
-    m.map = { ...m.map, info: { admin: ['admin'], security: { room: 'security', kind: 'cameras', covers: ['medbay', 'admin', 'storage'] }, vitals: null, doorLog: null } } as typeof m.map;
+    m.map = { ...m.map, info: { admin: ['admin'], security: { room: 'security', kind: 'cameras', covers: ['medbay', 'admin', 'storage'] }, vitals: null, doorLog: null } } as unknown as typeof m.map;
     const s = securityFor(m);
     expect(s).toMatchObject({ admin: true, vitals: false, doorLog: false, _verified: true });
     const spots = s.cams as { id: string; room: string | null }[];
@@ -23,7 +31,7 @@ describe('security availability', () => {
   });
   it('map.info without admin / security (Fungle-like) turns those tabs off (edge)', () => {
     const m = build();
-    m.map = { ...m.map, info: { admin: [], security: { room: 'lookout', kind: 'binoculars', covers: [] }, vitals: 'laboratory', doorLog: null } } as typeof m.map;
+    m.map = { ...m.map, info: { admin: [], security: { room: 'lookout', kind: 'binoculars', covers: [] }, vitals: 'laboratory', doorLog: null } } as unknown as typeof m.map;
     expect(securityFor(m)).toMatchObject({ admin: false, cams: 'anyRoom', vitals: true });
   });
 });

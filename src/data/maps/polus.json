@@ -8,6 +8,74 @@
     "durations": false
   },
   "_note": "Rooms/doors, the four vent systems and the 23-task table (rooms, kind, visual, stages) were checked against among-us.fandom.com on 2026-10-21: https://among-us.fandom.com/wiki/Polus, /wiki/Vent_(object), /wiki/Tasks, /wiki/Visual_tasks, /wiki/Outside, /wiki/Decontamination and the per-task pages (Fix_Wiring, Upload_Data, Fix_Weather_Node, Open_Waterways, Replace_Water_Jug, Reboot_Wifi, Record_Temperature, Fuel_Engines, Empty_Garbage, Submit_Scan, Clear_Asteroids, Inspect_Sample, ...). Visual tasks on Polus are Submit Scan and Clear Asteroids only; Empty Garbage is not visual here. Clean Vent and Divert Power do not exist on Polus. MODELLING CHOICES (not wiki facts): the single wiki location \"Outside\" is split into three zones - Outside (Left) x, Outside (Right) r, Lava Pit h - with the dividing line through the Dropship exit and Weapons; which zone each door, weather node and outdoor vent falls in is my reading of the wiki descriptions, not something the wiki states. Dropship, Weapons and Office are adjacent to both zones. MedBay is kept as its own room (wiki treats it as a Laboratory section); the in-game region label may read Laboratory. OPEN DOUBTS: zone of the outdoor Record Temperature panel (placed at lava), zone of node PD and the Open Waterways valve (placed right), whether \"Outside (Admin)\" vent is in the right zone, exact in-game labels for the decontamination rooms. Travel seconds are eyeballed at speed 1.0x, room-centre to room-centre, and outdoor zones are large so they are rough. Task durations: Replace Water Jug (~6 s/stage), Reboot Wifi (60 s wait), Inspect Sample (59-60 s), Submit Scan (~10 s) and Download/Upload (>= 8 s/stage) are sourced; the rest are guesses or copied from skeld.json. Room keys are single characters so a sighting chord is exactly two keypresses; q = Communications matches skeld.json, f = Office (o is O2), n = Lower Decontamination, u = Upper Decontamination, x = Outside (Left), r = Outside (Right), h = Lava Pit are the non-mnemonic ones; v, k and z are reserved action keys.",
+  "info": {
+    "admin": [
+      "admin"
+    ],
+    "security": {
+      "room": "security",
+      "kind": "cameras",
+      "covers": [
+        "outsideLeft",
+        "outsideRight",
+        "lava",
+        "laboratory",
+        "specimen"
+      ],
+      "_note": "Six cameras, mostly outdoors; exact coverage per zone is UNVERIFIED. Disabled by Comms Sabotaged."
+    },
+    "vitals": "office",
+    "doorLog": null,
+    "emergencyButton": "office",
+    "sabotages": [
+      "lights",
+      "comms",
+      "seismic",
+      "doors"
+    ],
+    "sabotageRooms": {
+      "lights": [
+        "electrical"
+      ],
+      "comms": [
+        "communications"
+      ],
+      "seismic": [
+        "outsideLeft",
+        "outsideRight",
+        "laboratory"
+      ],
+      "doors": [
+        "electrical",
+        "o2",
+        "weapons",
+        "communications",
+        "office",
+        "laboratory",
+        "storage"
+      ]
+    },
+    "doors": true,
+    "features": [
+      "decontamination"
+    ],
+    "spawn": {
+      "start": [
+        "dropship"
+      ],
+      "afterMeeting": [
+        "office"
+      ],
+      "_note": "After-meeting spawn UNVERIFIED."
+    },
+    "dummyPanels": [
+      {
+        "room": "office",
+        "taskId": "divertPower"
+      }
+    ],
+    "_note": "Reset Seismic Stabilizers: the research relay says the two scanners are on opposite sides of the Dropship (outdoors); an earlier guess placed them by Laboratory - UNVERIFIED, all three listed. The Office Divert Power panel is a dummy (Polus has no Divert Power)."
+  },
   "rooms": [
     {
       "id": "dropship",
@@ -60,7 +128,10 @@
           "sec": 10
         }
       ],
-      "_note": "West/south-west outdoor area: Dropship exit, Electrical and O2 doors, Fix Lights panel, Communications pod, Dropship left engine, nodes TB/IRO/GI, vents south and east of Electrical and below Communications."
+      "_note": "West/south-west outdoor area: Dropship exit, Electrical and O2 doors, Fix Lights panel, Communications pod, Dropship left engine, nodes TB/IRO/GI, vents south and east of Electrical and below Communications.",
+      "aliases": [
+        "Outside"
+      ]
     },
     {
       "id": "outsideRight",
@@ -97,7 +168,10 @@
           "sec": 10
         }
       ],
-      "_note": "Central/east outdoor area: Dropship right engine, Storage pod, Office west door and the Open Waterways valve beside Admin, Laboratory door, east Seismic Stabilizer path, nodes CA/PD, vents west of Laboratory and below the valve."
+      "_note": "Central/east outdoor area: Dropship right engine, Storage pod, Office west door and the Open Waterways valve beside Admin, Laboratory door, east Seismic Stabilizer path, nodes CA/PD, vents west of Laboratory and below the valve.",
+      "aliases": [
+        "Outside"
+      ]
     },
     {
       "id": "lava",
@@ -114,7 +188,10 @@
           "sec": 8
         }
       ],
-      "_note": "Outdoor area east of Office / south of Laboratory where ejected players land. Node MLG and the lava vent (to Admin and the Laboratory bathroom) are here."
+      "_note": "Outdoor area east of Office / south of Laboratory where ejected players land. Node MLG and the lava vent (to Admin and the Laboratory bathroom) are here.",
+      "aliases": [
+        "Outside"
+      ]
     },
     {
       "id": "electrical",
@@ -275,7 +352,10 @@
           "sec": 9
         }
       ],
-      "_note": "Travel time includes the door delay and vapour cycle."
+      "_note": "Travel time includes the door delay and vapour cycle.",
+      "aliases": [
+        "Decontamination"
+      ]
     },
     {
       "id": "specimen",
@@ -308,7 +388,10 @@
           "sec": 7
         }
       ],
-      "_note": "Travel time includes the door delay and vapour cycle."
+      "_note": "Travel time includes the door delay and vapour cycle.",
+      "aliases": [
+        "Decontamination"
+      ]
     },
     {
       "id": "laboratory",

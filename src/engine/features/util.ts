@@ -1,51 +1,29 @@
 /**
  * Shared helpers for src/engine/features/*. Pure TS (no DOM / React / Tauri).
  */
-import type { MapData, MatchState, Observation, PlayerId, RoomId } from '../../types/game';
+import type { MapData, MapInfo, MatchState, Observation, PlayerId, RoomId } from '../../types/game';
+import { fastestSeconds } from '../map';
 
 export const pname = (m: MatchState, p: PlayerId): string => m.players[p]?.name ?? p;
 export const roomName = (m: MatchState, r: RoomId): string => m.map.rooms.find(x => x.id === r)?.name ?? r;
 
 /**
- * Seconds an impostor needs to get from one vent room to another inside the same network
- * (enter animation + hop + exit). UNVERIFIED: eyeballed; deliberately small so that
- * "could not have reached" stays honest (errs toward "could have").
+ * Map walk times are eyeballed (`_verified.durations` false on every map); the research relay
+ * says "impossible travel" verdicts need ≥ 30 % slack. Every feature exclusion multiplies travel
+ * by this factor, so a "could not" only stands when they would have needed to be 30 % faster.
  */
-export const VENT_HOP_SEC = 2;
+export const TRAVEL_SLACK = 0.7;
 
 /**
- * Fastest possible travel time for an IMPOSTOR between two rooms: walking edges at the lobby
- * speed plus every vent network treated as fully connected at VENT_HOP_SEC.
- * Returns null when either room is unknown to the map (no constraint can be derived).
- *
- * MERGE: replace the body with the maps agent's
- *   `const s = fastestSeconds(map, from, to, { speed, vents: true }); return Number.isFinite(s) ? s : null;`
- * from engine/map.ts (same model: walk + vent hops at 2 s). Keep the null-for-unknown contract —
- * killWindow treats null as "no constraint", never as "unreachable".
+ * Fastest possible travel time for an IMPOSTOR between two rooms (walking + vent hops), from the
+ * maps agent's engine/map.ts `fastestSeconds(..., { vents: true })`.
+ * Returns null when either room is unknown to the map: callers treat null as "no constraint",
+ * never as "unreachable".
  */
 export function impostorTravelSec(map: MapData, from: RoomId, to: RoomId, speed = 1): number | null {
   if (from === to) return 0;
-  const ids = new Set(map.rooms.map(r => r.id));
-  if (!ids.has(from) || !ids.has(to)) return null;
-  const edges = new Map<RoomId, { room: RoomId; sec: number }[]>();
-  const add = (a: RoomId, b: RoomId, sec: number) => { if (!edges.has(a)) edges.set(a, []); edges.get(a)!.push({ room: b, sec }); };
-  const sp = speed > 0 ? speed : 1;
-  for (const r of map.rooms) for (const a of r.adjacent) add(r.id, a.room, a.sec / sp);
-  for (const v of map.vents) for (const a of v.rooms) for (const b of v.rooms) if (a !== b) add(a, b, VENT_HOP_SEC);
-  const dist = new Map<RoomId, number>([[from, 0]]);
-  const done = new Set<RoomId>();
-  for (;;) {
-    let cur: RoomId | null = null; let best = Infinity;
-    for (const [r, d] of dist) if (!done.has(r) && d < best) { best = d; cur = r; }
-    if (cur === null) break;
-    if (cur === to) return best;
-    done.add(cur);
-    for (const e of edges.get(cur) ?? []) {
-      const nd = best + e.sec;
-      if (nd < (dist.get(e.room) ?? Infinity)) dist.set(e.room, nd);
-    }
-  }
-  return null; // disconnected graph: no constraint
+  const s = fastestSeconds(map, from, to, { speed: speed > 0 ? speed : 1, vents: true });
+  return Number.isFinite(s) ? s : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,23 +57,8 @@ export function playersPlacedBy(o: Observation): PlayerId[] {
   }
 }
 
-/**
- * Subset of the maps agent's `MapInfo` (MapData.info) that the features read. Declared locally
- * because that type lives on the maps branch.
- * MERGE: replace with `import type { MapInfo } from '../../types/game'` and read `m.map.info` directly.
- */
-export interface MapInfoLite {
-  admin?: RoomId[];
-  security?: { room: RoomId; kind: 'cameras' | 'binoculars'; covers: RoomId[] } | null;
-  vitals?: RoomId | null;
-  doorLog?: { room: RoomId; sensors: string[] } | null;
-  emergencyButton?: RoomId;
-  features?: string[];
-  spawn?: { start: RoomId[]; afterMeeting: RoomId[] };
-  dummyPanels?: { room: RoomId; taskId: string }[];
-}
-
-export const mapInfo = (map: MapData): MapInfoLite | undefined => (map as unknown as { info?: MapInfoLite }).info;
+/** The maps agent's MapData.info (stations, spawn, dummy panels), when the map file has it. */
+export const mapInfo = (map: MapData): Partial<MapInfo> | undefined => map.info;
 
 /** Index of the meeting that ended `round` (meeting k closes round k when every round ends in a meeting). */
 export const meetingOfRound = (round: number) => round;

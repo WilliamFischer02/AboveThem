@@ -8,6 +8,76 @@
     "durations": false
   },
   "_note": "Rooms/adjacency, vent networks and the task table (rooms, kind, visual, stages) were checked against among-us.fandom.com (The_Skeld, Vent_(object), Tasks, Visual_tasks, per-task pages) on 2026-10-21. Still to confirm IN-GAME: Clear Asteroids long vs short; hallway vent position. Travel seconds are eyeballed at speed 1.0x, room-centre to room-centre. Task durations: only Inspect Sample (59-60 s), Submit Scan (~10 s) and Download/Upload (>=8 s per stage) are sourced; the rest are guesses. Room keys are single characters so a sighting chord is exactly two keypresses (prefix+colour, then room); q = Communications is the one non-mnemonic key.",
+  "info": {
+    "admin": [
+      "admin"
+    ],
+    "security": {
+      "room": "security",
+      "kind": "cameras",
+      "covers": [
+        "upperEngine",
+        "lowerEngine",
+        "medbay",
+        "admin",
+        "storage",
+        "navigation",
+        "shields"
+      ],
+      "_note": "Four cameras watch HALLWAYS next to these rooms (engines/Security, MedBay, Admin/Storage, Navigation/Shields) - which room each hallway counts as is approximate. Disabled by Comms Sabotaged."
+    },
+    "vitals": null,
+    "doorLog": null,
+    "emergencyButton": "cafeteria",
+    "sabotages": [
+      "lights",
+      "comms",
+      "reactor",
+      "o2",
+      "doors"
+    ],
+    "sabotageRooms": {
+      "lights": [
+        "electrical"
+      ],
+      "comms": [
+        "communications"
+      ],
+      "reactor": [
+        "reactor"
+      ],
+      "o2": [
+        "o2",
+        "admin"
+      ],
+      "doors": [
+        "cafeteria",
+        "storage",
+        "electrical",
+        "medbay",
+        "security",
+        "upperEngine",
+        "lowerEngine"
+      ]
+    },
+    "doors": true,
+    "features": [],
+    "spawn": {
+      "start": [
+        "cafeteria"
+      ],
+      "afterMeeting": [
+        "cafeteria"
+      ]
+    },
+    "dummyPanels": [
+      {
+        "room": "reactor",
+        "taskId": "divertPower"
+      }
+    ],
+    "_note": "No vitals, no doorlog on The Skeld. The Divert Power panel in Reactor is a dummy (research relay, wiki Guide:Crewmate)."
+  },
   "rooms": [
     {
       "id": "cafeteria",

@@ -28,7 +28,7 @@ describe('task claim verifier', () => {
   });
   it('a claim on a dummy panel (map.info.dummyPanels) is fake', () => {
     const m = build();
-    m.map = { ...m.map, info: { dummyPanels: [{ room: 'reactor', taskId: 'divertPower' }] } } as typeof m.map;
+    m.map = { ...m.map, info: { dummyPanels: [{ room: 'reactor', taskId: 'divertPower' }] } } as unknown as typeof m.map;
     m.claims.push(claim('c1', 'red', 'divertPower', 'reactor'));
     expect(taskClaimChecks(m)[0]).toMatchObject({ verdict: 'fake', check: 'dummy_panel' });
   });

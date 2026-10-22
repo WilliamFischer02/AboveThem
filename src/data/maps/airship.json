@@ -1,9 +1,941 @@
 {
   "id": "airship",
-  "name": "TODO",
-  "_verified": { "rooms": false, "vents": false, "tasks": false, "durations": false },
-  "_note": "Stub. Fill from the live game in Phase 5 using skeld.json as the template. The engine refuses to use a map whose rooms are empty.",
-  "rooms": [],
-  "vents": [],
-  "tasks": []
+  "name": "The Airship",
+  "_verified": {
+    "rooms": true,
+    "vents": true,
+    "tasks": true,
+    "durations": false
+  },
+  "_note": "Rooms, exits, ladders, vents and the task table were checked on 2026-10-22 against among-us.fandom.com (The_Airship and the per-location pages Brig, Vault, Gap_Room, Main_Hall, Engine_Room, Showers, Records, Lounge, Cargo_Bay, Ventilation, Medical, Electrical, Security_(location), Hall_of_Portraits, Kitchen, Viewing_Deck, Armory, Cockpit, Communications, Meeting_Room, Outside; Vent_(object); Tasks list table; Visual_tasks) and cross-checked with PC Gamer / Pro Game Guides (12 vents, 4 systems, no visual tasks). NO VISUAL TASKS on The Airship. MODELLING CHOICES: the hallway joining Cockpit, Communications, Armory and Engine Room is folded into direct edges between them; the two balconies are separate rooms (Outside by Viewing Deck, Outside by Security) because they are not connected to each other - the in-game label for both is just \"Outside\"; Gap Room is the LEFT (Brig / ladder) side and its edge to Records includes the moving-platform crossing (~6 s wait + ride, rough). Electrical is a maze of randomly opened doors, so its edges are averages. Ladders add ~2 s. Players choose their spawn room after every meeting (Main Hall, Brig, Engine Room, Kitchen, Records, Cargo Bay + others), so round-start positions are not shared. Travel seconds are eyeballed at speed 1.0x and unverified. Keys: c Cockpit, q Communications, a Armory, d Viewing Deck, x Outside (Viewing Deck), i Kitchen, p Hall of Portraits, s Security, o Outside (Security), e Electrical, m Medical, y Cargo Bay, f Ventilation (fans), l Lounge, r Records, w Showers, h Main Hall, g Engine Room, b Brig, u Vault, j Gap Room, t Meeting Room.",
+  "info": {
+    "admin": [
+      "cockpit",
+      "records"
+    ],
+    "security": {
+      "room": "security",
+      "kind": "cameras",
+      "covers": [
+        "engineRoom",
+        "vault",
+        "records",
+        "cargoBay",
+        "meetingRoom",
+        "hallOfPortraits"
+      ],
+      "_note": "Seven cameras: Engine Room, Vault, Security (near the Hall of Portraits exit), Records (two), Cargo Bay, Meeting Room. Disabled by Comms Sabotaged."
+    },
+    "vitals": "medical",
+    "doorLog": null,
+    "emergencyButton": "meetingRoom",
+    "sabotages": [
+      "lights",
+      "comms",
+      "crashCourse",
+      "doors"
+    ],
+    "sabotageRooms": {
+      "lights": [
+        "gapRoom",
+        "viewingDeck",
+        "cargoBay"
+      ],
+      "comms": [
+        "communications"
+      ],
+      "crashCourse": [
+        "gapRoom"
+      ],
+      "doors": [
+        "brig",
+        "kitchen",
+        "mainHall",
+        "medical",
+        "records",
+        "cockpit",
+        "communications",
+        "armory",
+        "engineRoom",
+        "vault",
+        "viewingDeck",
+        "hallOfPortraits",
+        "ventilation"
+      ]
+    },
+    "spawn": {
+      "start": [
+        "brig",
+        "cargoBay",
+        "engineRoom",
+        "kitchen",
+        "mainHall",
+        "records"
+      ],
+      "afterMeeting": [
+        "brig",
+        "cargoBay",
+        "engineRoom",
+        "kitchen",
+        "mainHall",
+        "records"
+      ],
+      "_note": "Each player picks one of three offered rooms from this list (research relay + wiki location pages); first sightings of a round cluster here."
+    },
+    "dummyPanels": [
+      {
+        "room": "armory",
+        "taskId": "fixWiring"
+      },
+      {
+        "room": "communications",
+        "taskId": "fixWiring"
+      },
+      {
+        "room": "vault",
+        "taskId": "fixWiring"
+      },
+      {
+        "room": "lounge",
+        "taskId": "emptyGarbage"
+      }
+    ],
+    "doors": true,
+    "features": [
+      "ladders",
+      "movingPlatform",
+      "spawnChoice"
+    ],
+    "shortcuts": [
+      {
+        "from": "gapRoom",
+        "to": "meetingRoom",
+        "kind": "ladder",
+        "sec": 4
+      },
+      {
+        "from": "electrical",
+        "to": "mainHall",
+        "kind": "ladder",
+        "sec": 5
+      },
+      {
+        "from": "gapRoom",
+        "to": "records",
+        "kind": "platform",
+        "sec": 10
+      }
+    ],
+    "_note": "Avert Crash Course keypads are on both sides of Gap Room (90 s). Door rooms UNVERIFIED: union of the wiki location pages and the research relay (the Doors page lists Vault where others list Kitchen). Fix Lights panels per the wiki location pages: Gap Room, Viewing Deck, Cargo Bay (the light switch panel is one of these - unverified which). Meeting Room has ONE entrance (the ladder from Gap Room)."
+  },
+  "rooms": [
+    {
+      "id": "cockpit",
+      "name": "Cockpit",
+      "key": "c",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "communications",
+          "sec": 4
+        },
+        {
+          "room": "armory",
+          "sec": 5
+        },
+        {
+          "room": "engineRoom",
+          "sec": 7
+        }
+      ]
+    },
+    {
+      "id": "communications",
+      "name": "Communications",
+      "key": "q",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "cockpit",
+          "sec": 4
+        },
+        {
+          "room": "armory",
+          "sec": 4
+        },
+        {
+          "room": "engineRoom",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "armory",
+      "name": "Armory",
+      "key": "a",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cockpit",
+          "sec": 5
+        },
+        {
+          "room": "communications",
+          "sec": 4
+        },
+        {
+          "room": "engineRoom",
+          "sec": 5
+        },
+        {
+          "room": "kitchen",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "viewingDeck",
+      "name": "Viewing Deck",
+      "key": "d",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "kitchen",
+          "sec": 4
+        },
+        {
+          "room": "outsideViewing",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "outsideViewing",
+      "name": "Outside (Viewing Deck)",
+      "key": "x",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "viewingDeck",
+          "sec": 3
+        }
+      ],
+      "aliases": [
+        "Outside"
+      ],
+      "_note": "Small balcony below Viewing Deck (Upload Data). Not connected to the other Outside."
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "key": "i",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "armory",
+          "sec": 5
+        },
+        {
+          "room": "viewingDeck",
+          "sec": 4
+        },
+        {
+          "room": "hallOfPortraits",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "hallOfPortraits",
+      "name": "Hall of Portraits",
+      "key": "p",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "kitchen",
+          "sec": 4
+        },
+        {
+          "room": "security",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "key": "s",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "hallOfPortraits",
+          "sec": 3
+        },
+        {
+          "room": "outsideSecurity",
+          "sec": 3
+        },
+        {
+          "room": "electrical",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "outsideSecurity",
+      "name": "Outside (Security)",
+      "key": "o",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "security",
+          "sec": 3
+        }
+      ],
+      "aliases": [
+        "Outside"
+      ],
+      "_note": "Larger balcony with stairs below Security (Upload Data)."
+    },
+    {
+      "id": "electrical",
+      "name": "Electrical",
+      "key": "e",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "security",
+          "sec": 4
+        },
+        {
+          "room": "medical",
+          "sec": 6
+        },
+        {
+          "room": "mainHall",
+          "sec": 5
+        }
+      ],
+      "_note": "Maze of rooms with randomly opened doors; exits to Security, Medical and a ladder up to Main Hall."
+    },
+    {
+      "id": "medical",
+      "name": "Medical",
+      "key": "m",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "electrical",
+          "sec": 6
+        },
+        {
+          "room": "cargoBay",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "cargoBay",
+      "name": "Cargo Bay",
+      "key": "y",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "medical",
+          "sec": 5
+        },
+        {
+          "room": "lounge",
+          "sec": 4
+        },
+        {
+          "room": "ventilation",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "ventilation",
+      "name": "Ventilation",
+      "key": "f",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cargoBay",
+          "sec": 3
+        },
+        {
+          "room": "showers",
+          "sec": 3
+        }
+      ],
+      "_note": "Two platforms split by a gap; west door to Showers, east door to Cargo Bay."
+    },
+    {
+      "id": "lounge",
+      "name": "Lounge",
+      "key": "l",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cargoBay",
+          "sec": 4
+        },
+        {
+          "room": "records",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "records",
+      "name": "Records",
+      "key": "r",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "showers",
+          "sec": 4
+        },
+        {
+          "room": "lounge",
+          "sec": 4
+        },
+        {
+          "room": "gapRoom",
+          "sec": 10
+        }
+      ]
+    },
+    {
+      "id": "showers",
+      "name": "Showers",
+      "key": "w",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "ventilation",
+          "sec": 3
+        },
+        {
+          "room": "mainHall",
+          "sec": 4
+        },
+        {
+          "room": "records",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "mainHall",
+      "name": "Main Hall",
+      "key": "h",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "electrical",
+          "sec": 5
+        },
+        {
+          "room": "showers",
+          "sec": 4
+        },
+        {
+          "room": "engineRoom",
+          "sec": 5
+        }
+      ]
+    },
+    {
+      "id": "engineRoom",
+      "name": "Engine Room",
+      "key": "g",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "cockpit",
+          "sec": 7
+        },
+        {
+          "room": "communications",
+          "sec": 5
+        },
+        {
+          "room": "armory",
+          "sec": 5
+        },
+        {
+          "room": "mainHall",
+          "sec": 5
+        },
+        {
+          "room": "brig",
+          "sec": 5
+        }
+      ],
+      "_note": "Includes the hallway up to Brig (its Download Data panel is labelled Brig in the task list)."
+    },
+    {
+      "id": "brig",
+      "name": "Brig",
+      "key": "b",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "engineRoom",
+          "sec": 5
+        },
+        {
+          "room": "vault",
+          "sec": 4
+        },
+        {
+          "room": "gapRoom",
+          "sec": 3
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "key": "u",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "brig",
+          "sec": 4
+        }
+      ]
+    },
+    {
+      "id": "gapRoom",
+      "name": "Gap Room",
+      "key": "j",
+      "deadEnd": false,
+      "adjacent": [
+        {
+          "room": "records",
+          "sec": 10
+        },
+        {
+          "room": "brig",
+          "sec": 3
+        },
+        {
+          "room": "meetingRoom",
+          "sec": 4
+        }
+      ],
+      "_note": "Left (Brig) side. The right side, Records door and Download Data are reached over the moving platform."
+    },
+    {
+      "id": "meetingRoom",
+      "name": "Meeting Room",
+      "key": "t",
+      "deadEnd": true,
+      "adjacent": [
+        {
+          "room": "gapRoom",
+          "sec": 4
+        }
+      ],
+      "_note": "Only entrance is the ladder from the left side of Gap Room."
+    }
+  ],
+  "vents": [
+    {
+      "id": "cockpit-vault-deck",
+      "rooms": [
+        "cockpit",
+        "vault",
+        "viewingDeck"
+      ],
+      "links": [
+        [
+          "cockpit",
+          "vault"
+        ],
+        [
+          "cockpit",
+          "viewingDeck"
+        ]
+      ],
+      "_note": "Vault and Viewing Deck each link only to Cockpit."
+    },
+    {
+      "id": "engine-kitchen-hall",
+      "rooms": [
+        "engineRoom",
+        "kitchen",
+        "mainHall"
+      ],
+      "links": [
+        [
+          "engineRoom",
+          "kitchen"
+        ],
+        [
+          "engineRoom",
+          "mainHall"
+        ],
+        [
+          "kitchen",
+          "mainHall"
+        ]
+      ],
+      "_note": "Main Hall LOWER vent."
+    },
+    {
+      "id": "gap-hall",
+      "rooms": [
+        "gapRoom",
+        "mainHall"
+      ],
+      "links": [
+        [
+          "gapRoom",
+          "mainHall"
+        ]
+      ],
+      "_note": "Both Gap Room vents (west and east, linked to each other) and the Main Hall UPPER vent. The east Gap Room vent sits on the far side of the gap: venting is how an impostor crosses without the platform."
+    },
+    {
+      "id": "cargo-records-showers",
+      "rooms": [
+        "cargoBay",
+        "records",
+        "showers"
+      ],
+      "links": [
+        [
+          "cargoBay",
+          "records"
+        ],
+        [
+          "cargoBay",
+          "showers"
+        ],
+        [
+          "records",
+          "showers"
+        ]
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "fixWiring",
+      "name": "Fix Wiring",
+      "rooms": [
+        "viewingDeck",
+        "engineRoom",
+        "mainHall",
+        "showers",
+        "lounge",
+        "cargoBay",
+        "meetingRoom"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 3,
+      "stageDurationSec": 4,
+      "_note": "Three panels in order: Viewing Deck > Engine Room > Main Hall > Showers > Lounge > Cargo Bay > Meeting Room."
+    },
+    {
+      "id": "enterIdCode",
+      "name": "Enter Id Code",
+      "rooms": [
+        "meetingRoom"
+      ],
+      "kind": "common",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "calibrateDistributor",
+      "name": "Calibrate Distributor",
+      "rooms": [
+        "electrical"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "cleanToilet",
+      "name": "Clean Toilet",
+      "rooms": [
+        "lounge"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "cleanVent",
+      "name": "Clean Vent",
+      "rooms": [
+        "cockpit",
+        "vault",
+        "viewingDeck",
+        "engineRoom",
+        "kitchen",
+        "mainHall",
+        "gapRoom",
+        "cargoBay",
+        "records",
+        "showers"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5,
+      "_note": "Any vent. Duration unsourced."
+    },
+    {
+      "id": "decontaminate",
+      "name": "Decontaminate",
+      "rooms": [
+        "mainHall"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "developPhotos",
+      "name": "Develop Photos",
+      "rooms": [
+        "mainHall"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 60,
+      "_note": "Put photos in, wait 60 s (window need not stay open), take them out."
+    },
+    {
+      "id": "divertPower",
+      "name": "Divert Power",
+      "rooms": [
+        "electrical",
+        "armory",
+        "cockpit",
+        "engineRoom",
+        "gapRoom",
+        "mainHall",
+        "meetingRoom",
+        "showers"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 3,
+      "_note": "Electrical, then Accept Diverted Power in one of the other rooms."
+    },
+    {
+      "id": "dressMannequin",
+      "name": "Dress Mannequin",
+      "rooms": [
+        "vault"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "emptyGarbage",
+      "name": "Empty Garbage",
+      "rooms": [
+        "kitchen",
+        "mainHall",
+        "medical",
+        "showers",
+        "meetingRoom"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 4,
+      "_note": "Kitchen, Main Hall or Medical, then Meeting Room (wiki task table). The Showers location page also shows a bin - included, UNVERIFIED. The Lounge bin is a DUMMY panel (info.dummyPanels). NOT visual."
+    },
+    {
+      "id": "fixShower",
+      "name": "Fix Shower",
+      "rooms": [
+        "showers"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "fuelEngines",
+      "name": "Fuel Engines",
+      "rooms": [
+        "cargoBay",
+        "engineRoom"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5,
+      "_note": "Cargo Bay, then one of the two engines in Engine Room."
+    },
+    {
+      "id": "makeBurger",
+      "name": "Make Burger",
+      "rooms": [
+        "kitchen"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "pickUpTowels",
+      "name": "Pick Up Towels",
+      "rooms": [
+        "showers"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "polishRuby",
+      "name": "Polish Ruby",
+      "rooms": [
+        "vault"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "putAwayPistols",
+      "name": "Put Away Pistols",
+      "rooms": [
+        "armory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "putAwayRifles",
+      "name": "Put Away Rifles",
+      "rooms": [
+        "armory"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 5
+    },
+    {
+      "id": "resetBreakers",
+      "name": "Reset Breakers",
+      "rooms": [
+        "electrical"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 15,
+      "_note": "Several breaker panels around Electrical. Duration is a guess."
+    },
+    {
+      "id": "rewindTapes",
+      "name": "Rewind Tapes",
+      "rooms": [
+        "security"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 20,
+      "_note": "Duration is a guess."
+    },
+    {
+      "id": "sortRecords",
+      "name": "Sort Records",
+      "rooms": [
+        "records"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 6
+    },
+    {
+      "id": "stabilizeSteering",
+      "name": "Stabilize Steering",
+      "rooms": [
+        "cockpit"
+      ],
+      "kind": "short",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 3
+    },
+    {
+      "id": "startFans",
+      "name": "Start Fans",
+      "rooms": [
+        "ventilation"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 5,
+      "_note": "Read the code on one platform, enter it on the other."
+    },
+    {
+      "id": "unlockSafe",
+      "name": "Unlock Safe",
+      "rooms": [
+        "cargoBay"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 1,
+      "stageDurationSec": 10
+    },
+    {
+      "id": "downloadUpload",
+      "name": "Download / Upload Data",
+      "rooms": [
+        "brig",
+        "cargoBay",
+        "gapRoom",
+        "records",
+        "vault",
+        "armory",
+        "cockpit",
+        "communications",
+        "medical",
+        "viewingDeck",
+        "engineRoom",
+        "outsideViewing",
+        "outsideSecurity"
+      ],
+      "kind": "long",
+      "visual": false,
+      "stages": 2,
+      "stageDurationSec": 9,
+      "_note": "Download in a room, upload Outside (either balcony). LONG from Brig, Cargo Bay, Gap Room, Records or Vault; SHORT from Armory, Cockpit, Communications, Medical or Viewing Deck. The Brig panel is physically in the Engine Room hallway."
+    }
+  ]
 }

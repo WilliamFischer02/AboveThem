@@ -19,11 +19,12 @@
  *
  * A player "could not have killed" when, for every t in [lo, hi], something I logged puts them too
  * far from the body room to be there at t. Travel uses the IMPOSTOR model (walking + any vent hop,
- * see util.impostorTravelSec), so a "could not" survives the "they vented" objection.
+ * see util.impostorTravelSec) with 30 % slack on eyeballed walk times, so a "could not" survives
+ * both "they vented" and "your map timings are off".
  */
 import type { MatchState, PlayerId, RoomId, Stamp, BodyFoundObs } from '../../types/game';
 import { fmt } from '../evidence';
-import { impostorTravelSec, subtract, totalLength, type Interval, pname, roomName } from './util';
+import { impostorTravelSec, TRAVEL_SLACK, subtract, totalLength, type Interval, pname, roomName } from './util';
 
 /** Sourced (see header). */
 export const FIRST_ROUND_COOLDOWN_SEC = 10;
@@ -143,7 +144,8 @@ export function killWindowFor(m: MatchState, body: BodyFoundObs): KillWindow {
   if (seen && seen.t > lo) { lo = seen.t; lowerBy = 'lastSeenAlive'; lowerRef = seen.ref; }
 
   const speed = m.settings.playerSpeed || 1;
-  const travel = (from: RoomId) => impostorTravelSec(m.map, from, room, speed);
+  // Eyeballed walk times: only 70 % of the fastest route counts (TRAVEL_SLACK), so "could not" errs toward "could".
+  const travel = (from: RoomId) => { const d = impostorTravelSec(m.map, from, room, speed); return d === null ? null : d * TRAVEL_SLACK; };
   const roundObs = m.observations.filter(o => o.stamp.round === round);
 
   const results: PlayerFeasibility[] = candidates(m, body.victim, round).map(player => {
@@ -177,7 +179,7 @@ export function killWindowFor(m: MatchState, body: BodyFoundObs): KillWindow {
       if (where === null) continue;
       const d = travel(where);
       if (d === null || d === 0) continue;
-      cut(o.stamp.t - d, o.stamp.t + d, `seen in ${roomName(m, where)} at ${fmt(o.stamp.t)} (${Math.round(d)} s from ${roomName(m, room)} even by vent)`, [o.id]);
+      cut(o.stamp.t - d, o.stamp.t + d, `seen in ${roomName(m, where)} at ${fmt(o.stamp.t)} (${Math.round(d / TRAVEL_SLACK)} s from ${roomName(m, room)} even by vent)`, [o.id]);
     }
 
     const len = Math.max(1, hi - lo);

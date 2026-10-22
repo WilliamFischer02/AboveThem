@@ -256,11 +256,17 @@ export interface MapRoom {
   deadEnd: boolean;
   /** Neighbouring rooms and rough travel time in seconds at speed 1.0. */
   adjacent: { room: RoomId; sec: number }[];
+  /** Other labels the game / OCR may show for this room (e.g. "Outside" for split outdoor zones). Additive. */
+  aliases?: string[];
+  _note?: string;
 }
 
 export interface MapVentNetwork {
   id: string;
   rooms: RoomId[];          // vents in this network connect all of these
+  /** Single vent hops (room pairs), when known. Every pair is inside `rooms`. Additive. */
+  links?: [RoomId, RoomId][];
+  _note?: string;
 }
 
 export interface MapTask {
@@ -272,6 +278,7 @@ export interface MapTask {
   stages: number;
   /** Seconds to complete one stage, roughly. */
   stageDurationSec: number;
+  _note?: string;
 }
 
 export interface MapData {
@@ -281,6 +288,40 @@ export interface MapData {
   vents: MapVentNetwork[];
   tasks: MapTask[];
   _verified: { rooms: boolean; vents: boolean; tasks: boolean; durations: boolean };
+  _note?: string;
+  /** Map-specific monitoring / sabotage / movement facts (additive; may be absent on old data). */
+  info?: MapInfo;
+}
+
+// --- Map info (additive, maps agent) ----------------------------------------
+
+export type MapSabotage = 'lights' | 'comms' | 'reactor' | 'o2' | 'doors' | 'seismic' | 'crashCourse' | 'mushroomMixup';
+
+export type MapFeature = 'doorLog' | 'decontamination' | 'oneVentNetwork' | 'ladders' | 'movingPlatform' | 'zipline' | 'spawnChoice' | 'mushroomMixup';
+
+/** Monitoring, sabotage and traversal facts per map. Everything here is visible to any player, never hidden info. */
+export interface MapInfo {
+  /** Rooms with an Admin table (empty on The Fungle; two on The Airship). */
+  admin: RoomId[];
+  /** Where the camera / binocular console is, and which rooms (or hallways next to them) it shows. null = none (MIRA HQ). */
+  security: { room: RoomId; kind: 'cameras' | 'binoculars'; covers: RoomId[]; _note?: string } | null;
+  /** Room with the Vitals monitor (Polus, Airship, Fungle), else null. */
+  vitals: RoomId | null;
+  /** MIRA HQ only: the Communications computer listing who crossed the Hallway sensors. */
+  doorLog: { room: RoomId; sensors: string[] } | null;
+  emergencyButton: RoomId;
+  sabotages: MapSabotage[];
+  /** Where each sabotage is fixed (or, for doors, which rooms can be shut). Unverified spots carry a note in `_note`. */
+  sabotageRooms?: Partial<Record<MapSabotage, RoomId[]>>;
+  /** Impostors can shut doors on this map. */
+  doors: boolean;
+  features: MapFeature[];
+  /** Non-walking links that are already in the adjacency graph (ladders, zipline, moving platform), for display / reasoning. */
+  shortcuts?: { from: RoomId; to: RoomId; kind: 'ladder' | 'zipline' | 'platform'; sec: number }[];
+  /** Where players appear at game start / after a meeting (Airship: each player picks one of these). */
+  spawn?: { start: RoomId[]; afterMeeting: RoomId[]; _note?: string };
+  /** Panels that look like a task but can never be done: anyone "doing" one is faking. */
+  dummyPanels?: { room: RoomId; taskId: string }[];
   _note?: string;
 }
 

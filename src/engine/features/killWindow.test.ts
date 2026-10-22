@@ -70,7 +70,7 @@ describe('kill window', () => {
     expect(couldNot).toContain('blue');          // with me the whole round
     expect(could).toEqual(expect.arrayContaining(['red', 'green', 'purple', 'white', 'orange']));
     const purple = w.could.find(p => p.player === 'purple')!;
-    expect(purple.feasible).toEqual([[10, 28]]);  // seen in Nav at 0:40, 12 s from Electrical even by vent
+    expect(purple.feasible).toEqual([[10, 31.6], [48.4, 50]]); // Nav at 0:40, 12 s by vent × 0.7 slack = 8.4 s
     expect(purple.reasons[0].refs).toEqual(['o5']);
     const blue = w.couldNot.find(p => p.player === 'blue')!;
     expect(blue.reasons[0].refs).toContain('o2'); // traceable to the with-me toggle
@@ -105,7 +105,7 @@ describe('kill window', () => {
     const [w] = killWindows(m);
     const red = w.could.find(p => p.player === 'red')!;
     // admin → electrical: admin→storage 5 + storage→elec 5 = 10 s
-    expect(red.feasible).toEqual([[45, 60]]); // cut (15−10, 35+10)
+    expect(red.feasible).toEqual([[42, 60]]); // cut (15 − 7, 35 + 7): 10 s × 0.7 slack
     expect(red.openFraction).toBeLessThan(1);
   });
 
