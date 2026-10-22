@@ -56,7 +56,27 @@ export function learnName(book: NameBook, name: string, source: NameSource, now:
   if (lobby && !rec.lobbies.includes(lobby)) rec.lobbies = [...rec.lobbies, lobby].slice(-MAX_LOBBIES);
   const junk = { ...book.junk };
   delete junk[key];                     // a confirmed name is never junk
-  return { ...book, names: { ...book.names, [key]: rec }, junk };
+  let names: Record<string, NameRecord> = { ...book.names, [key]: rec };
+  // A user-typed name is never a misread of someone else: drop it from every other record's aliases
+  // (an automatic merge once filed "BigBingus" under another player and hid the owner for good).
+  if (source === 'user') names = stripAlias(names, key, t);
+  return { ...book, names, junk };
+}
+
+/** Remove every alias of `name` (by normalised key) from records other than `name`'s own. */
+function stripAlias(names: Record<string, NameRecord>, key: string, name: string): Record<string, NameRecord> {
+  const out: Record<string, NameRecord> = {};
+  for (const [k, rec] of Object.entries(names)) {
+    if (k === key || !Object.keys(rec.aliases).some(a => norm(a) === key || nameScore(a, name) >= 0.9)) { out[k] = rec; continue; }
+    const aliases = Object.fromEntries(Object.entries(rec.aliases).filter(([a]) => norm(a) !== key && nameScore(a, name) < 0.9));
+    out[k] = { ...rec, aliases };
+  }
+  return out;
+}
+
+/** Mark a name the user owns (their own in-game name): confirmed, and never an alias of anyone else. */
+export function protectName(book: NameBook, name: string, now: number): NameBook {
+  return learnName(book, name, 'user', now);
 }
 
 /** An OCR reading that turned out to be `canonical` (user rename, merge). */
@@ -64,6 +84,8 @@ export function learnAlias(book: NameBook, alias: string, canonical: string, now
   const a = alias.trim(), c = canonical.trim();
   const ka = norm(a), kc = norm(c);
   if (!ka || !kc || ka === kc || isPlaceholderName(a)) return learnName(book, c, source, now);
+  // A user-confirmed spelling (the owner's own name above all) is a person, not a misread of another one.
+  if (book.names[ka]?.user && source !== 'user') return learnName(book, c, source, now);
   let next = learnName(book, c, source, now);
   const rec = next.names[kc];
   if (!rec) return next;
@@ -104,6 +126,19 @@ export function resolve(book: NameBook, raw: string): Resolution {
   if (!key || isPlaceholderName(t)) return { name: t, via: 'none', score: 0 };
   const exact = book.names[key];
   if (exact) return { name: exact.name, via: 'exact', score: 1 };
+  // A close reading of a user-confirmed name is that name, whatever aliases other records collected.
+  if (key.length >= 4) {
+    let bestUser: { rec: NameRecord; score: number } | null = null;
+    for (const rec of Object.values(book.names)) {
+      if (!rec.user) continue;
+      const s = nameScore(t, rec.name);
+      if (!bestUser || s > bestUser.score) bestUser = { rec, score: s };
+    }
+    if (bestUser && bestUser.score >= 0.75) {
+      const known = Object.keys(bestUser.rec.aliases).some(a => norm(a) === key);
+      return { name: bestUser.rec.name, via: known ? 'alias' : 'fuzzy', score: known ? 1 : bestUser.score };
+    }
+  }
   for (const rec of Object.values(book.names)) {
     for (const a of Object.keys(rec.aliases)) if (norm(a) === key) return { name: rec.name, via: 'alias', score: 1 };
   }

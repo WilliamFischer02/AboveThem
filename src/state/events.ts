@@ -172,7 +172,7 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       const now = m.phase.meeting ?? 0;
       const merged: Player = {
         ...b,
-        name: nameQuality(a.name) > nameQuality(b.name) ? a.name : b.name,   // the better-spelled name wins
+        name: b.isMe ? b.name : a.isMe ? a.name : nameQuality(a.name) > nameQuality(b.name) ? a.name : b.name,   // my card keeps my name; otherwise the better-spelled name wins
         color: KNOWN_COLOUR(b.color) || !KNOWN_COLOUR(a.color) ? b.color : a.color,
         colorLocked: b.colorLocked || a.colorLocked,
         roleLocked: b.roleLocked || a.roleLocked,

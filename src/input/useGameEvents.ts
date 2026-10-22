@@ -22,7 +22,7 @@ import { MAPS } from '../data/maps';
 import { parseChatClaims, toClaims } from '../engine/chatClaims';
 import { matchGrid, rosterConfidence, norm, similarity, nameScore, type GridEntry, type RosterPlayer } from '../engine/rosterMatch';
 import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type ConsolidatePlayer } from '../engine/rosterConsolidate';
-import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
+import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, protectName, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
 import { translationRequest, senderByIconColor, captureVerdict, watcherStalled, autoMatchSettings, type ChatPayload, type CaptureSnap } from './eventHelpers';
@@ -146,7 +146,12 @@ export function useGameEvents() {
     bookSave.current = setTimeout(() => { persist.writeJson('names.json', bookRef.current).catch(() => {}); }, 1500);
   };
   useEffect(() => {
-    persist.readJson<NameBook>('names.json').then(b => { if (b && b.version === 1) bookRef.current = prune(b, Date.now()); }).catch(() => {});
+    persist.readJson<NameBook>('names.json').then(b => {
+      if (b && b.version === 1) bookRef.current = prune(b, Date.now());
+      // My own name is never somebody else's misread: protect it as soon as the book is in.
+      const mine = settingsRef.current?.myName?.trim();
+      if (mine) learn(bk => protectName(bk, mine, Date.now()));
+    }).catch(() => {});
   }, []);
   useEffect(() => { lobbyRef.current = lobbyCode; }, [lobbyCode]);
   /** Saved setup-screen presets (special roles can't be read from the screen); reloaded per room code. */
@@ -158,6 +163,14 @@ export function useGameEvents() {
   const settingsLoaded = settings !== null;
 
   useEffect(() => { loadSettings().catch(() => ({ ...DEFAULT_APP_SETTINGS })).then(setSettings); }, []);
+
+  // The typed in-game name is the owner's: confirmed in the book and stripped from every other player's aliases.
+  useEffect(() => {
+    const mine = settings?.myName?.trim();
+    if (!mine) return;
+    const t = setTimeout(() => learn(bk => protectName(bk, mine, Date.now())), 800);
+    return () => clearTimeout(t);
+  }, [settings?.myName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resume the most recent match after a restart/reload (logs persist; memory doesn't).
   useEffect(() => {

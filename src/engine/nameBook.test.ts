@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestReading, emptyBook, isJunk, learnAlias, learnJunk, learnName, prune, resolve, snapList } from './nameBook';
+import { bestReading, emptyBook, isJunk, learnAlias, learnJunk, learnName, protectName, prune, resolve, snapList } from './nameBook';
 
 const T = 1_700_000_000_000;
 
@@ -66,5 +66,28 @@ describe('name book', () => {
     expect(bestReading({ BigBihgis: 1, BigBingus: 2 }, 'BigBihgis', false)).toBe('BigBingus');
     expect(bestReading({ BigBihgis: 1, BigBingus: 2 }, 'Typed', true)).toBe('Typed');
     expect(bestReading({ 'eobältfÖ*': 3, Cobaltfox: 2 }, 'eobältfÖ*', false)).toBe('Cobaltfox');
+  });
+});
+
+describe('the owner\'s own name', () => {
+  it('a user-typed name is pulled out of other players\' aliases and wins resolution', () => {
+    let b = emptyBook();
+    // What happened live: automatic merges filed "BigBingus" as a misread of "china".
+    b = learnName(b, 'china', 'grid', T);
+    b = learnAlias(b, 'BigBingus', 'china', T, 'merge');
+    b = learnAlias(b, 'BigBingus', 'china', T, 'merge');
+    expect(resolve(b, 'BigBingus')).toMatchObject({ name: 'china', via: 'alias' });
+    b = protectName(b, 'BigBingus', T);
+    expect(resolve(b, 'BigBingus')).toMatchObject({ name: 'BigBingus', via: 'exact' });
+    expect(resolve(b, 'BigBihgus')).toMatchObject({ name: 'BigBingus' });      // close reading: still me
+    expect(Object.keys(b.names.china.aliases)).not.toContain('BigBingus');
+    expect(resolve(b, 'china')).toMatchObject({ name: 'china' });              // the other player is untouched
+  });
+
+  it('a later automatic merge cannot file the owner\'s name under someone else again', () => {
+    let b = protectName(emptyBook(), 'BigBingus', T);
+    b = learnAlias(b, 'BigBingus', 'china', T, 'merge');
+    expect(b.names.china?.aliases.BigBingus).toBeUndefined();
+    expect(resolve(b, 'BigBingus')).toMatchObject({ name: 'BigBingus', via: 'exact' });
   });
 });

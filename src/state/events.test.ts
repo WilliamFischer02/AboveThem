@@ -127,4 +127,21 @@ describe('roster consolidation events', () => {
     expect(m.rosterSize).toBe(10);
     expect(m.rosterSizeSource).toBe('grid');
   });
+  it('mergePlayers never renames my own card, whichever side of the merge I am on', () => {
+    // Live failure: my card ("BigBingus", grey) folded into a better-evidenced card read as "china" and took its name.
+    const log: MatchEvent[] = [
+      { kind: 'init', wall: 1000, payload: init },
+      { kind: 'addPlayer', wall: 1500, payload: { id: 'slot3', name: 'china', color: 'cyan', isMe: false, status: 'alive', knownRole: 'unknown', slot: 3, slotMeeting: 0 } },
+      { kind: 'mergePlayers', wall: 3000, payload: { from: init.me, into: 'slot3', why: 'colour cyan' } },
+    ];
+    const m = replay(log)!;
+    expect(m.players.slot3).toMatchObject({ isMe: true, name: init.players.find(p => p.id === init.me)!.name });
+    const log2: MatchEvent[] = [
+      { kind: 'init', wall: 1000, payload: init },
+      { kind: 'addPlayer', wall: 1500, payload: { id: 'chat9', name: 'china', color: 'gray', isMe: false, status: 'alive', knownRole: 'unknown' } },
+      { kind: 'mergePlayers', wall: 3000, payload: { from: 'chat9', into: init.me, why: 'name' } },
+    ];
+    const m2 = replay(log2)!;
+    expect(m2.players[init.me].name).toBe(init.players.find(p => p.id === init.me)!.name);
+  });
 });
