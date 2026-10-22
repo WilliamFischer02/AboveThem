@@ -395,3 +395,12 @@ details.fold[open] > summary { margin-bottom: 8px; }
 details.fold.panel.tight > summary { padding: 2px 0; }
 .manual-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .status-line { font-size: 12px; color: var(--warn); }
+
+/* ===================== ui-streamline: popover (bug 1) =====================
+   Card menus render in a portal at a fixed, clamped position (Popover.tsx), so they can't be
+   clipped by a scrolling ancestor or trail off the right edge of a 380 px window. */
+.menu.pop { position: fixed; z-index: 60; min-width: 0; max-width: calc(100vw - 16px); top: auto; left: auto; }
+.menu.pop .grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.menu.pop .grid .btn { min-width: 0; white-space: normal; text-align: left; line-height: 1.1; min-height: 32px; }
+.menu.pop .row > .btn { min-height: 32px; }
+.menu-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

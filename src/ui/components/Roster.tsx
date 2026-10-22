@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Player, PlayerColor, PlayerId, RoomId, SuspectScore } from '../../types/game';
 import { useMatch } from '../../state/store';
 import { Crewmate, PlayerIcon } from './Crewmate';
+import { Popover } from './Popover';
 import { myRoomNow, roomName, withMeNow } from '../../input/useHotkeys';
 import { PALETTE, COLOR_IDS } from '../palette';
 import { useAuto } from '../App';
@@ -68,12 +69,6 @@ function ConfidenceDot() {
 function Chip({ p, score, mark, open, onToggle, onClose, prime, flashKey }: { p: Player; score?: SuspectScore; mark?: UserMark; open: boolean; onToggle: () => void; onClose: () => void; prime?: boolean; flashKey?: string | null }) {
   const match = useMatch(s => s.match)!;
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    window.addEventListener('mousedown', h);
-    return () => window.removeEventListener('mousedown', h);
-  }, [open, onClose]);
 
   const withMe = !p.isMe && withMeNow(match, p.id);
   const verdict = p.isMe ? null : score?.verdict ?? (p.status === 'alive' ? 'unknown' : null);
@@ -110,7 +105,7 @@ function Chip({ p, score, mark, open, onToggle, onClose, prime, flashKey }: { p:
       )}
       {!p.isMe && p.status === 'alive' && <QuickActions p={p} />}
       {!p.isMe && <MarkToggles p={p} mark={mark} />}
-      {open && <ChipMenu p={p} onClose={onClose} />}
+      {open && <Popover anchorRef={ref} onClose={onClose}><ChipMenu p={p} onClose={onClose} /></Popover>}
     </div>
   );
 }
@@ -185,7 +180,6 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
   const dispatch = useMatch(s => s.dispatch);
   const [mode, setMode] = useState<MenuMode>('main');
   const [alone, setAlone] = useState(false);
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
   const here = myRoomNow(match) ?? match.map.rooms[0]?.id ?? 'unknown';
   const done = () => { setMode('main'); onClose(); };
   const others = Object.values(match.players).filter(o => o.id !== p.id && o.status === 'alive');
@@ -200,7 +194,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
 
   if (p.isMe) {
     return (
-      <div className="menu" onClick={stop} onMouseDown={stop}>
+      <div className="menu-body">
         <div className="muted small">Where am I?</div>
         {rooms(r => { observe({ type: 'myRoom', room: r }, `Me → ${roomName(match, r)}`); done(); })}
         <div className="row">
@@ -214,7 +208,7 @@ function ChipMenu({ p, onClose }: { p: Player; onClose: () => void }) {
   }
 
   return (
-    <div className="menu" onClick={stop} onMouseDown={stop}>
+    <div className="menu-body">
       {mode === 'main' && (
         <>
           <div className="muted small">{p.name} seen in… <label className="check small" style={{ marginLeft: 8 }}><input type="checkbox" checked={alone} onChange={e => setAlone(e.target.checked)} /> alone</label></div>
