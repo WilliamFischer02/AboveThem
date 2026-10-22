@@ -30,6 +30,8 @@ interface Lexicon {
   noise: string[];
   /** Single words the tokenizer rewrites into several ("conmigo" → with me). */
   expand?: Record<string, string[]>;
+  /** Colour pairs players mix up on screen (research seed). */
+  confusableColors?: { pairs: [string, string][] };
 }
 export const LEX = raw as unknown as Lexicon;
 

@@ -18,6 +18,7 @@
 import type { ChatAssertion, ChatLine, MatchState, PlayerId } from '../../types/game';
 import { interpretClause, isAgreeLine, isNoiseLine, splitClauses, type Clause, type Draft, type Env, type QuestionMeta, type Ref } from './parse';
 import { tagLine, type Unit } from './tokenize';
+import { LEX } from './lexicon';
 
 /** Fields other branches add to ChatLine (bugs-rust): read defensively. */
 type ChatLineX = ChatLine & { unreadable?: boolean; xlatGuess?: boolean };
@@ -185,6 +186,7 @@ export function parseLines(lines: ChatLine[], m: MatchState): ChatAssertion[] {
       });
     }
   });
+  confusableColors(out, m);
   markSuperseded(out);
   // drop undefined optional fields for clean equality in tests / NDJSON
   for (const a of out) for (const k of Object.keys(a) as (keyof ChatAssertion)[]) if (a[k] === undefined) delete a[k];
@@ -203,6 +205,25 @@ export function markSuperseded(list: ChatAssertion[]) {
       const prev = last.get(k);
       if (prev && prev.polarity !== a.polarity && prev.line !== a.line) prev.supersededBy = a.id;
       last.set(k, a);
+    }
+  }
+}
+
+const EYEWITNESS = new Set(['sawVent', 'sawKill', 'sighting', 'sawTask']);
+/** "brown vented" while maroon is also alive: an easy colour to mix up on screen → confidence x0.9. */
+function confusableColors(list: ChatAssertion[], m: MatchState) {
+  const pairs = LEX.confusableColors?.pairs ?? [];
+  const alive = new Set(Object.values(m.players).filter(p => p.status === 'alive').map(p => p.color));
+  for (const a of list) {
+    if (!EYEWITNESS.has(a.kind)) continue;
+    for (const id of a.about) {
+      const c = m.players[id]?.color;
+      const other = pairs.find(([x, y]) => (x === c && alive.has(y as never)) || (y === c && alive.has(x as never)));
+      if (!c || !other) continue;
+      const partner = other[0] === c ? other[1] : other[0];
+      a.confidence = Math.round(a.confidence * 0.9 * 100) / 100;
+      a.why = [...a.why, `${c} and ${partner} are both alive and easy to mix up: confidence x0.9`];
+      break;
     }
   }
 }

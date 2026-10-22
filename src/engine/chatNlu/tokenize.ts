@@ -173,22 +173,45 @@ export function tagLine(text: string, m: MatchState, speaker: PlayerId): Unit[] 
     const span = toks.slice(i, i + (hit?.len ?? 1));
     const s = span[0].s, e = span[span.length - 1].e, w = span.map(x => x.w).join(' ');
     const caps = span.some(x => x.caps);
-    if (hit) {
-      const u: Unit = { ...hit.unit, s, e, w, caps };
-      // "im" / "i am" / "i was" = me + be
+    // "im" / "i am" / "i was" = me + be; "i" / "me" / "we" = me
+    const pushUnit = (u: Unit) => {
       if (u.k === 'selfBe') {
-        units.push({ k: 'P', s, e, w, cls: new Set(['self']), ids: [], self: true, conf: 1, via: 'direct' });
-        units.push({ k: 'be', s, e, w, cls: new Set(['be']), conf: 1 });
+        units.push({ k: 'P', s: u.s, e: u.e, w: u.w, cls: new Set(['self']), ids: [], self: true, conf: u.conf, via: 'direct' });
+        units.push({ k: 'be', s: u.s, e: u.e, w: u.w, cls: new Set(['be']), conf: 1 });
       } else if (u.k === 'self') {
-        units.push({ k: 'P', s, e, w, cls: u.cls, ids: [], self: true, conf: 1, via: 'direct' });
+        units.push({ k: 'P', s: u.s, e: u.e, w: u.w, cls: u.cls, ids: [], self: true, conf: u.conf, via: 'direct' });
       } else units.push(u);
+    };
+    if (hit) {
+      pushUnit({ ...hit.unit, s, e, w, caps });
       i += hit.len;
     } else {
-      units.push({ k: 'W', s, e, w, cls: new Set(), conf: 1, caps });
+      // OCR sometimes drops the space: "redsus", "wasin" → two known words
+      const parts = splitCompound(t.w, m, speaker);
+      if (parts) {
+        const cut = t.s + parts.at;
+        pushUnit({ ...parts.left, s: t.s, e: cut, w: t.w.slice(0, parts.at), conf: Math.min(parts.left.conf, 0.8), via: parts.left.k === 'P' ? 'fuzzy' : parts.left.via });
+        pushUnit({ ...parts.right, s: cut, e: t.e, w: t.w.slice(parts.at), conf: Math.min(parts.right.conf, 0.8), via: parts.right.k === 'P' ? 'fuzzy' : parts.right.via });
+      } else units.push({ k: 'W', s, e, w, cls: new Set(), conf: 1, caps });
       i++;
     }
   }
   return units;
+}
+
+/**
+ * Split an unknown word into two exact lexicon words ("redsus" → red + sus). Both halves must be
+ * >= 2 letters and neither may be filler/noise, so ordinary English words are not chopped up.
+ */
+function splitCompound(w: string, m: MatchState, speaker: PlayerId): { at: number; left: Unit; right: Unit } | undefined {
+  if (w.length < 5 || w.length > 16 || !/^\p{L}+$/u.test(w)) return undefined;
+  const useful = (u?: Hit['unit']) => !!u && !['filler', 'noise', 'W', 'agree', 'hedge', 'intens'].includes(u.k) && !(u.k === 'P' && !u.ids?.length && !u.self);
+  for (let at = w.length - 2; at >= 2; at--) {
+    const l = lookupPhrase(w.slice(0, at), m, speaker, true, 1);
+    const r = lookupPhrase(w.slice(at), m, speaker, true, 1);
+    if (useful(l) && useful(r)) return { at, left: { ...l!, s: 0, e: 0, w: '' }, right: { ...r!, s: 0, e: 0, w: '' } };
+  }
+  return undefined;
 }
 
 /** The fuzzy static hit returns entries; recover a phrase that maps to the same primary class. */

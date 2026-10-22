@@ -179,6 +179,26 @@ describe('chat NLU: player names and OCR noise (roster = snap list)', () => {
     expect(p('slayer sus', 'white', named)).toEqual(['accuse:blue']);
     expect(parseLine('bigbngus clear', 'white', named)[0].confidence).toBeLessThan(parseLine('bigbingus clear', 'white', named)[0].confidence);
   });
+  it('OCR-merged words split into two known words; ordinary words are not chopped', () => {
+    expect(p('redsus', 'white')).toEqual(['accuse:red']);
+    expect(p('i wasin elec', 'white')).toEqual(['location:white@electrical']);
+    expect(p('blackvented', 'white')).toEqual(['sawVent:black']);
+    expect(parseLine('redsus', 'white', m)[0].confidence).toBeLessThan(parseLine('red sus', 'white', m)[0].confidence);
+    expect(p('surely', 'white')).toEqual([]);
+    expect(p('weekend', 'white')).toEqual([]);
+  });
+  it('"we" is the speaker', () => {
+    expect(p('we were in elec', 'white')).toEqual(['location:white@electrical']);
+    expect(p('me and lime were together', 'white')).toEqual(['withMe:lime']);
+  });
+  it('eyewitness claims on an easily confused colour lose a little confidence', () => {
+    // brown and maroon are both alive in this lobby; red is ejected, so maroon/red is not a live pair
+    const brown = parseLine('brown vented', 'white', m)[0];
+    const black = parseLine('black vented', 'white', m)[0];
+    expect(brown.confidence).toBeLessThan(black.confidence);
+    expect(brown.why.join(' ')).toContain('maroon');
+    expect(parseLine('brown sus', 'white', m)[0].confidence).toBe(parseLine('black sus', 'white', m)[0].confidence);
+  });
   it('short common words never snap to names or colours', () => {
     expect(p('read it', 'white', named)).toEqual([]);
     expect(p('pot', 'white', named)).toEqual(['accuse:green']); // 3-letter unique prefix of a name: weak bare mention
