@@ -38,8 +38,25 @@ const CLOCK_SLACK = 3;
 export function killWindow(m: MatchState, b: BodyFoundObs): [number, number] {
   const cd = b.stamp.round === 0 ? Math.min(OPENING_COOLDOWN_SEC, m.settings.killCooldownSec) : m.settings.killCooldownSec;
   const earliest = Math.max(0, cd - CLOCK_SLACK);
-  const w0 = Math.max(0, b.stamp.t - W.killWindow.defaultSec, Math.min(earliest, b.stamp.t));
-  return [w0, b.stamp.t];
+  let w0 = Math.max(0, b.stamp.t - W.killWindow.defaultSec, Math.min(earliest, b.stamp.t));
+  let w1 = b.stamp.t;
+  // game-knowledge `vitals_timing`: a vitals read I made bounds the death. Victim OK at t ⇒ died after t;
+  // victim DED at t ⇒ died before t. (Vitals on my own screen: local info, no advantage.)
+  for (const v of vitalsReads(m)) {
+    if (v.stamp.round !== b.stamp.round || v.stamp.t > b.stamp.t) continue;
+    if (v.alive?.includes(b.victim)) w0 = Math.max(w0, Math.min(v.stamp.t, w1));
+    if (v.dead?.includes(b.victim)) w1 = Math.min(w1, Math.max(v.stamp.t, w0));
+  }
+  return [w0, w1];
+}
+
+/**
+ * MERGE: features adds `VitalsReadObs {type:'vitalsRead', dead, alive, dc?}` to the Observation union.
+ * Until then this reads it structurally so the branch compiles either way.
+ */
+interface VitalsLike { id: string; type: 'vitalsRead'; stamp: { round: number; t: number }; dead?: PlayerId[]; alive?: PlayerId[] }
+export function vitalsReads(m: MatchState): VitalsLike[] {
+  return (m.observations as unknown as { type: string }[]).filter((o): o is VitalsLike => o.type === 'vitalsRead');
 }
 
 /** Travel time with vents allowed (a vent hop costs ~2 s): Dijkstra over walk + vent edges. */

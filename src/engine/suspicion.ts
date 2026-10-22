@@ -21,7 +21,7 @@ import { buildAlibiGraph, killWindowClears } from './alibi';
 import { OBSERVATION_RULES } from './rules';
 import { CLAIM_RULES } from './contradictions';
 import { VOTING_RULES } from './voting';
-import { killWindow, ruleKillFeasibility, travelLowerBound } from './feasibility';
+import { killWindow, ruleKillFeasibility, travelLowerBound, vitalsReads } from './feasibility';
 import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
 import { assertionsToEvidence, chatAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
@@ -101,6 +101,7 @@ export function hardFacts(m: MatchState): HardFacts {
   const soloImpostor = m.settings.impostorCount === 1;
   for (const b of bodies) {
     const [windowStart, windowEnd] = killWindow(m, b);
+    const vitalsRefs = vitalsReads(m).filter(v => v.stamp.round === b.stamp.round && v.stamp.t <= b.stamp.t && (v.alive?.includes(b.victim) || v.dead?.includes(b.victim))).map(v => v.id);
     const cleared = new Set<PlayerId>();
     for (const c of killWindowClears(edges, anchors, b.stamp.round, windowStart, windowEnd)) {
       if (c.player === m.me) continue;
@@ -109,11 +110,11 @@ export function hardFacts(m: MatchState): HardFacts {
       // One impostor in the lobby + with me (my own eyes) through the whole window = they did not kill = crew.
       if (soloImpostor && c.hops === 1 && c.via === m.me && m.myRole !== 'impostor' && !imp.has(c.player)) {
         crew.add(c.player);
-        evidence.push(ev(c.player, -HARD, 'hard', `With me through the whole kill window for ${pname(b.victim)} (only 1 impostor)`, [...c.refs, b.id]));
+        evidence.push(ev(c.player, -HARD, 'hard', `With me through the whole kill window for ${pname(b.victim)} (only 1 impostor)`, [...c.refs, b.id, ...vitalsRefs]));
         continue;
       }
       const w = c.hops === 1 ? -3 : -3 * 0.7;
-      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})`, [...c.refs, b.id]));
+      evidence.push(ev(c.player, w, 'hard', `With ${via} during the kill window for ${pname(b.victim)} (${fmt(windowStart)}–${fmt(windowEnd)})`, [...c.refs, b.id, ...vitalsRefs]));
     }
     clearedForKill.set(b.id, cleared);
   }

@@ -5,7 +5,7 @@ import { ruleTaskClaims, ruleLocationClaims } from './contradictions';
 import { assertionsToEvidence, chatPlaced, ruleDeadAccuser, ruleProfileTells, visualClearValid } from './chatEvidence';
 import type { ChatAssertion, SpeakerProfile } from './chatNluTypes';
 import { ruleMutualAlibiPair, impostorPairs } from './pairs';
-import { killFeasibility, travelLowerBound } from './feasibility';
+import { killFeasibility, killWindow, travelLowerBound } from './feasibility';
 import { scoreAll, suspectPairs } from './suspicion';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { fixture2 } from './__fixtures__/skeld_match_02_two_imp';
@@ -110,6 +110,23 @@ describe('dead_accuser and chat-nlu profile tells', () => {
     };
     const e = ruleProfileTells(fixture3, { blue: prof, ghost: { ...prof, player: 'ghost' } });
     expect(e.map(x => x.label)).toEqual(['Said Admin, then Electrical in meeting 1', 'Flipped on Green within meeting 1']);
+  });
+});
+
+describe('vitals_timing', () => {
+  it('a vitals read with the victim still OK narrows the kill window, so a later companion clears', () => {
+    const withMe: Observation = { id: 'wm', type: 'withMe', stamp: st(0, 35), source: 'me', confidence: 0.95, player: 'purple', room: 'cafeteria', on: true };
+    const before: MatchState = { ...fixture3, observations: [...fixture3.observations, withMe] };
+    const body = fixture3.observations.find(o => o.type === 'bodyFound') as BodyFoundObs; // Yellow, Storage, 0:55
+    expect(scoreAll(before).find(s => s.player === 'purple')!.verdict).not.toBe('certainCrew');
+    const vitals = { id: 'vit', type: 'vitalsRead', stamp: st(0, 40), source: 'me', confidence: 1, alive: ['yellow', 'purple'], dead: [] } as unknown as Observation;
+    const after: MatchState = { ...before, observations: [...before.observations, vitals] };
+    expect(killWindow(after, body)).toEqual([40, 55]);
+    const p = scoreAll(after).find(s => s.player === 'purple')!;
+    expect(p.verdict).toBe('certainCrew'); // 1-impostor lobby, with me through [0:40, 0:55]
+    expect(p.evidence[0].refs).toContain('vit');
+    const ded = { ...vitals, id: 'v2', stamp: st(0, 50), alive: [], dead: ['yellow'] } as unknown as Observation;
+    expect(killWindow({ ...after, observations: [...after.observations, ded] }, body)).toEqual([40, 50]);
   });
 });
 
