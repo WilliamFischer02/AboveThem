@@ -58,15 +58,8 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
   const hl = useMemo(() => headline(match, scores), [match, scores]);
   return (
     <section className="panel">
-      <HeadlineBar h={hl} scores={scores} big label={`Meeting ${script.meeting + 1}`} />
-      <div className={`vote-card big ${target === 'skip' ? 'skip' : 'go'}`}>
-        {target !== 'skip' && <PlayerIcon id={target} color={match.players[target]?.color ?? 'unknown'} size={48} />}
-        <div className="col" style={{ gap: 2 }}>
-          <div style={{ fontWeight: 800, fontSize: 22 }}>{target === 'skip' ? 'SKIP' : `VOTE ${name(target)}`} <span className="muted" style={{ fontSize: 14 }}>({Math.round(script.vote.confidence * 100)}%)</span></div>
-          <div className="small">{script.vote.reason}</div>
-          {script.vote.alternative && <div className="small muted">or: {name(script.vote.alternative)}</div>}
-        </div>
-      </div>
+      {/* The vote recommendation lives inside the header (it IS the headline's vote — one source of truth). */}
+      <HeadlineBar h={hl} scores={scores} big label={`Meeting ${script.meeting + 1}`} vote={script.vote} />
       <PushTally recommended={target} />
       {!ghost && <div className="col">
         {script.say.length > 0 && <h3>Say</h3>}

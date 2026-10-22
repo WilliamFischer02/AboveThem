@@ -10,6 +10,7 @@ import { MeetingPanel } from '../components/MeetingPanel';
 import { Toast } from '../components/Toast';
 import { ChatDock } from '../components/ChatDock';
 import { HeadlineBar } from '../components/HeadlineBar';
+import { MapChecks } from '../components/MapChecks';
 import { Popover } from '../components/Popover';
 import { useHotkeys, myRoomNow } from '../../input/useHotkeys';
 import { buildConfig, keyLabel, ACTION_KEYS, FIRST_SPECIAL } from '../../input/hotkeys';
@@ -88,9 +89,11 @@ export function MatchScreen() {
             </div>
           )}
         </div>
-        {!script && playing && !impostor && (
+        {!script && playing && (
           <div className="area-head">
-            <HeadlineBar h={hl} scores={scores} right={manualPhases ? <PhaseButtons inMeeting={inMeeting} /> : undefined} />
+            {!impostor && <HeadlineBar h={hl} scores={scores} right={manualPhases ? <PhaseButtons inMeeting={inMeeting} /> : undefined} />}
+            {impostor && manualPhases && <div className="row"><PhaseButtons inMeeting={inMeeting} /></div>}
+            {!focus && <MapChecks map={match.map} />}
           </div>
         )}
         <div className="area-side">
