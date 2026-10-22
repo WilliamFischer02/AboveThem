@@ -11,13 +11,13 @@
  *   - the "pack" = players ≥ 0.45 and within PACK (0.15) of the top:
  *       ≥ 3 → threeSuspects, 2 → twoSuspects,
  *       1 and top ≥ MAJOR (0.6) and #2 < SECOND_LOW (0.4) → oneSuspect, else → leaning
- *   Critical vote (crew alive − impostors left ≤ 1: a wrong eject loses immediately) wraps
+ *   Critical vote (meetingMath danger 'critical': a wrong eject loses immediately) wraps
  *   any of the above except confirmedImpostor; `basis` keeps the underlying classification.
  *   A dead "me" becomes imDead (same basis). Lobby / game over short-circuit.
  * Every listed player links to the evidence ids that put them there (`why`).
  */
 import type { MatchState, PlayerId, SuspectScore } from '../types/game';
-import { impostorsRemaining } from './suspicion';
+import { meetingMath } from './features/meetingMath';
 import weights from '../data/tactics/weights.json';
 
 export type HeadlineKind =
@@ -60,14 +60,6 @@ export const CRITICAL_MIN = 0.3;
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 
-/** Crew alive minus impostors left; ≤ 1 = critical (a wrong eject loses), 2 = careful. */
-export function voteMargin(m: MatchState): { imp: number; crew: number; margin: number } {
-  const alive = Object.values(m.players).filter(p => p.status === 'alive').length;
-  const imp = impostorsRemaining(m);
-  const crew = alive - imp;
-  return { imp, crew, margin: crew - imp };
-}
-
 export function headline(m: MatchState, scores: SuspectScore[]): Headline {
   const name = (id: PlayerId) => m.players[id]?.name ?? id;
   const phase = m.phase.phase;
@@ -85,12 +77,11 @@ export function headline(m: MatchState, scores: SuspectScore[]): Headline {
   const topLabel = (s: SuspectScore) => [...s.evidence].filter(e => e.weight > 0).sort((a, b) => b.weight - a.weight)[0]?.label;
   const withPct = (s: SuspectScore) => `${name(s.player)} (${pct(s.probability)})`;
 
-  const { imp, margin } = voteMargin(m);
-  // MERGE: use meetingMath(m) from src/engine/features/meetingMath.ts once the features branch is on main
-  // (danger 'critical' = wrongVoteLoses, 'careful' = skipThenOneKillLoses-style margin 2). Rule (lead decision):
-  // critical = a wrong eject loses immediately: crew − 1 ≤ imp  ⇔  crew − imp ≤ 1; careful = crew − imp == 2.
-  const critical = imp > 0 && margin <= 1;
-  const careful = imp > 0 && margin === 2;
+  // Vote arithmetic has one owner: features' meetingMath (critical = a wrong eject loses now; careful = one
+  // wrong vote / one skip+kill from that). No duplicate rule here.
+  const mm = meetingMath(m);
+  const critical = mm.danger === 'critical';
+  const careful = mm.danger === 'careful';
 
   let base: Headline;
   const confirmed = ranked.filter(s => s.verdict === 'certainImpostor');

@@ -4,6 +4,7 @@ import { headline, headlineText } from './headline';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { scoreAll } from './suspicion';
 import { buildMeetingScript } from './meetingScript';
+import { meetingMath } from './features/meetingMath';
 
 const ids = ['me', 'red', 'blue', 'green', 'pink', 'orange', 'yellow', 'black'];
 
@@ -164,5 +165,17 @@ describe('headline', () => {
   it('meetingScript.vote is exactly the headline vote', () => {
     const scores = scoreAll(fixture);
     expect(buildMeetingScript(fixture, scores, 0).vote).toEqual(headline(fixture, scores).vote);
+  });
+  it('danger is exactly meetingMath (features) — one source of truth for vote arithmetic', () => {
+    const cases: [string[], number][] = [[ids, 2], [['me', 'red', 'blue', 'green', 'pink', 'orange'], 2], [['me', 'red', 'blue', 'green'], 1], [['me', 'red', 'blue'], 1]];
+    for (const [alive, imps] of cases) {
+      const m = match({}, alive, imps);
+      expect(headline(m, [sc('red', 0.5)]).danger).toBe(meetingMath(m).danger);
+      expect(headline(m, [sc('red', 0.5)]).critical).toBe(meetingMath(m).wrongVoteLoses);
+    }
+    // 2 impostors, 6 alive: crew 4 − imp 2 = 2 → careful (warn), vote not forced
+    const h = headline(match({}, ['me', 'red', 'blue', 'green', 'pink', 'orange'], 2), [sc('red', 0.35), sc('blue', 0.2)]);
+    expect(h.danger).toBe('careful');
+    expect(h.vote.target).toBe('skip');
   });
 });
