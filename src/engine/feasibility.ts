@@ -14,14 +14,23 @@ import type { BodyFoundObs, MapData, MatchState, PlayerId, RoomId, SightingObs, 
 import weightsJson from '../data/tactics/weights.json';
 import { walkSeconds, ventConnected } from './map';
 import { ev, fmt } from './evidence';
+import { hasMapData } from './mapAdapter';
 
 const W = weightsJson;
 
 /**
- * Earliest instant a kill is possible in a round: every impostor's cooldown restarts at the
- * start of a round. Round 0 uses a short opening cooldown.
- * UNVERIFIED: the stock client's opening cooldown is ~10 s regardless of the lobby setting;
- * rounds after a meeting restart at the full setting. 3 s slack for our round-start clock.
+ * Map travel seconds are eyeballed (game-knowledge §1.3): an "impossible travel" verdict must
+ * survive ≥ 30 % slack (and at least 3 s). Use this lower bound wherever travel time convicts.
+ */
+export const travelLowerBound = (sec: number): number =>
+  // Unknown room / no path in our data (Infinity) ⇒ 0: never convict on missing map data (fail soft).
+  (Number.isFinite(sec) ? Math.max(0, Math.min(sec - 3, sec * 0.7)) : 0);
+
+/**
+ * Earliest instant a kill is possible in a round: every impostor's cooldown restarts when a
+ * meeting ends (and pauses in vents / on cams, so this stays a lower bound). The first
+ * cooldown of the match is 10 s regardless of settings (game-knowledge §1.2, Fandom "Kill").
+ * 3 s slack for our round-start clock.
  */
 export const OPENING_COOLDOWN_SEC = 10;
 const CLOCK_SLACK = 3;
@@ -83,17 +92,17 @@ export function killFeasibility(m: MatchState, player: PlayerId, body: BodyFound
     o.type === 'sighting' && o.stamp.round === body.stamp.round && (o.source === 'me' || o.source === 'mod')
     && (o.player === player || !!o.withPlayers?.includes(player)));
   const roomName = (r: string) => m.map.rooms.find(x => x.id === r)?.name ?? r;
+  if (!hasMapData(m.map) || !m.map.rooms.some(r => r.id === body.room)) return { feasible: 'unknown', reason: 'No map data for this room', refs: [], shaky: true };
   if (sights.length === 0) return { feasible: 'unknown', reason: 'Not seen during the round', refs: [], shaky: false };
   const speed = m.settings.playerSpeed || 1;
   // Relevant: sightings close enough in time to the window to constrain it.
   const relevant = sights.filter(s => s.stamp.t >= w0 - 40 && s.stamp.t <= w1 + 5);
   if (relevant.length === 0) return { feasible: 'unknown', reason: 'No sighting near the kill window', refs: [], shaky: false };
-  // Travel times in the map table are rough (±3 s): only call it impossible / vent-only when it is
-  // impossible by more than that. A hair-thin verdict accused crewmates in the calibration games.
-  const GRACE = 3;
-  const block = (secs: (s: SightingObs) => number) => relevant.map(s => [s.stamp.t - secs(s) + GRACE, s.stamp.t + secs(s) - GRACE] as [number, number]);
-  const walk = (s: SightingObs) => walkSeconds(m.map, s.room, body.room, speed);
-  const vent = (s: SightingObs) => ventAssistedSeconds(m.map, s.room, body.room, speed);
+  // Travel times in the map table are rough: only call it impossible / vent-only when it is
+  // impossible after the slack (travelLowerBound). A hair-thin verdict accused crewmates in the calibration games.
+  const block = (secs: (s: SightingObs) => number) => relevant.map(s => [s.stamp.t - secs(s), s.stamp.t + secs(s)] as [number, number]);
+  const walk = (s: SightingObs) => travelLowerBound(walkSeconds(m.map, s.room, body.room, speed));
+  const vent = (s: SightingObs) => travelLowerBound(ventAssistedSeconds(m.map, s.room, body.room, speed));
   const refs = [...relevant.map(s => s.id), body.id];
   const where = relevant.map(s => `${roomName(s.room)} ${fmt(s.stamp.t)}`).join(', ');
   const shakyRooms = !m.map._verified.rooms;

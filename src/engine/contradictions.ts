@@ -9,6 +9,7 @@ import weightsJson from '../data/tactics/weights.json';
 import { walkSeconds, taskExistsInRoom } from './map';
 import { buildAlibiGraph, ROUND_END } from './alibi';
 import { fmt, ev } from './evidence';
+import { travelLowerBound } from './feasibility';
 
 const W = weightsJson;
 
@@ -27,7 +28,7 @@ function checkLocation(m: MatchState, c: Claim): { verdict: Verdict; ref?: strin
     if (s.player !== c.by || s.stamp.round !== c.stamp.round || s.stamp.t < t0 || s.stamp.t > t1) continue;
     if (s.room === c.room) { confirmedRef = s.id; continue; }
     const slack = c.timeWindow ? Math.min(s.stamp.t - t0, t1 - s.stamp.t) : ROUND_END;
-    if (walkSeconds(m.map, s.room, c.room, m.settings.playerSpeed) > slack) return { verdict: 'contradicted', ref: s.id, seenRoom: s.room, seenT: s.stamp.t };
+    if (travelLowerBound(walkSeconds(m.map, s.room, c.room, m.settings.playerSpeed)) > slack) return { verdict: 'contradicted', ref: s.id, seenRoom: s.room, seenT: s.stamp.t };
   }
   return confirmedRef ? { verdict: 'confirmed', ref: confirmedRef } : { verdict: 'pending' };
 }
@@ -56,7 +57,7 @@ export function ruleStoryChanged(m: MatchState): EvidenceItem[] {
     if (a.by !== b.by || a.stamp.round !== b.stamp.round || a.room === b.room) continue;
     const [a0, a1] = a.timeWindow!, [b0, b1] = b.timeWindow!;
     const gap = Math.max(0, Math.max(b0 - a1, a0 - b1));
-    if (walkSeconds(m.map, a.room!, b.room!, m.settings.playerSpeed) > gap) {
+    if (travelLowerBound(walkSeconds(m.map, a.room!, b.room!, m.settings.playerSpeed)) > gap) {
       out.push(ev(a.by, W.meeting.storyChanged, 'meeting', `Story changed: ${roomName(m, a.room!)} then ${roomName(m, b.room!)} with no time to walk`, [a.id, b.id], false, 'contradiction',
         { P: pname(m, a.by), R: roomName(m, b.room!), R2: roomName(m, a.room!), T: fmt(b0), W: 'you' }));
     }
@@ -90,7 +91,11 @@ export function ruleTaskClaims(m: MatchState): EvidenceItem[] {
     if (c.type !== 'task' || !c.taskId) continue;
     const task = m.map.tasks.find(t => t.id === c.taskId);
     const taskName = task?.name ?? c.taskId;
-    if (c.room && !taskExistsInRoom(m.map, c.taskId, c.room)) {
+    if (!task && m.map.tasks.length > 0) {
+      // game-knowledge `task_not_on_map` (high, not hard: alias / name errors).
+      out.push(ev(c.by, W.task.taskNotOnMap, 'task', `Claims ${taskName} — there is no such task on ${m.map.name}`, [c.id], !m.map._verified.tasks, 'task_not_in_room',
+        { P: pname(m, c.by), R: c.room ? roomName(m, c.room) : m.map.name, TASK: taskName }));
+    } else if (c.room && !taskExistsInRoom(m.map, c.taskId, c.room)) {
       out.push(ev(c.by, W.task.taskNotAtClaimedLocation, 'task', `${taskName} does not exist in ${roomName(m, c.room)}`, [c.id], !m.map._verified.tasks, 'task_not_in_room',
         { P: pname(m, c.by), R: roomName(m, c.room), TASK: taskName }));
     } else if (task?.visual && m.settings.visualTasksOn) {

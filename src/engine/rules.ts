@@ -103,7 +103,12 @@ export function ruleLastSeenWithVictim(m: MatchState): EvidenceItem[] {
       }
     }
     if (last) {
-      out.push(ev(last.who, W.movement.stackingNearVictim, 'movement', `Last seen with ${pname(m, b.victim)} in ${roomName(m, last.s.room)} at ${fmt(last.s.stamp.t)}`, [last.s.id, b.id], false, 'last_seen_with_victim',
+      // game-knowledge `two_together_one_dies`: just the two of them, inside the kill window → very strong.
+      const pair = new Set([last.s.player, ...(last.s.withPlayers ?? [])]).size === 2;
+      const inWindow = last.s.stamp.t >= killWindow(m, b)[0];
+      const strong = pair && inWindow;
+      out.push(ev(last.who, strong ? W.movement.aloneWithVictimInWindow : W.movement.stackingNearVictim, 'movement',
+        `${strong ? 'Alone with' : 'Last seen with'} ${pname(m, b.victim)} in ${roomName(m, last.s.room)} at ${fmt(last.s.stamp.t)}${strong ? ' (kill window)' : ''}`, [last.s.id, b.id], false, 'last_seen_with_victim',
         { P: pname(m, last.who), V: pname(m, b.victim), R: roomName(m, last.s.room), T: fmt(last.s.stamp.t) }));
     }
   }

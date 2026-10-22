@@ -16,6 +16,7 @@
     "selfReportDeadEndBonus": 0.4,
     "reportedInRoomWithNoTaskReason": 0.6,
     "stackingNearVictim": 0.7,
+    "aloneWithVictimInWindow": 1.6,
     "roamingNoTaskStops": 0.6,
     "taskDurationMismatch": 0.5,
     "unaccountedWholeRound": 0.4,
@@ -29,6 +30,7 @@
     "taskNotAtClaimedLocation": 2.0,
     "claimedCommonTaskIDontHave": 2.5,
     "taskLogicImpossible": 2.0,
+    "taskNotOnMap": 1.6,
     "taskBarDidNotMove": 1.0,
     "taskBarMoved": -1.0,
     "visualWithoutAnimation": 3.0
@@ -57,7 +59,7 @@
     "oddArrivalAfterLights": 0.6,
     "ignoredCriticalSabotage": 0.5,
     "commsAfterVisualAnnounced": 0.4,
-    "fixedSabotageWithMe": -0.8
+    "fixedSabotageWithMe": -0.4
   },
   "structural": {
     "neverVoteEachOther": 0.4,
@@ -66,7 +68,10 @@
     "repeatedCrewEjections": 0.5,
     "minorityVoteBloc": 0.35,
     "recurrence": 0.3,
-    "mutualVouchPair": 0.3
+    "mutualVouchPair": 0.3,
+    "deadAccuser": 0.25,
+    "storyFlipNlu": 0.9,
+    "stanceFlipWhenCountered": 0.2
   },
   "manual": {
     "sus": 0.8,

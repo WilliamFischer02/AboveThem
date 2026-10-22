@@ -21,13 +21,15 @@ import { buildAlibiGraph, killWindowClears } from './alibi';
 import { OBSERVATION_RULES } from './rules';
 import { CLAIM_RULES } from './contradictions';
 import { VOTING_RULES } from './voting';
-import { killWindow, ruleKillFeasibility } from './feasibility';
+import { killWindow, ruleKillFeasibility, travelLowerBound } from './feasibility';
 import { markHistory } from './marks';
 import { ev, fmt, resetEvidenceIds } from './evidence';
-import { assertionsToEvidence, claimsToAssertions, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
+import { assertionsToEvidence, claimsToAssertions, ruleDeadAccuser, ruleProfileTells, ruleSilentInMeeting, speakerCredibility, type SpeakerCred, type SpeakerStatus } from './chatEvidence';
+import type { ChatAssertion } from './chatNluTypes';
 import { parseAllChat, activeAssertions } from './chatNlu';
 import { speakerProfiles } from './chatProfile';
-import { aliveAtMeeting, completedMeetings, currentMeeting, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
+import { aliveAtMeeting, completedMeetings, currentMeeting, deathOf, nowRound, roundOfMeeting, snapshotAtMeeting } from './history';
+import { impostorPairs, ruleMutualAlibiPair, type PairSignal } from './pairs';
 import { walkSeconds } from './map';
 
 type Weights = typeof weightsJson;
@@ -132,7 +134,20 @@ export function hardFacts(m: MatchState): HardFacts {
 // Decay, caps, normalisation
 // ---------------------------------------------------------------------------
 
-export const SOFT_RULES = [...OBSERVATION_RULES, ...CLAIM_RULES, ...VOTING_RULES, ruleKillFeasibility];
+export const SOFT_RULES = [...OBSERVATION_RULES, ...CLAIM_RULES, ...VOTING_RULES, ruleKillFeasibility, ruleMutualAlibiPair];
+
+/** Every chat assertion the engine weighs: chat-nlu's reading, plus Claim records for lines it did not read. */
+export function chatAssertions(m: MatchState): ChatAssertion[] {
+  const nlu = activeAssertions(parseAllChat(m));
+  const readLines = new Set(nlu.map(a => a.line));
+  return [...nlu, ...claimsToAssertions(m, readLines)];
+}
+
+/** Candidate impostor pairs among unresolved players (display: "watch this pair"). */
+export function suspectPairs(m: MatchState): PairSignal[] {
+  const hf = hardFacts(m);
+  return impostorPairs(m, chatAssertions(m), new Set([...hf.certainCrew, ...hf.certainImpostors]));
+}
 
 /** id → round for everything an EvidenceItem can reference. */
 function refRounds(m: MatchState): Map<string, number> {
@@ -268,7 +283,7 @@ export function ruleWitnessContradiction(m: MatchState, certainCrew: Set<PlayerI
     if (s.about !== l.by || s.stamp.round !== l.stamp.round || s.room === l.room) continue;
     const [a0, a1] = l.timeWindow!, [b0, b1] = s.timeWindow!;
     const gap = Math.max(0, Math.max(b0 - a1, a0 - b1));
-    if (walkSeconds(m.map, l.room!, s.room!, m.settings.playerSpeed) <= gap) continue;
+    if (travelLowerBound(walkSeconds(m.map, l.room!, s.room!, m.settings.playerSpeed)) <= gap) continue;
     const tag = { P: pname(l.by), R: roomName(l.room!), R2: roomName(s.room!), T: fmt(b0), W: pname(s.by) };
     if (certainCrew.has(s.by)) {
       out.push(ev(l.by, W.meeting.witnessContradiction, 'meeting', `Claimed ${roomName(l.room!)}, but confirmed-crew ${pname(s.by)} saw them in ${roomName(s.room!)}`, [l.id, s.id], !m.map._verified.rooms, 'contradiction', tag));
@@ -315,20 +330,21 @@ function scoreCore(m: MatchState): SuspectScore[] {
   const pass1 = combine(m, hf, base);
 
   const roundOf = roundOfMeeting(m);
-  const nlu = activeAssertions(parseAllChat(m));
-  const readLines = new Set(nlu.map(a => a.line));
-  const assertions = [...nlu, ...claimsToAssertions(m, readLines)];
+  const assertions = chatAssertions(m);
+  const profiles = speakerProfiles(m);
   const knownAliveImp = Object.values(m.players).filter(p => p.status === 'alive' && hf.certainImpostors.has(p.id)).length;
   const social = annotate(m, [
     ...assertionsToEvidence(m, assertions, {
       credibility: credibilityFrom(m, hf, pass1),
       certainCrew: hf.certainCrew,
       unknownImpostorsLeft: Math.max(0, hf.impostorsRemaining - knownAliveImp),
-      profiles: speakerProfiles(m),
+      profiles,
       roundOfMeeting: roundOf,
     }),
     ...ruleSilentInMeeting(m, (p, k) => aliveAtMeeting(m, p, k), roundOf),
     ...ruleWitnessContradiction(m, hf.certainCrew),
+    ...ruleProfileTells(m, profiles, roundOf),
+    ...ruleDeadAccuser(m, assertions, p => deathOf(m, p).diedRound, roundOf),
   ]);
   const all = [...base, ...social];
   const rec = annotate(m, ruleRecurrence(all));

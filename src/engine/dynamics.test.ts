@@ -97,13 +97,15 @@ describe('kill feasibility', () => {
   });
   it('a player seen far away right before the report could not have done it; unknown when unseen', () => {
     const m: MatchState = { ...fixture, observations: [...fixture.observations,
-      { id: 's1', type: 'sighting', stamp: { round: 0, t: 12, wall: 1 }, source: 'me', confidence: 0.95, player: 'orange', room: 'navigation', alone: true },
-      { id: 's2', type: 'sighting', stamp: { round: 0, t: 30, wall: 2 }, source: 'me', confidence: 0.95, player: 'orange', room: 'navigation', alone: true },
-      { id: 's3', type: 'sighting', stamp: { round: 0, t: 48, wall: 3 }, source: 'me', confidence: 0.95, player: 'orange', room: 'navigation', alone: true },
+      // Watched in Navigation every ~10 s through the whole window: not even a vent run fits.
+      ...[10, 20, 30, 40, 48].map((t, i) => ({ id: `s${i + 1}`, type: 'sighting', stamp: { round: 0, t, wall: i }, source: 'me', confidence: 0.95, player: 'orange', room: 'navigation', alone: true })),
     ] as Observation[] };
     const f = killFeasibility(m, 'orange', body);
     expect(f.feasible).toBe('no');
     expect(f.refs).toContain('s2');
+    // Seen only every 18 s: a vent run (Nav→Shields→Cafeteria→MedBay→Electrical) fits between sightings.
+    const sparse: MatchState = { ...m, observations: m.observations.filter(o => !['s2', 's4'].includes(o.id)) };
+    expect(killFeasibility(sparse, 'orange', body).feasible).toBe('ventOnly');
     expect(killFeasibility(m, 'white', body).feasible).toBe('unknown');
     expect(killFeasibility(m, 'red', body).feasible).toBe('yes'); // Storage → Electrical is next door
     expect(by(m).orange.evidence.some(e => e.weight < 0 && /could not reach/.test(e.label))).toBe(true);

@@ -9,6 +9,7 @@
  */
 import type { MatchState, PlayerId, RoomId, Claim, SightingObs } from '../types/game';
 import { walkSeconds } from './map';
+import { travelLowerBound } from './feasibility';
 
 export type EdgeStatus = 'trusted' | 'confirmed' | 'pending' | 'contradicted';
 
@@ -90,7 +91,7 @@ export function contradictsTogether(m: MatchState, a: PlayerId, b: PlayerId, roo
       if (room && s.room !== room) {
         // Could they have walked from where I saw them to the claimed room within the window?
         const slack = Math.min(s.stamp.t - t0, t1 - s.stamp.t);
-        if (walkSeconds(m.map, s.room, room, m.settings.playerSpeed) > slack) return s.id;
+        if (travelLowerBound(walkSeconds(m.map, s.room, room, m.settings.playerSpeed)) > slack) return s.id;
       }
       // Seen alone while claiming company at that very moment.
       if (s.alone && (s.stamp.t >= t0 && s.stamp.t <= t1) && !room) return s.id;
@@ -101,7 +102,7 @@ export function contradictsTogether(m: MatchState, a: PlayerId, b: PlayerId, roo
     if (s.player !== a) continue;
     for (const u of sightings) {
       if (u.player !== b || Math.abs(u.stamp.t - s.stamp.t) > SIGHT_SLOP) continue;
-      if (s.room !== u.room && walkSeconds(m.map, s.room, u.room, m.settings.playerSpeed) > Math.abs(u.stamp.t - s.stamp.t) + 2) return s.id;
+      if (s.room !== u.room && travelLowerBound(walkSeconds(m.map, s.room, u.room, m.settings.playerSpeed)) > Math.abs(u.stamp.t - s.stamp.t)) return s.id;
     }
   }
   return null;

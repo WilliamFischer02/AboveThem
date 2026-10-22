@@ -85,14 +85,26 @@ export function claimsToAssertions(m: MatchState, skipLines: ReadonlySet<string>
 // Weighting
 // ---------------------------------------------------------------------------
 
-function baseWeight(a: ChatAssertion): number {
+/**
+ * A "visual" clear only counts as one when visuals are ON and the task (if named) is visual on
+ * THIS map (game-knowledge `visual_off_clear`, `visual_wrong_map`): otherwise it is a plain vouch.
+ */
+export function visualClearValid(m: MatchState, a: ChatAssertion): boolean {
+  if (a.reason !== 'visual' && a.reason !== 'scan') return false;
+  if (!m.settings.visualTasksOn) return false;
+  if (!a.taskId) return true;
+  const t = m.map.tasks.find(x => x.id === a.taskId);
+  return !!t?.visual;
+}
+
+function baseWeight(m: MatchState, a: ChatAssertion): number {
   switch (a.kind) {
     case 'accuse': return NO_REASON.has(a.reason) ? S.accusation : S.accusationWithReason;
     case 'selfReport': return S.accusationWithReason;
     case 'voteCall': return a.negated ? 0 : S.voteCall;
     case 'sawVent': case 'sawKill': return S.eyewitness;
-    case 'clear': return a.reason === 'visual' || a.reason === 'scan' ? S.clearVisual : S.clear;
-    case 'sawTask': return a.reason === 'visual' || a.reason === 'scan' ? S.clearVisual : S.sawTask;
+    case 'clear': return visualClearValid(m, a) ? S.clearVisual : S.clear;
+    case 'sawTask': return visualClearValid(m, a) ? S.clearVisual : S.sawTask;
     case 'defense': return S.defense;
     case 'withMe': return S.companionUnconfirmed;
     case 'withOther': return S.withOther;
@@ -135,7 +147,7 @@ export function assertionsToEvidence(m: MatchState, assertions: ChatAssertion[],
     const c = ctx.credibility(sp);
     for (const x of a.about) {
       if (x === sp || !m.players[x] || x === m.me) continue;
-      const base = baseWeight(a);
+      const base = baseWeight(m, a);
       if (base === 0) continue;
       const k = `${a.meeting}|${x}`;
       const earlier = accusersSoFar.get(k) ?? new Set<PlayerId>();
@@ -211,6 +223,55 @@ export function speakerCredibility(status: SpeakerStatus | 'unknown', probabilit
   const excess = Math.max(0, probability - p0) / (1 - p0);           // 0 at baseline, 1 at certain impostor
   const cred = Math.max(S.credibilityFloor, 1 - excess) * consistency;
   return { cred, status: probability >= Math.max(0.5, 2 * p0) ? 'suspect' : 'normal' };
+}
+
+// ---------------------------------------------------------------------------
+// Speaker-side tells from chat-nlu's profiles and accusation outcomes
+// ---------------------------------------------------------------------------
+
+/**
+ * From chat-nlu's SpeakerProfile: own location stated as two rooms in one meeting (`story_changed`),
+ * and flipping stance on a target inside one meeting (`flip_when_countered`, low weight).
+ */
+export function ruleProfileTells(m: MatchState, profiles: Record<PlayerId, SpeakerProfile>, roundOf: (k: number) => number = k => k): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const roomName = (r: string) => m.map.rooms.find(x => x.id === r)?.name ?? r;
+  for (const p of Object.values(profiles)) {
+    if (!m.players[p.player] || p.player === m.me) continue;
+    for (const lc of p.locationChanges) {
+      if (lc.rooms.length < 2 || !lc.assertions.length) continue;
+      const e = ev(p.player, weightsJson.structural.storyFlipNlu, 'meeting', `Said ${lc.rooms.map(roomName).join(', then ')} in meeting ${lc.meeting + 1}`, lc.assertions);
+      e.round = roundOf(lc.meeting); out.push(e);
+    }
+    const flipMeetings = new Set<number>();
+    for (const f of p.flips) {
+      if (!f.sameMeeting || flipMeetings.has(f.toMeeting)) continue;
+      flipMeetings.add(f.toMeeting);
+      const e = ev(p.player, weightsJson.structural.stanceFlipWhenCountered, 'meeting', `Flipped on ${pname(m, f.target)} within meeting ${f.toMeeting + 1}`, [f.fromAssertion, f.toAssertion]);
+      e.round = roundOf(f.toMeeting); out.push(e);
+    }
+  }
+  return out;
+}
+
+const ACCUSING = new Set(['accuse', 'sawVent', 'sawKill', 'selfReport', 'voteCall']);
+
+/** `dead_accuser`: the player who accused X was killed the very next round (low weight: can be a frame). */
+export function ruleDeadAccuser(m: MatchState, assertions: ChatAssertion[], diedRound: (p: PlayerId) => number | undefined, roundOf: (k: number) => number = k => k): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const seen = new Set<string>();
+  for (const a of assertions) {
+    if (a.supersededBy || a.polarity <= 0 || !ACCUSING.has(a.kind) || a.speaker === m.me) continue;
+    const d = diedRound(a.speaker);
+    if (d === undefined || d !== roundOf(a.meeting) + 1) continue;
+    for (const x of a.about) {
+      if (x === a.speaker || !m.players[x] || seen.has(`${a.speaker}|${x}`)) continue;
+      seen.add(`${a.speaker}|${x}`);
+      const e = ev(x, weightsJson.structural.deadAccuser, 'structural', `${pname(m, a.speaker)} accused them, then died the next round`, a.refs.length ? a.refs : [a.id]);
+      e.round = d; out.push(e);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
