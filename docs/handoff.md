@@ -120,10 +120,10 @@ matches; impostor templates never leak `{A}`.
 
 ## Toolchain (unchanged): Node 24.19, Rust 1.97.1, Tauri 2.12.4, windows 0.62.2,
 windows-capture 2.0.1, Vite 8.3.5, Vitest 5.0.5. Among Us v19s 7489, 1920×1080 borderless
-on the primary monitor; app on the left monitor. Only `en-US` OCR is installed.
+on the primary monitor; app on the left monitor. Windows OCR packs installed 2026-10-22: en-US, de-DE, es-ES, ja, ru (chat bubbles that read badly in English are re-read in each; Cyrillic chat is UNVERIFIED live).
 
 ## Open questions for William
-- Install the Russian OCR pack (Settings → Time & language → Language & region → Add Russian →
+- Russian, German, Japanese and Spanish OCR packs are now installed; capture one Cyrillic chat frame as a fixture? (Install path for more:
   Optional features: OCR) and capture one Cyrillic chat frame as a fixture?
 - Default kill cooldown: the wiki says 45 s, `presets.ts` uses 30 s — which do your lobbies use?
 - Should undo skip automatic (OCR) events and only undo your own inputs?
