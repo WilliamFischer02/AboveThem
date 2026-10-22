@@ -6,7 +6,8 @@ import { assertionsToEvidence, chatPlaced, ruleDeadAccuser, ruleProfileTells, vi
 import type { ChatAssertion, SpeakerProfile } from './chatNluTypes';
 import { ruleMutualAlibiPair, impostorPairs } from './pairs';
 import { killFeasibility, killWindow, travelLowerBound } from './feasibility';
-import { scoreAll, suspectPairs } from './suspicion';
+import { scoreAll, suspectPairs, hardFacts } from './suspicion';
+import { MAPS } from '../data/maps';
 import { fixture } from './__fixtures__/skeld_match_01';
 import { fixture2 } from './__fixtures__/skeld_match_02_two_imp';
 import { fixture3 } from './__fixtures__/skeld_match_03_insufficient';
@@ -137,6 +138,37 @@ describe('dead_accuser and chat-nlu profile tells', () => {
     };
     const e = ruleProfileTells(fixture3, { blue: prof, ghost: { ...prof, player: 'ghost' } });
     expect(e.map(x => x.label)).toEqual(['Said Admin, then Electrical in meeting 1', 'Flipped on Green within meeting 1']);
+  });
+});
+
+describe('roles and per-map visuals change what a sighting proves', () => {
+  const vent = { id: 'vv', type: 'sawVent', stamp: st(0, 30), source: 'me', confidence: 0.95, player: 'purple', room: 'admin' } as Observation;
+  const kill = { id: 'kk', type: 'sawKill', stamp: st(0, 30), source: 'me', confidence: 0.95, killer: 'purple', victim: 'white', room: 'admin' } as Observation;
+  it('a vent is proof without Engineers, strong soft evidence with them', () => {
+    const base: MatchState = { ...fixture3, observations: [...fixture3.observations, vent] };
+    expect(hardFacts(base).certainImpostors.has('purple')).toBe(true);
+    const eng: MatchState = { ...base, settings: { ...base.settings, roles: { engineer: true } } };
+    expect(hardFacts(eng).certainImpostors.has('purple')).toBe(false);
+    const p = scoreAll(eng).find(s => s.player === 'purple')!;
+    expect(p.verdict).toBe('unknown');
+    expect(p.evidence[0].label).toMatch(/could be an Engineer/);
+    expect(scoreAll(eng)[0].player).toBe('purple');
+  });
+  it('a seen kill stays hard; with Shapeshifter on the identity is marked shaky', () => {
+    const ss: MatchState = { ...fixture3, observations: [...fixture3.observations, kill], settings: { ...fixture3.settings, roles: { shapeshifter: true } } };
+    const hf = hardFacts(ss);
+    expect(hf.certainImpostors.has('purple')).toBe(true);
+    expect(hf.evidence.find(e => e.refs.includes('kk'))?.shaky).toBe(true);
+  });
+  it('a "visual" task is a hard clear only when visual on THIS map', () => {
+    const asteroids = { id: 'aa', type: 'sawTask', stamp: st(0, 20), source: 'me', confidence: 0.95, player: 'blue', room: 'balcony', taskId: 'clearAsteroids', visualConfirmed: true } as Observation;
+    const mira: MatchState = { ...fixture3, map: MAPS.mira, settings: { ...fixture3.settings, map: 'mira' }, observations: [fixture3.observations[0], asteroids] };
+    expect(hardFacts(mira).certainCrew.has('blue')).toBe(false);
+    expect(scoreAll(mira).find(s => s.player === 'blue')!.evidence.some(e => /not a visual task on/.test(e.label))).toBe(true);
+    const skeld: MatchState = { ...fixture3, observations: [...fixture3.observations, { ...asteroids, room: 'weapons' } as Observation] };
+    expect(hardFacts(skeld).certainCrew.has('blue')).toBe(true);
+    const unnamed: MatchState = { ...fixture3, observations: [...fixture3.observations, { ...asteroids, taskId: undefined } as Observation] };
+    expect(hardFacts(unnamed).evidence.find(e => e.refs.includes('aa'))?.shaky).toBe(true); // old behaviour, flagged
   });
 });
 

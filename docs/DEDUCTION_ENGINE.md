@@ -54,8 +54,9 @@ Code map (all pure TypeScript in `src/engine/`, Vitest-covered):
 
 | Constraint | Effect |
 |---|---|
-| You saw X vent / kill | X = **Impostor** |
-| You saw X do a **visual** task (visuals ON) | X = **Crew** |
+| You saw X vent (Engineers OFF) | X = **Impostor**. With Engineers ON: +2.5 soft (Engineers are crew and vent) |
+| You saw X kill | X = **Impostor**. With Shapeshifter ON the identity is marked shaky (could be a disguise) |
+| You saw X do a task that is **visual on this map** (`task.visual` in the map JSON; visuals ON) | X = **Crew**. Skeld: Submit Scan, Clear Asteroids, Prime Shields, Empty Garbage/Chute; MIRA: Submit Scan only; Polus: Submit Scan, Clear Asteroids; Airship / Fungle: none. Never hard-code the list: read the map. A visual confirmation of a task that is not visual on this map is only a −0.3 soft clear; with no task id it stays hard but shaky |
 | You hard-cleared X (a mark) | X = **Crew** (a later round-clear does not undo it) |
 | Ejection "X was (not) The Impostor" | X = Impostor / Crew |
 | **1-impostor lobby**: X was with you (your own with-me toggle) through the **whole** kill window | X = **Crew** |

@@ -24,13 +24,15 @@
     "ventOnlyReachable": 2.0,
     "unaccountedKillWindow": 0.3,
     "couldNotReachBody": -1.5,
-    "presentAtBodySmallGroup": 0.3
+    "presentAtBodySmallGroup": 0.3,
+    "sawVentEngineersOn": 2.5
   },
   "task": {
     "taskNotAtClaimedLocation": 2.0,
     "claimedCommonTaskIDontHave": 2.5,
     "taskLogicImpossible": 2.0,
     "taskNotOnMap": 1.6,
+    "sawNonVisualTask": -0.3,
     "taskBarDidNotMove": 1.0,
     "taskBarMoved": -1.0,
     "visualWithoutAnimation": 3.0

@@ -69,6 +69,11 @@ export interface LobbySettings {
   commonTasks: number;
   longTasks: number;
   shortTasks: number;
+  /**
+   * Special roles enabled in the lobby (all default off). They change what a sighting proves:
+   * Engineers (crew) can vent; a Shapeshifter can kill wearing someone else's look.
+   */
+  roles?: { engineer?: boolean; shapeshifter?: boolean; scientist?: boolean; guardianAngel?: boolean; tracker?: boolean; noisemaker?: boolean; phantom?: boolean };
 }
 
 // ---------------------------------------------------------------------------

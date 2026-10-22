@@ -223,8 +223,14 @@ export function rulePresentAtBody(m: MatchState): EvidenceItem[] {
 export function ruleTaskObservations(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
   for (const o of m.observations) {
-    if (o.type !== 'sawTask' || o.visualConfirmed) continue;
+    if (o.type !== 'sawTask') continue;
     const task = o.taskId ? m.map.tasks.find(t => t.id === o.taskId) : undefined;
+    if (o.visualConfirmed) {
+      // Hard clear in suspicion.ts when the task is visual on THIS map (or unnamed). Otherwise it is only "seen at a task".
+      if (!m.settings.visualTasksOn || !task || task.visual) continue;
+      out.push(ev(o.player, W.task.sawNonVisualTask, 'task', `Seen at ${task.name} (not a visual task on ${m.map.name}: proves nothing hard)`, [o.id]));
+      continue;
+    }
     if (task && o.durationSec !== undefined) {
       const expected = task.stageDurationSec;
       const ratio = o.durationSec / Math.max(1, expected);
@@ -241,6 +247,16 @@ export function ruleTaskObservations(m: MatchState): EvidenceItem[] {
     }
   }
   return out;
+}
+
+/** With Engineers on, a vent is not proof (Engineers are crew and vent) — but it is still strong. */
+export function ruleVentWithEngineers(m: MatchState): EvidenceItem[] {
+  if (!m.settings.roles?.engineer) return [];
+  return m.observations.filter(o => o.type === 'sawVent').map(o => {
+    const e = ev((o as { player: PlayerId }).player, W.movement.sawVentEngineersOn, 'movement', `Seen venting in ${roomName(m, (o as { room: string }).room)} (Engineers are on: could be an Engineer)`, [o.id]);
+    e.round = o.stamp.round;
+    return e;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -279,5 +295,5 @@ export function ruleVotingPairs(m: MatchState): EvidenceItem[] {
 
 export const OBSERVATION_RULES: Array<(m: MatchState) => EvidenceItem[]> = [
   ruleManualMarks, ruleSelfReport, ruleProximityToKill, ruleLastSeenWithVictim, ruleUnaccounted,
-  ruleTaskObservations, ruleSabotage, ruleVotingPairs, ruleUnaccountedKillWindow, rulePresentAtBody,
+  ruleTaskObservations, ruleSabotage, ruleVotingPairs, ruleUnaccountedKillWindow, rulePresentAtBody, ruleVentWithEngineers,
 ];

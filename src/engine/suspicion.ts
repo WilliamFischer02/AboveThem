@@ -70,12 +70,24 @@ export function hardFacts(m: MatchState): HardFacts {
     if (p.isPartner) imp.add(p.id);
   }
 
+  const roles = m.settings.roles ?? {};
   for (const o of m.observations) {
-    if (o.type === 'sawVent') { imp.add(o.player); evidence.push(ev(o.player, HARD, 'hard', `Seen venting in ${roomName(o.room)}`, [o.id])); }
-    if (o.type === 'sawKill') { imp.add(o.killer); evidence.push(ev(o.killer, HARD, 'hard', `Seen killing ${pname(o.victim)} in ${roomName(o.room)}`, [o.id])); }
+    if (o.type === 'sawVent') {
+      // Engineers (crew) can vent: with the role on, a vent is strong evidence, not proof (soft: softFromHardFacts).
+      if (roles.engineer) continue;
+      imp.add(o.player); evidence.push(ev(o.player, HARD, 'hard', `Seen venting in ${roomName(o.room)}`, [o.id]));
+    }
+    if (o.type === 'sawKill') {
+      // A kill is always an impostor's — but with Shapeshifter on, the look may not be the killer's own (shaky identity).
+      imp.add(o.killer);
+      evidence.push(ev(o.killer, HARD, 'hard', `Seen killing ${pname(o.victim)} in ${roomName(o.room)}${roles.shapeshifter ? ' (Shapeshifter on: could be a disguise)' : ''}`, [o.id], !!roles.shapeshifter));
+    }
     if (o.type === 'sawTask' && o.visualConfirmed && m.settings.visualTasksOn) {
+      // Hard only if the task is visual on THIS map (MIRA asteroids / shields are not). No task id: old behaviour, shaky.
+      const task = o.taskId ? m.map.tasks.find(t => t.id === o.taskId) : undefined;
+      if (o.taskId && !task?.visual) continue;
       crew.add(o.player);
-      evidence.push(ev(o.player, -HARD, 'hard', `Visual task confirmed in ${roomName(o.room)}`, [o.id], false, 'round_open', { P: pname(o.player), R: roomName(o.room), TASK: o.taskId ? (m.map.tasks.find(t => t.id === o.taskId)?.name ?? o.taskId) : 'a visual task' }));
+      evidence.push(ev(o.player, -HARD, 'hard', `Visual task confirmed in ${roomName(o.room)}`, [o.id], !o.taskId, 'round_open', { P: pname(o.player), R: roomName(o.room), TASK: task ? task.name : 'a visual task' }));
     }
   }
 
