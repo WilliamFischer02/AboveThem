@@ -26,6 +26,12 @@ describe('task claim verifier', () => {
     expect(r.c3.verdict).toBe('plausible');
     expect(r.c2.ask!.length).toBeLessThanOrEqual(70);
   });
+  it('a claim on a dummy panel (map.info.dummyPanels) is fake', () => {
+    const m = build();
+    m.map = { ...m.map, info: { dummyPanels: [{ room: 'reactor', taskId: 'divertPower' }] } } as typeof m.map;
+    m.claims.push(claim('c1', 'red', 'divertPower', 'reactor'));
+    expect(taskClaimChecks(m)[0]).toMatchObject({ verdict: 'fake', check: 'dummy_panel' });
+  });
   it('unknown task list ⇒ no common verdict (edge)', () => {
     const m = build();
     expect(myCommons(m)).toBeNull();

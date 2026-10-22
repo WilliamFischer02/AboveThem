@@ -15,6 +15,7 @@ import { VoteTracker } from './VoteTracker';
 import { TaskBarCard } from './TaskBarCard';
 import { TaskClaimsCard } from './TaskClaimsCard';
 import { MeetingPrepCard } from './MeetingPrepCard';
+import { RoundPlanCard } from './RoundPlanCard';
 import './shared';
 
 export function FeatureSlots() {
@@ -28,6 +29,7 @@ export function FeatureSlots() {
   return (
     <div className="feat">
       {round && !ghost && <KillClock />}
+      {round && !ghost && <RoundPlanCard />}
       {round && !ghost && <TaskBarCard />}
       {round && <SecurityCard />}
       {meeting && !ghost && <MeetingPrepCard />}

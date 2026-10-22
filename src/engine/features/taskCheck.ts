@@ -13,7 +13,7 @@
  * ON and only on maps where that task is visual (map JSON `visual`).
  */
 import type { Claim, MatchState, PlayerId, RoomId, SawTaskObs, Stamp, MapTask } from '../../types/game';
-import { pname, roomName } from './util';
+import { pname, roomName, mapInfo } from './util';
 
 // ---------------------------------------------------------------------------
 // Task-bar tracker
@@ -89,6 +89,8 @@ type Partial_ = Pick<TaskClaimCheck, 'verdict' | 'check' | 'line' | 'ask' | 'ref
 
 function checkTask(m: MatchState, c: Claim, task: MapTask | undefined, commons: Set<string> | null, visualsOn: boolean): Partial_ {
   const P = pname(m, c.by);
+  const dummy = c.room ? mapInfo(m.map)?.dummyPanels?.find(d => d.room === c.room && d.taskId === c.taskId) : undefined;
+  if (dummy) return { verdict: 'fake', check: 'dummy_panel', line: `${P}: the ${task?.name ?? c.taskId} panel in ${roomName(m, dummy.room)} is a dummy — nobody can do it`, ask: `${P} that panel in ${roomName(m, dummy.room)} is fake. Nobody can do it.`.slice(0, 70), refs: [c.id] };
   if (!task) return { verdict: 'fake', check: 'task_not_on_map', line: `${P}: "${c.taskId}" is not a task on ${m.map.name}`, ask: `There is no ${c.taskId} on this map ${P}.`, refs: [c.id] };
   if (c.room && !task.rooms.includes(c.room)) {
     return { verdict: 'fake', check: 'task_not_in_room', line: `${P}: ${task.name} has no stage in ${roomName(m, c.room)}`, ask: `${task.name} is not in ${roomName(m, c.room)}. Which panel ${P}?`.slice(0, 70), refs: [c.id] };

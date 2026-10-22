@@ -14,7 +14,7 @@
  */
 import type { AdminReadObs, MapId, MatchState, PlayerId, RoomId, SightingObs, VitalsReadObs, Claim } from '../../types/game';
 import { fmt } from '../evidence';
-import { pname, roomName } from './util';
+import { pname, roomName, mapInfo } from './util';
 
 export interface CamSpot { id: string; label: string; /** nearest real room id on the map (null = map has no such room yet) */ room: RoomId | null; match?: string }
 
@@ -24,6 +24,8 @@ export interface SecurityInfo {
   cams: CamSpot[] | 'anyRoom' | false;
   vitals: boolean;
   doorLog: boolean;
+  /** Door-log sensor names from map.info (MIRA), when known. */
+  doorSensors?: string[];
   _verified: boolean;
   _note: string;
 }
@@ -102,11 +104,34 @@ export function commsDown(m: MatchState, round: number): boolean {
   return down;
 }
 
+/**
+ * Stations for the current map. Prefers the maps agent's `map.info` (admin rooms, security
+ * {kind, covers}, vitals room, doorLog {sensors}); falls back to SECURITY_FALLBACK only when absent.
+ * With `info`, camera spots are the rooms the cameras/binoculars cover; our labelled hallway spots are
+ * kept only when they resolve to one of those covered rooms (they are more readable).
+ */
 export function securityFor(m: MatchState): SecurityInfo {
-  const info = (m.map as unknown as { info?: { security?: Partial<SecurityInfo> } }).info?.security;
   const base = SECURITY_FALLBACK[m.map.id] ?? SECURITY_FALLBACK[m.settings.map];
-  if (info && typeof info === 'object') return { ...base, ...info } as SecurityInfo;
-  return base;
+  const info = mapInfo(m.map);
+  if (!info) return base;
+  let cams: SecurityInfo['cams'] = false;
+  if (info.security) {
+    const covers = info.security.covers ?? [];
+    const prefix = info.security.kind === 'binoculars' ? 'Binoculars: ' : '';
+    const labelled = Array.isArray(base?.cams) ? base.cams.filter(s => { const r = resolveSpot(m, s); return r !== null && covers.includes(r); }) : [];
+    const rest = covers.filter(r => !labelled.some(s => resolveSpot(m, s) === r)).map(r => ({ id: r, label: prefix + roomName(m, r), room: r }));
+    cams = [...labelled, ...rest];
+    if (cams.length === 0) cams = 'anyRoom';
+  }
+  return {
+    admin: (info.admin?.length ?? 0) > 0,
+    cams,
+    vitals: !!info.vitals,
+    doorLog: !!info.doorLog,
+    doorSensors: info.doorLog?.sensors,
+    _verified: true,
+    _note: `stations from ${m.map.name} map data${m.map._verified?.rooms ? '' : ' (rooms unverified)'}`,
+  };
 }
 
 /** Rooms of the current map (empty for maps whose room data is still missing). */

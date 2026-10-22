@@ -90,6 +90,7 @@ export function SecurityCard() {
 
       {(active === 'cams' || active === 'door') && (noRooms ? <div className="feat-sub">No room data for {m.map.name} yet — cams/door-log sightings need real rooms.</div> : (
         <>
+          {active === 'door' && sec.doorSensors?.length ? <div className="feat-sub">Sensors: {sec.doorSensors.join(' · ')} — log the nearest room.</div> : null}
           <div className="feat-sub" style={{ marginBottom: 3 }}>{curSpot ? <>Spot: <b>{curSpot.label}</b>{curSpot.room && curSpot.room !== curSpot.id ? ` (logged as ${roomName(m, curSpot.room)})` : ''} — now tap who you see</> : 'Pick where you are looking'}</div>
           <div className="feat-grid">
             {spots.map(s => <div key={s.id} className={`feat-tap ${spot === s.id ? 'on' : ''} ${s.room ? '' : 'dim'}`} onClick={() => s.room && setSpot(s.id)}>{s.label}</div>)}

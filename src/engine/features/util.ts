@@ -17,6 +17,11 @@ export const VENT_HOP_SEC = 2;
  * Fastest possible travel time for an IMPOSTOR between two rooms: walking edges at the lobby
  * speed plus every vent network treated as fully connected at VENT_HOP_SEC.
  * Returns null when either room is unknown to the map (no constraint can be derived).
+ *
+ * MERGE: replace the body with the maps agent's
+ *   `const s = fastestSeconds(map, from, to, { speed, vents: true }); return Number.isFinite(s) ? s : null;`
+ * from engine/map.ts (same model: walk + vent hops at 2 s). Keep the null-for-unknown contract —
+ * killWindow treats null as "no constraint", never as "unreachable".
  */
 export function impostorTravelSec(map: MapData, from: RoomId, to: RoomId, speed = 1): number | null {
   if (from === to) return 0;
@@ -73,6 +78,24 @@ export function playersPlacedBy(o: Observation): PlayerId[] {
     default: return [];
   }
 }
+
+/**
+ * Subset of the maps agent's `MapInfo` (MapData.info) that the features read. Declared locally
+ * because that type lives on the maps branch.
+ * MERGE: replace with `import type { MapInfo } from '../../types/game'` and read `m.map.info` directly.
+ */
+export interface MapInfoLite {
+  admin?: RoomId[];
+  security?: { room: RoomId; kind: 'cameras' | 'binoculars'; covers: RoomId[] } | null;
+  vitals?: RoomId | null;
+  doorLog?: { room: RoomId; sensors: string[] } | null;
+  emergencyButton?: RoomId;
+  features?: string[];
+  spawn?: { start: RoomId[]; afterMeeting: RoomId[] };
+  dummyPanels?: { room: RoomId; taskId: string }[];
+}
+
+export const mapInfo = (map: MapData): MapInfoLite | undefined => (map as unknown as { info?: MapInfoLite }).info;
 
 /** Index of the meeting that ended `round` (meeting k closes round k when every round ends in a meeting). */
 export const meetingOfRound = (round: number) => round;

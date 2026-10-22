@@ -13,10 +13,18 @@ describe('security availability', () => {
     expect(SECURITY_FALLBACK.fungle.admin).toBe(false);
     expect(SECURITY_FALLBACK.mira.doorLog).toBe(true);
   });
-  it('prefers map.info.security when the maps agent supplies it', () => {
+  it('prefers map.info (maps agent shape) and keeps labelled spots that match covered rooms', () => {
     const m = build();
-    (m.map as unknown as { info: unknown }).info = { security: { vitals: true, _verified: true } };
-    expect(securityFor(m)).toMatchObject({ vitals: true, admin: true, _verified: true });
+    m.map = { ...m.map, info: { admin: ['admin'], security: { room: 'security', kind: 'cameras', covers: ['medbay', 'admin', 'storage'] }, vitals: null, doorLog: null } } as typeof m.map;
+    const s = securityFor(m);
+    expect(s).toMatchObject({ admin: true, vitals: false, doorLog: false, _verified: true });
+    const spots = s.cams as { id: string; room: string | null }[];
+    expect(spots.map(x => x.id)).toEqual(['admin', 'medbay', 'storage']); // labelled Admin + MedBay hall cams, then Storage
+  });
+  it('map.info without admin / security (Fungle-like) turns those tabs off (edge)', () => {
+    const m = build();
+    m.map = { ...m.map, info: { admin: [], security: { room: 'lookout', kind: 'binoculars', covers: [] }, vitals: 'laboratory', doorLog: null } } as typeof m.map;
+    expect(securityFor(m)).toMatchObject({ admin: false, cams: 'anyRoom', vitals: true });
   });
 });
 
