@@ -554,5 +554,34 @@ Each map: rooms, dead-ends, choke points, kill spots (H), vents (§1.7), visuals
 12. **Chat slang frequency** per region is from general knowledge; tune from real logs (`chatLines`).
 13. Terms "vent chain", "bussing", "ACK" not found in a fetched source.
 
-## 6. Changelog
+## 6. OCR notes for the Among Us UI (stretch)
+
+From the repo's own 1920×1080 fixtures (`src-tauri/fixtures/screens/1920x1080/meeting_chat.png`, `meeting_vote_grid*.png`) — observed, not sourced elsewhere (**U** until tested against the OCR pipeline):
+
+- **Two fonts matter.** Chat *bodies* are a plain sans (Arial/Liberation-like). *Names* (chat sender, vote grid, lobby) are a bold rounded face with a thick dark outline; the outline merges thin strokes. "SKIP VOTE" and some headers use a condensed font.
+- **Sans (chat body) confusions:** `I`↔`l`↔`1`↔`|`, `O`↔`0`, `rn`↔`m`, `vv`↔`w`, `cl`↔`d`, `S`↔`5`, `B`↔`8`, `Z`↔`2`, `.`/`,` lost after `?`.
+- **Outlined name font confusions:** `n`↔`h` and `u`↔`i` (the roster's "BigBingus" → "BigBihgis" case in ADR-022), `a`↔`e`, `c`↔`e`, `ii`↔`u`, `l`↔`I`, `B`↔`8`, `g`↔`q`, double letters collapsing (`ll`→`l`). Faded names in the vote grid behind the chat overlay are not readable — never OCR the grid while chat is open.
+- **Guest/random names** look like two concatenated English words (Timetrast, Sensepast, Waxscarce, Flushbevy, Bonsainew). A dictionary of these stems would help snapping. Names are ≤ 12 chars (game cap).
+- **Chat lines**: each bubble = coloured crewmate head + outlined name on line 1, body on line 2+; your own lines are right-aligned with the head on the right. Max 100 chars per message (`0/100` counter).
+- **Colour from the head, not the text:** the bubble's crewmate head carries the colour; Mushroom Mixup (Fungle) randomises it for ~10 s.
+
+## 7. Lobby settings people actually use (notes for `src/state/presets.ts`; not edited)
+
+| Setting | Game default | Common public / guide values | Source |
+|---|---|---|---|
+| Impostors | host choice | 1 below 8 players, 2 at 8+ (3 is rare) | pcgamesn.com/among-us/settings-best; sportskeeda 10-player article |
+| Kill cooldown | 45 s (wiki table) | 22.5–30 s (25 s pcgamesn) | pcgamesn; gamewith.net/among-us-wiki/article/show/22148 |
+| Kill distance | Medium | Short (guides), Medium (public) | pcgamesn |
+| Player speed | 1.0× | 1.25× | pcgamesn; gameranx community settings |
+| Crew / impostor vision | 1.0× / 1.5× | crew 0.5–1.5×, impostor 1.5–1.75× | pcgamesn |
+| Emergency meetings / cooldown | 1 / 15 s | 1–2 / 15–20 s | pcgamesn |
+| Discussion / voting | 15 s / 120 s | 15–45 s / 30–120 s | pcgamesn |
+| Confirm ejects | on | on in public; off for experienced groups | pcgamesn; gamewith |
+| Visual tasks | on | on in public; off for experienced groups | pcgamesn |
+| Tasks common/long/short | 1/1/2 | 1–2 / 1 / 2–3 | pcgamesn |
+
+`DEFAULT_SETTINGS` in `src/state/presets.ts` (2 imps, 30 s, 1×, visuals on, confirm on, 15/120 s, 1/1/2) is a reasonable public-lobby guess; the only questionable value is kill cooldown (game default 45 s per the wiki). Recommend: keep reading the lobby screen as the source of truth; if a quick preset list is wanted, offer "Public default (2 imp, 30 s, 1×)", "Fast (2 imp, 22.5 s, 1.25×)", "Experienced (confirm ejects off, visuals off, 25 s)".
+
+## 8. Changelog
 - 2026-10-22 draft 1 (research agent): §1–§5 from wiki API pulls + community glossaries.
+- 2026-10-22 draft 2: bodies-on-admin resolved (show until meeting; kill flash removed 2021), max impostors by lobby size sourced, OCR notes (§6), settings presets (§7), `chatSlang.seed.json`, `lieChecks.json`, crew/impostor JSON additions.
