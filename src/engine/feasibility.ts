@@ -12,7 +12,7 @@
  */
 import type { BodyFoundObs, MapData, MatchState, PlayerId, RoomId, SightingObs, EvidenceItem } from '../types/game';
 import weightsJson from '../data/tactics/weights.json';
-import { walkSeconds, ventConnected } from './map';
+import { walkSeconds, fastestSeconds } from './map';
 import { ev, fmt } from './evidence';
 import { hasMapData } from './mapAdapter';
 
@@ -61,23 +61,7 @@ export function vitalsReads(m: MatchState): VitalsLike[] {
 
 /** Travel time with vents allowed (a vent hop costs ~2 s): Dijkstra over walk + vent edges. */
 export function ventAssistedSeconds(map: MapData, from: RoomId, to: RoomId, speed = 1): number {
-  if (from === to) return 0;
-  const VENT_HOP = 2;
-  const dist = new Map<RoomId, number>(map.rooms.map(r => [r.id, Infinity]));
-  dist.set(from, 0);
-  const done = new Set<RoomId>();
-  while (done.size < map.rooms.length) {
-    let cur: RoomId | null = null, best = Infinity;
-    for (const [r, d] of dist) if (!done.has(r) && d < best) { best = d; cur = r; }
-    if (cur === null) break;
-    done.add(cur);
-    if (cur === to) break;
-    const room = map.rooms.find(r => r.id === cur);
-    const next: [RoomId, number][] = (room?.adjacent ?? []).map(a => [a.room, a.sec / speed]);
-    for (const v of map.vents) if (v.rooms.includes(cur)) for (const r of v.rooms) if (r !== cur) next.push([r, VENT_HOP]);
-    for (const [r, s] of next) if (best + s < (dist.get(r) ?? Infinity)) dist.set(r, best + s);
-  }
-  return dist.get(to) ?? Infinity;
+  return fastestSeconds(map, from, to, { speed, vents: true }); // maps agent's cached travel matrix (vent hop = VENT_HOP_SEC)
 }
 
 /** Instants in [w0, w1] not excluded by any (t ± travel) interval. */
