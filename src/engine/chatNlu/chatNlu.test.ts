@@ -94,6 +94,19 @@ const CASES: [string, string, string[]][] = [
   ['wasnt me i was in nav', 'white', ['defense:white', 'location:white@navigation']],
   ['light blue sus', 'white', ['accuse:cyan']],
   ['blue and black sus', 'white', ['accuse:blue+black']],
+  // regressions found by probing
+  ['ask blue', 'white', []],
+  ['green is lying he wasnt in admin', 'white', ['accuse:green']],
+  ['skip no proof', 'white', ['skipCall']],
+  ['why me', 'white', ['defense:white']],
+  ['i didnt kill anyone', 'white', ['defense:white']],
+  ['i saw blue go into a vent in nav', 'white', ['sawVent:blue@navigation']],
+  ['orange came out of vent in reactor', 'white', ['sawVent:orange@reactor']],
+  ['red sus cuz he was near body', 'white', ['accuse:red', 'accuse:red']],
+  ['black did it', 'white', ['sawKill:black']],
+  ['blue vouch', 'white', ['clear:blue']],
+  ['everyone vote black', 'white', ['voteCall:black']],
+  ['i sus blue i barely see him', 'white', ['accuse:blue']],
 ];
 
 describe('chat NLU: single lines', () => {
@@ -145,6 +158,33 @@ describe('chat NLU: single lines', () => {
 
   it('sawKill keeps the victim', () => {
     expect(parseLine('coral killed tan', 'white', m)[0].victim).toBe('tan');
+  });
+});
+
+describe('chat NLU: player names and OCR noise (roster = snap list)', () => {
+  const named: MatchState = {
+    ...m,
+    players: {
+      ...m.players,
+      red: { ...m.players.red, name: 'BigBingus', status: 'alive' },
+      blue: { ...m.players.blue, name: 'xXSlayerXx' },
+      green: { ...m.players.green, name: 'potato' },
+    },
+  };
+  it('exact, OCR-confused, misspelled and prefix name mentions resolve to the roster', () => {
+    expect(p('bigbingus sus', 'white', named)).toEqual(['accuse:red']);
+    expect(p('b1gbingus vented', 'white', named)).toEqual(['sawVent:red']);
+    expect(p('bigbngus clear', 'white', named)).toEqual(['clear:red']);
+    expect(p('potat0 was with me', 'white', named)).toEqual(['withMe:green']);
+    expect(p('slayer sus', 'white', named)).toEqual(['accuse:blue']);
+    expect(parseLine('bigbngus clear', 'white', named)[0].confidence).toBeLessThan(parseLine('bigbingus clear', 'white', named)[0].confidence);
+  });
+  it('short common words never snap to names or colours', () => {
+    expect(p('read it', 'white', named)).toEqual([]);
+    expect(p('pot', 'white', named)).toEqual(['accuse:green']); // 3-letter unique prefix of a name: weak bare mention
+    expect(parseLine('pot', 'white', named)[0].confidence).toBeLessThan(0.5);
+    expect(p('hello fellow', 'white', named)).toEqual([]);
+    expect(p('we range far', 'white', named)).toEqual([]);
   });
 });
 

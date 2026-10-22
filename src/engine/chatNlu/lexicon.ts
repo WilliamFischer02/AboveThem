@@ -220,7 +220,12 @@ export function nameMatch(word: string, m: MatchState): { id: PlayerId; conf: nu
   if (word.length >= 3) {
     const pre = [...idx.byName.entries()].filter(([n]) => n.length >= 4 && n.startsWith(word)).map(([, id]) => id);
     const uniq = [...new Set(pre)];
-    if (uniq.length === 1 && word.length >= Math.min(4, uniq.length + 2)) return { id: uniq[0], conf: 0.8 };
+    if (uniq.length === 1) return { id: uniq[0], conf: word.length >= 4 ? 0.8 : 0.7 };
+  }
+  if (word.length >= 4) {
+    // "slayer" for "xXSlayerXx": a unique inner chunk of a longer name
+    const inner = [...new Set([...idx.byName.entries()].filter(([n]) => n.length >= word.length + 2 && n.includes(word)).map(([, id]) => id))];
+    if (inner.length === 1) return { id: inner[0], conf: 0.7 };
   }
   const f = fuzzyBest(word, idx.byName.entries());
   if (f) return { id: f.val, conf: f.dist === 1 ? 0.8 : 0.7 };

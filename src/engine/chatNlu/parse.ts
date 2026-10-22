@@ -61,7 +61,10 @@ export interface Env {
 
 export interface Clause { units: Unit[]; qmark: boolean; excl: number; verdict: boolean; s: number; e: number }
 
-const DROP = new Set(['filler', 'noise', 'report', 'agree', 'W']);
+const DROP = new Set(['filler', 'noise', 'report', 'agree']);
+/** Predicate classes: a clause that has one is "complete"; a new subject after it starts a new clause. */
+const PREDICATE = new Set(['sus', 'vent', 'kill', 'lying', 'clear', 'followed', 'fake', 'stack', 'selfReport', 'vote', 'dead', 'scan']);
+const SUBJECT_FOLLOW = new Set(['be', 'neg', 'move', 'see', 'do']);
 
 /** True when every word of the line is noise / filler / hedge / punctuation ("lol", "gg", "?", "idk"). */
 export function isNoiseLine(units: Unit[]): boolean {
@@ -72,13 +75,14 @@ export const isAgreeLine = (units: Unit[]) => units.some(u => u.k === 'agree' ||
 
 /** Merge player mentions joined by and / n / & / , / nothing into groups; split the rest into clauses. */
 export function splitClauses(units: Unit[]): Clause[] {
-  const kept = units.filter(u => !DROP.has(u.k) || (u.k === 'W' && false));
+  const kept = units.filter(u => !DROP.has(u.k));
   const merged: Unit[] = [];
   for (let i = 0; i < kept.length; i++) {
     const u = kept[i];
     const last = merged[merged.length - 1];
     const prev2 = merged[merged.length - 2];
-    if (u.k === 'P' && last?.k === 'P') { mergeInto(last, u); continue; }
+    // "blk grn sus" merges; "blue i barely see him" does not (no connector next to "i")
+    if (u.k === 'P' && last?.k === 'P' && !u.self && !last.self) { mergeInto(last, u); continue; }
     if (u.k === 'P' && prev2?.k === 'P' && (last.k === 'and' || (last.k === 'PUNCT' && last.w === ',') || last.k === 'or')) {
       if (last.k === 'or') prev2.cls.add('or');
       merged.pop(); mergeInto(prev2, u); continue;
@@ -94,8 +98,11 @@ export function splitClauses(units: Unit[]): Clause[] {
     else if (excl && clauses.length) clauses[clauses.length - 1].excl += excl;
     cur = []; verdict = false;
   };
-  for (const u of merged) {
+  for (let i = 0; i < merged.length; i++) {
+    const u = merged[i];
     if (u.k === 'PUNCT') { flush(u.w === '?', u.w === '!' ? 1 : 0); continue; }
+    // "green is lying | he wasnt in admin": a new subject after a complete predicate
+    if ((u.k === 'P' || u.k === 'PRON') && cur.some(x => PREDICATE.has(x.k)) && cur.some(x => x.k === 'P' && x.ids?.length) && merged[i + 1] && SUBJECT_FOLLOW.has(merged[i + 1].k)) flush();
     if (u.k === 'bound' || u.k === 'and') { flush(); continue; }
     if (u.k === 'so') { flush(); verdict = true; continue; }
     cur.push(u);
@@ -204,7 +211,8 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
 
   // --- questions --------------------------------------------------------------
   const qi = u.findIndex(x => x.k === 'Q');
-  if (qi >= 0 && !(qi > 0 && ['prepIn', 'prepNear', 'prepFrom', 'prepTo'].includes(u[qi - 1].k))) {
+  const proofOnly = qi >= 0 && u[qi].q === 'proof' && !cl.qmark && u.length > 1; // "skip no proof" is not a question
+  if (qi >= 0 && !proofOnly && !(qi > 0 && ['prepIn', 'prepNear', 'prepFrom', 'prepTo'].includes(u[qi - 1].k))) {
     const q = u[qi].q!;
     // "why me" / "why would i" = denial, not a question
     if (q === 'why' && freeSelf && !freeOthers.length) { emit({ kind: 'defense', about: [speaker], polarity: -1, base: 0.35, reason: 'didnt' }); return out; }
@@ -262,6 +270,12 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
     const seeNeg = negLeft && idx('neg') < Math.max(0, idx('see'));
     if (seeNeg) return out;
     const before = u.slice(0, ki).filter(x => x.k === 'P' && !x.self);
+    const selfBefore = u.slice(0, ki).some(x => x.k === 'P' && x.self);
+    if (!before.length && selfBefore) {
+      // "i didnt kill anyone" → self defense; "i killed" (joke / confession) → nothing
+      if (negLeft) emit({ kind: 'defense', about: [speaker], polarity: -1, reason: 'didnt', base: BASE.didnt });
+      return out;
+    }
     const after = u.slice(ki + 1).filter(x => x.k === 'P');
     let killers = before.length ? othersOf(before[before.length - 1]) : [];
     let z: ReturnType<typeof zeroSubject> | undefined;
@@ -449,7 +463,9 @@ export function interpretClause(cl: Clause, env: Env): Draft[] {
       else emit({ kind: 'location', about: [speaker], room: roomU.room, polarity: 0, base: 0.5, conf: 0.55 });
       return out;
     }
-    emit({ kind: 'location', about: [speaker], room: roomU.room, polarity: 0, base: 0.5, conf: 0.85 });
+    // "i was in nav" / "went to nav" / "at nav": stated; a room among unknown words ("ask about nav") is weak
+    const stated = has('be') || has('move') || has('prepIn') || has('prepFrom') || has('prepTo') || Ps.some(x => x.self);
+    emit({ kind: 'location', about: [speaker], room: roomU.room, polarity: 0, base: 0.5, conf: stated ? 0.85 : 0.45 });
     return out;
   }
 
