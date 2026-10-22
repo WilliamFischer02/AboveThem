@@ -87,6 +87,83 @@
       ],
       "avoid": ["Not knowing why you were in {K}"],
       "followup": "Have a map-valid task reason for {K} BEFORE you self-report. The planner checks this."
+    },
+    "saw_you_vent": {
+      "uncleared_accuser": [
+        "I was doing {TASK} in {R}. Where were you, {A}?",
+        "Vent where? I came from {R2}. Ask {W}."
+      ],
+      "cleared_accuser": [
+        "Wrong colour maybe. I was in {R} with {W} at {T}."
+      ],
+      "avoid": [
+        "Claiming Engineer unless it is true and provable",
+        "Attacking the cleared accuser"
+      ],
+      "followup": "If the accuser is hard-cleared, the vent claim is lost. Pivot to timing and a real sighting of someone else."
+    },
+    "visual_not_seen": {
+      "best": [
+        "I didnt finish it, I got pulled to the sabotage.",
+        "I never said {TASK}. I said {TASK2}."
+      ],
+      "avoid": [
+        "Insisting the animation played",
+        "Changing the task twice"
+      ],
+      "followup": "Never claim a visual task with visuals on. If caught, admit leaving it unfinished once and stop."
+    },
+    "common_task_callout": {
+      "best": [
+        "I mixed it up. I meant {TASK2} in {R}.",
+        "Which commons do you have? Mine shows {TASK}."
+      ],
+      "avoid": [
+        "Doubling down on a common nobody has"
+      ],
+      "followup": "The fake list shows the real commons. Only ever name those."
+    },
+    "monitor_callout": {
+      "best": [
+        "I checked before comms went down.",
+        "I passed {R} on the way, I didnt use it."
+      ],
+      "avoid": [
+        "Inventing admin or cams readings",
+        "Naming a monitor this map lacks"
+      ],
+      "followup": "Only report monitor readings you really saw; others check them too."
+    },
+    "too_fast_task": {
+      "best": [
+        "I closed it to run to the sabotage, its not done.",
+        "That was the first half. The bar only moves at the end."
+      ],
+      "avoid": [
+        "Claiming you finished it"
+      ],
+      "followup": "Use multi-stage tasks for fakes; stand the real duration."
+    },
+    "story_changed": {
+      "best": [
+        "Same round, I went {R} then {R2}. Both are true.",
+        "I said {R} for the start, {R2} for the kill."
+      ],
+      "avoid": [
+        "A third version",
+        "Blaming translation"
+      ],
+      "followup": "Make the old and new claims a route. If they can't be a route, stop talking."
+    },
+    "stack_kill_blame": {
+      "best": [
+        "I was on the far side of the stack from {V}.",
+        "{X} was next to {V}. I was by the button."
+      ],
+      "avoid": [
+        "Saying you saw nothing in a stack you were in"
+      ],
+      "followup": "Name a real position in the stack. Push to skip if it stays a coin flip."
     }
   },
 
@@ -122,6 +199,35 @@
       "Agree with correct crew observations. Credibility compounds.",
       "Push 50/50s between two crew; never between you and crew.",
       "If a crewmate hard-clears you by mistake, accept it quietly and move on."
+    ],
+    "sabotage_rules": [
+      "Critical sabotage pulls crew to fix points; kill on the far side, then walk toward the fix.",
+      "Lights: crew vision shrinks ~5x, yours does not. Electrical is where everyone goes.",
+      "Comms blinds admin, cams, vitals and doorlog (not Fungle binoculars). Use it before venting near a monitor.",
+      "Doors: Skeld doors reopen after 10 s; Polus/Airship/Fungle doors must be opened by hand.",
+      "Report ends a critical sabotage. Sabotage right after a kill delays the report."
+    ],
+    "monitor_rules": [
+      "Cams blink red while a living player watches. Check the blink before killing in view.",
+      "Admin shows players in vents. Don't sit in a vent in a room someone is watching on admin.",
+      "Vitals show DED the instant you kill. Any vitals watcher knows the time of death.",
+      "MIRA doorlog logs your real identity at the three hallway sensors."
+    ],
+    "kill_window_rules": [
+      "Your cooldown resets at meeting end and pauses in vents and on cams.",
+      "A body found right after the cooldown ends points at whoever was alone then.",
+      "Two kills in one cooldown can only be a double kill. Use it only to end the game."
+    ],
+    "chat_rules": [
+      "Give room and companion in one short line before anyone asks.",
+      "Use real room shorthand: elec, nav, comms, admin. Misnamed rooms read as lies.",
+      "Never name a task from another map or a common the lobby doesn't have.",
+      "Ask the crew questions first: who was near the body, who checked vitals."
+    ],
+    "endgame_rules": [
+      "Count: alive crew minus alive impostors. At one kill from winning, sabotage + kill.",
+      "Crew calls 'come watch my scan' at the end: it can be a lure, or a real clear.",
+      "Don't vote with a split crew on a 50/50 you are part of; push a third name."
     ]
   }
 }
