@@ -25,6 +25,7 @@ import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type Consolidate
 import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
+import { translationRequest, senderByIconColor, type ChatPayload } from './eventHelpers';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
 export interface RosterEntry { index: number; name: string; name_confidence: number; color: string; color_delta_e: number; dead: boolean; reporter: boolean; avatar_png?: string; body_rgb?: [number, number, number]; icon_hash?: string; dim?: number }
@@ -72,15 +73,8 @@ export function playedRounds(m: { phase: { phase: string; round: number }; obser
   return m.phase.round >= 0 && (m.observations.length + m.claims.length + m.ejections.length > 0 || Object.values(m.players).some(p => p.status !== 'alive'));
 }
 
-// Quick "is this English already" check so most chat never leaves the machine.
-const EN = new Set(('i im me my you u ur your he she it we they the a an and or but so if not no yes ok okay lol lmao omg bro guys guy who what where when why how was were is are am be been do did does done have has had go went going come came get got see saw seen say said tell told know think thought sus vent vented venting kill killed killer body report reported self button skip vote voted voting imp impostor crew crewmate task tasks fake faking clear clean safe trust with alone there here this that these those on in at to of for from by about near around behind left right up down out over just only also too very really maybe idk dunk hard soft wait stop pls please thanks thx ty gg gl hi hello hey bye yo nah yeah yep nope red blue green pink orange yellow black white purple brown cyan lime maroon rose banana gray grey tan coral cafeteria cafe weapons o2 navigation nav admin storage electrical elec medbay med security sec cams comms shields reactor engine engines upper lower lights sabotage sab doors lab office specimen dropship boiler laboratory communications decontamination cockpit vault records kitchen gap room showers vent vents rounds round meeting emergency last first then now before after dead died die vents saw sees look looked follow followed following chase chased stack stacked group two one three 1 2 3 4 5').split(' '));
-export function looksEnglish(text: string): boolean {
-  const words = text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter(Boolean);
-  if (words.length === 0) return true;
-  if (/[^\x00-\x7f]/.test(text)) return false;      // accents, cyrillic, cjk, arabic → translate
-  const hits = words.filter(w => EN.has(w) || /^\d+$/.test(w)).length;
-  return hits / words.length >= 0.6 || (words.length <= 2 && hits >= 1);
-}
+// looksEnglish lives in ./eventHelpers (script-aware, tested); re-exported for old importers.
+export { looksEnglish } from './eventHelpers';
 
 export function useGameEvents() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -257,22 +251,27 @@ export function useGameEvents() {
       if (merged.length || dropped.length) useMatch.getState().showToast(`${why}: ${[merged.length ? `merged ${merged.join(', ')}` : '', dropped.length ? `dropped ${dropped.join(', ')}` : ''].filter(Boolean).join('; ')}`);
     };
 
-    const translateLine = async (id: string, text: string) => {
-      if (looksEnglish(text)) return;
+    const translateLine = async (id: string, msg: ChatPayload) => {
+      const req = translationRequest(msg);
+      if (!req) return;
+      const { text, from, guess } = req;
       const s = useMatch.getState();
-      const key = text.trim().toLowerCase();
+      const key = `${from ?? ''}|${text.trim().toLowerCase()}`;
       const cached = translated.get(key);
-      if (cached) { s.dispatch({ kind: 'chatPatch', payload: { id, translated: cached.text, lang: cached.lang ?? undefined } }); return; }
+      if (cached) { s.dispatch({ kind: 'chatPatch', payload: { id, translated: cached.text || undefined, lang: cached.lang ?? undefined, ...(guess && cached.text ? { xlatGuess: true } : {}) } }); return; }
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const r = await invoke<{ text: string; detected: string | null; provider: string }>('translate_text', { req: { text, to: 'en' } });
+        const r = await invoke<{ text: string; detected: string | null; provider: string }>('translate_text', { req: { text, to: 'en', ...(from ? { from } : {}) } });
         const lang = r.detected ?? null;
         const changed = r.text.trim().length > 0 && norm(r.text) !== norm(text) && lang !== 'en';
         const result = { text: changed ? r.text : '', lang };
         translated.set(key, result);
         if (translated.size > 300) translated.delete(translated.keys().next().value as string);
-        useMatch.getState().dispatch({ kind: 'chatPatch', payload: { id, translated: changed ? r.text : undefined, lang: lang ?? undefined } });
-      } catch { /* offline or provider down: the original stays */ }
+        useMatch.getState().dispatch({ kind: 'chatPatch', payload: { id, translated: changed ? r.text : undefined, lang: lang ?? undefined, ...(guess && changed ? { xlatGuess: true } : {}) } });
+      } catch (err) {
+        // Offline or provider down: the original stays. Logged so a silent failure is visible in the NDJSON.
+        useMatch.getState().dispatch({ kind: 'diag', payload: { what: 'translateFailed', line: id, error: String(err).slice(0, 200) } });
+      }
     };
 
     (async () => {
@@ -555,12 +554,15 @@ export function useGameEvents() {
         if (s.match && s.match.settings.map !== id) { s.dispatch({ kind: 'settings', payload: { map: id } }); s.showToast(`Map: ${MAPS[id].name} (auto)`); }
       }));
 
-      guard(await listen<{ sender: string; text: string; mine: boolean; system: boolean; y: number; color: string }[]>('game://chat', e => {
+      guard(await listen<ChatPayload[]>('game://chat', e => {
         const s = useMatch.getState();
         if (!s.match) return;
         const meeting = s.match.phase.meeting ?? 0;
+        /** Every bubble the screen showed that does not become a chat line gets a reason in the NDJSON. */
+        const drop = (why: string, msg: ChatPayload) => s.dispatch({ kind: 'diag', payload: { what: 'chatDropped', why, sender: msg.sender, text: msg.text.slice(0, 120) } });
         for (const msg of e.payload) {
-          if (!msg.system && msg.text.trim().length === 0) continue;
+          if (!msg.system && msg.text.trim().length === 0 && !msg.unreadable) { drop('empty', msg); continue; }
+          if (msg.unreadable) s.dispatch({ kind: 'diag', payload: { what: 'chatUnreadable', sender: msg.sender, text: msg.text.slice(0, 120), scriptHint: msg.script_hint ?? null, ocrLang: msg.ocr_lang ?? null, plausibility: msg.plausibility ?? null } });
           // Garbled system lines ("sillynorny nas votea. z remyalmng.") still carry 'vot' + 'rem' fragments.
           const system = msg.system || (/vot/i.test(msg.text) && /rem/i.test(msg.text) && !/(vote|voting) [a-z]/i.test(msg.text)) || /left the game|joined the game/i.test(msg.text);
           if (system) {
@@ -572,12 +574,14 @@ export function useGameEvents() {
           // Re-reads of the same bubble can lose the name line: a long identical text seen recently is a duplicate.
           const recent = m.chat.slice(-25);
           const nt = norm(msg.text);
-          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || (nt.startsWith(o) && o.length >= 12) || similarity(nt, o) >= 0.85; })) continue;
+          if (nt.length >= 12 && recent.some(c => { const o = norm(c.original); return o === nt || o.startsWith(nt) || (nt.startsWith(o) && o.length >= 12) || similarity(nt, o) >= 0.85; })) { drop('duplicate', msg); continue; }
           const others = Object.values(m.players).filter(p => !p.isMe);
           // A bubble whose first line was unreadable yields text that is just the sender's name: not a message.
-          if (msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) continue;
-          if (msg.sender && !msg.mine) msg.sender = resolve(bookRef.current, msg.sender).name;
-          let sender: string = msg.mine ? m.me : (fuzzyFind(msg.sender, others)?.id ?? 'unknown');
+          if (msg.text.trim() && msg.text.split(' ').length <= 2 && fuzzyFind(msg.text, others) && !fuzzyFind(msg.sender, others)) { drop('nameOnly', msg); continue; }
+          if (msg.sender && !msg.mine && msg.sender !== '?') msg.sender = resolve(bookRef.current, msg.sender).name;
+          let sender: string = msg.mine ? m.me : (msg.sender && msg.sender !== '?' ? fuzzyFind(msg.sender, others)?.id ?? 'unknown' : 'unknown');
+          // No readable name line (cut off, or a non-Latin name): the icon colour names the sender when it is unique.
+          if (sender === 'unknown' && !msg.mine && (!msg.sender || msg.sender === '?')) sender = senderByIconColor(msg.color, others) ?? 'unknown';
           if (sender === 'unknown' && msg.color && msg.color !== 'unknown') {
             const byColor = others.filter(p => p.color === msg.color);
             if (byColor.length === 1 && msg.sender && similarity(norm(msg.sender), norm(byColor[0].name)) > 0.4) sender = byColor[0].id;
@@ -609,9 +613,10 @@ export function useGameEvents() {
           }
           const stamp = s.stamp();
           const lineId = newId('ch');
-          s.dispatch({ kind: 'chat', payload: { id: lineId, meeting, stamp, sender, original: msg.text, source: 'ocr' } });
-          if (sender !== m.me) void translateLine(lineId, msg.text);
-          if (sender === 'unknown' || sender === m.me) continue;
+          s.dispatch({ kind: 'chat', payload: { id: lineId, meeting, stamp, sender, original: msg.text, source: 'ocr', ...(msg.unreadable ? { unreadable: true } : {}), ...(msg.script_hint ? { scriptHint: msg.script_hint } : {}), ...(msg.ocr_lang ? { ocrLang: msg.ocr_lang } : {}) } });
+          if (sender !== m.me) void translateLine(lineId, msg);
+          // Garbage OCR must not turn into claims (a misread could "say" anything).
+          if (sender === 'unknown' || sender === m.me || msg.unreadable) continue;
           const parsed = parseChatClaims(msg.text, sender, m);
           for (const b of parsed.filter(x => x.type === 'body' && x.room)) {
             const live = useMatch.getState().match!;
