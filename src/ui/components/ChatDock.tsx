@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMatch } from '../../state/store';
 import { PlayerIcon } from './Crewmate';
 
-export function ChatDock() {
+export function ChatDock({ mini = false }: { mini?: boolean }) {
   const match = useMatch(s => s.match);
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -30,7 +30,7 @@ export function ChatDock() {
   let lastMeeting = -1;
 
   return (
-    <div className={`chat-dock ${open ? 'open' : ''}`} onClick={() => { if (!open) setOpen(true); }}>
+    <div className={`chat-dock ${open ? 'open' : ''} ${mini ? 'mini' : ''}`} onClick={() => { if (!open) setOpen(true); }}>
       <div className="chat-bar" onClick={e => { e.stopPropagation(); setOpen(o => !o); }}>
         <span>{open ? '▾' : '▴'} Chat</span>
         <span className="n">{count === 0 ? 'nothing read yet' : `${count} lines · ${open ? 'click to shrink' : 'click to expand'}`}</span>

@@ -6,6 +6,8 @@ import { verifyClaims } from '../../engine/contradictions';
 import { pushTally } from '../../engine/chatClaims';
 import { PlayerIcon } from './Crewmate';
 import { copyText } from '../clipboard';
+import { headline } from '../../engine/headline';
+import { HeadlineBar } from './HeadlineBar';
 
 function Why({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceItem> }) {
   const [open, setOpen] = useState(false);
@@ -53,12 +55,10 @@ export function MeetingPanel({ script, scores, ghost = false }: { script: Meetin
   const evidence = useMemo(() => new Map(scores.flatMap(s => s.evidence).map(e => [e.id, e])), [scores]);
   const name = (id: string) => (id === 'all' ? 'everyone' : match.players[id]?.name ?? id);
   const target = script.vote.target;
+  const hl = useMemo(() => headline(match, scores), [match, scores]);
   return (
     <section className="panel">
-      <div className="row" style={{ marginBottom: 6 }}>
-        <h3>Meeting {script.meeting + 1}</h3>
-        <span className="small right" style={{ color: '#e6eaf0' }}>{script.headline}</span>
-      </div>
+      <HeadlineBar h={hl} scores={scores} big label={`Meeting ${script.meeting + 1}`} />
       <div className={`vote-card big ${target === 'skip' ? 'skip' : 'go'}`}>
         {target !== 'skip' && <PlayerIcon id={target} color={match.players[target]?.color ?? 'unknown'} size={48} />}
         <div className="col" style={{ gap: 2 }}>
