@@ -118,6 +118,8 @@ export function reduce(m: MatchState, e: MatchEvent): MatchState {
       if (e.payload.auto && m.myRoleLocked) return m; // the user said otherwise
       const me = m.players[m.me];
       const players = me ? { ...m.players, [m.me]: { ...me, knownRole: e.payload.role } } : m.players;
+      // Crew have no partner: a switch to crew drops partner flags (they came from a wrong red-name read).
+      if (e.payload.role === 'crew') for (const p of Object.values(players)) if (p.isPartner) players[p.id] = { ...p, isPartner: false, knownRole: 'unknown' };
       return { ...m, myRole: e.payload.role, myRoleLocked: e.payload.locked ? true : m.myRoleLocked, players };
     }
     case 'me': {

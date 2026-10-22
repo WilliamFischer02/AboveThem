@@ -150,6 +150,7 @@ export function useGameEvents() {
     let pendingSettings: Record<string, unknown> = {};
     let bannerReason: 'body' | 'button' | null = null;
     const lastAutoSighting = new Map<string, number>();
+    const redSeen = new Map<string, number>();
     /** Vote-grid colour votes per player: three agreeing reads change an unlocked colour. */
     const colorVotes = new Map<string, { color: string; n: number }>();
     const translated = new Map<string, { text: string; lang: string | null }>();
@@ -571,9 +572,14 @@ export function useGameEvents() {
         const m = s.match;
         if (!m || m.phase.phase !== 'round') return;
         // Red floating names: only an impostor sees them — on me (role) or on a partner.
+        // A red hat or sign near a label can fake it: act on the second consecutive sighting only.
+        const redNow = new Set(e.payload.filter(r => r.startsWith('!')).map(r => norm(r.slice(1))));
+        for (const k of [...redSeen.keys()]) if (!redNow.has(k)) redSeen.delete(k);
+        for (const k of redNow) redSeen.set(k, (redSeen.get(k) ?? 0) + 1);
         for (const raw of e.payload) {
           if (!raw.startsWith('!')) continue;
           const nm = raw.slice(1);
+          if ((redSeen.get(norm(nm)) ?? 0) < 2) continue;
           const live = useMatch.getState().match!;
           const p = fuzzyFind(nm, Object.values(live.players));
           if (!p) continue;

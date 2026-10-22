@@ -71,4 +71,19 @@ describe('round clock', () => {
     c = clockOnPhase(c, { phase: 'round', wall: 110_000, round: 1 });
     expect(stampAt(c, 112_000)).toMatchObject({ round: 1, t: 12 });
   });
+
+  it('switching myself to crew drops partner flags from a wrong red-name read', () => {
+    const log: MatchEvent[] = [
+      { kind: 'init', wall: 1000, payload: init },
+      { kind: 'myRole', wall: 2000, payload: { role: 'impostor', auto: true } },
+      { kind: 'player', wall: 2001, payload: { id: 'red', isPartner: true, knownRole: 'impostor' } },
+      { kind: 'myRole', wall: 3000, payload: { role: 'crew', locked: true } },
+      { kind: 'myRole', wall: 4000, payload: { role: 'impostor', auto: true } },
+    ];
+    const m = replay(log)!;
+    expect(m.myRole).toBe('crew');
+    expect(m.myRoleLocked).toBe(true);
+    expect(m.players.red.isPartner).toBe(false);
+    expect(m.players.red.knownRole).toBe('unknown');
+  });
 });
