@@ -103,6 +103,12 @@ pub struct WatcherStatus {
     pub frame_seq: u64,
     pub lobby_code: Option<String>,
     pub room: Option<String>,
+    /// Wall ms the loop started / last processed a new frame / stopped (0 = never). Lets the UI say "stopped since".
+    pub started_ms: u64,
+    pub last_frame_ms: u64,
+    pub stopped_ms: u64,
+    /// Panic message if the loop died.
+    pub last_panic: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -272,12 +278,16 @@ pub fn start<R: Runtime>(app: AppHandle<R>, state: &WatcherState, latest: Latest
         // A panic anywhere in the loop (odd frame size, OCR surprise) must not leave `running` stuck at true:
         // the frontend restarts a stopped watcher every 8 s, but never a "running" dead one.
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_loop(app, running.clone(), shared.clone(), latest)));
+        let mut st = shared.lock().unwrap_or_else(|e| e.into_inner());
         if let Err(e) = r {
             let msg = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
             eprintln!("watcher thread panicked: {msg}");
+            st.status.last_panic = Some(msg);
         }
+        st.status.running = false;
+        st.status.stopped_ms = crate::capture::now_ms();
+        drop(st);
         running.store(false, Ordering::SeqCst);
-        shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = false;
     });
     *state.handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
 }
@@ -322,7 +332,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut eject_gone_since: Option<Instant> = None;
     let mut ocr_calls = 0u64;
     let mut last_status_emit = Instant::now();
-    { shared.lock().unwrap_or_else(|e| e.into_inner()).status.running = true; }
+    { let mut s = shared.lock().unwrap_or_else(|e| e.into_inner()); s.status.running = true; s.status.started_ms = crate::capture::now_ms(); s.status.stopped_ms = 0; }
 
     while running.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(200));
@@ -632,6 +642,7 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
             if ocr_ms > 0 { s.status.last_ocr_ms = ocr_ms; }
             s.status.ocr_calls = ocr_calls;
             s.status.frame_seq = frame.seq;
+            s.status.last_frame_ms = crate::capture::now_ms();
             if last_status_emit.elapsed() > Duration::from_millis(1000) {
                 last_status_emit = Instant::now();
                 let _ = app.emit(EV_STATUS, s.status.clone());

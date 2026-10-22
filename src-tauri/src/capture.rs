@@ -28,6 +28,10 @@ pub struct CaptureStatus {
     pub height: u32,
     pub seq: u64,
     pub age_ms: u64,
+    /// Wall ms the current session started (0 = none). A session with no frame long after this is stale.
+    pub started_ms: u64,
+    /// Why the last start failed (window missing, Graphics Capture refused…), cleared by a successful start.
+    pub last_error: Option<String>,
 }
 
 pub fn now_ms() -> u64 {
@@ -113,6 +117,7 @@ pub mod win {
     pub struct Session {
         control: CaptureControl<Handler, HandlerError>,
         pub title: String,
+        pub started_ms: u64,
     }
 
     impl Session {
@@ -152,13 +157,14 @@ pub mod win {
             Ok(c) => c,
             Err(_) => Handler::start_free_threaded(make(DrawBorderSettings::Default)).map_err(|e| format!("capture start failed: {e}"))?,
         };
-        Ok(Session { control, title })
+        Ok(Session { control, title, started_ms: now_ms() })
     }
 }
 
 /// Tauri-managed capture state.
 pub struct CaptureState {
     pub latest: Latest,
+    pub last_error: Mutex<Option<String>>,
     #[cfg(windows)]
     pub session: Mutex<Option<win::Session>>,
 }
@@ -167,6 +173,7 @@ impl Default for CaptureState {
     fn default() -> Self {
         Self {
             latest: Arc::new(Mutex::new(None)),
+            last_error: Mutex::new(None),
             #[cfg(windows)]
             session: Mutex::new(None),
         }
@@ -178,13 +185,14 @@ impl CaptureState {
         let latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
         let (width, height, seq, age_ms) = latest.as_ref().map(|f| (f.width, f.height, f.seq, now_ms().saturating_sub(f.t_wall_ms))).unwrap_or((0, 0, 0, 0));
         #[cfg(windows)]
-        let (running, title) = {
+        let (running, title, started_ms) = {
             let s = self.session.lock().unwrap_or_else(|e| e.into_inner());
-            (s.as_ref().map(|s| !s.is_finished()).unwrap_or(false), s.as_ref().map(|s| s.title.clone()))
+            (s.as_ref().map(|s| !s.is_finished()).unwrap_or(false), s.as_ref().map(|s| s.title.clone()), s.as_ref().map(|s| s.started_ms).unwrap_or(0))
         };
         #[cfg(not(windows))]
-        let (running, title) = (false, None);
-        CaptureStatus { running, title, width, height, seq, age_ms }
+        let (running, title, started_ms) = (false, None, 0);
+        let last_error = self.last_error.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        CaptureStatus { running, title, width, height, seq, age_ms, started_ms, last_error }
     }
 
     pub fn start(&self, title_contains: &str, min_interval_ms: u64) -> Result<CaptureStatus, String> {
@@ -193,7 +201,9 @@ impl CaptureState {
             let mut s = self.session.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(old) = s.take() { old.stop(); }
             *self.latest.lock().unwrap_or_else(|e| e.into_inner()) = None;
-            *s = Some(win::start(title_contains, self.latest.clone(), min_interval_ms)?);
+            let started = win::start(title_contains, self.latest.clone(), min_interval_ms);
+            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = started.as_ref().err().cloned();
+            *s = Some(started?);
             drop(s);
             Ok(self.status())
         }

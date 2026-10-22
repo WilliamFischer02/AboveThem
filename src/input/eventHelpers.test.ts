@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { looksEnglish, translationRequest, unreadableHint, senderByIconColor } from './eventHelpers';
+import { looksEnglish, translationRequest, unreadableHint, senderByIconColor, captureVerdict, watcherStalled } from './eventHelpers';
+
+describe('capture / watcher health', () => {
+  const now = 1_000_000;
+  it('a running session without frames for 20 s is stale; a fresh one is ok', () => {
+    expect(captureVerdict({ running: true, seq: 50, age_ms: 300 }, now)).toBe('ok');
+    expect(captureVerdict({ running: true, seq: 50, age_ms: 25_000 }, now)).toBe('stale');
+    expect(captureVerdict({ running: true, seq: 0, age_ms: 0, started_ms: now - 30_000 }, now)).toBe('stale');
+    expect(captureVerdict({ running: true, seq: 0, age_ms: 0, started_ms: now - 2_000 }, now)).toBe('ok');
+    expect(captureVerdict({ running: true, seq: 0, age_ms: 0 }, now)).toBe('ok'); // old build: no started_ms
+    expect(captureVerdict({ running: false, seq: 9, age_ms: 0 }, now)).toBe('stopped');
+  });
+  it('the watcher is stalled only when capture is fresh and it stopped consuming frames', () => {
+    expect(watcherStalled({ running: true, last_frame_ms: now - 30_000 }, true, now)).toBe(true);
+    expect(watcherStalled({ running: true, last_frame_ms: now - 30_000 }, false, now)).toBe(false);
+    expect(watcherStalled({ running: true, last_frame_ms: now - 1_000 }, true, now)).toBe(false);
+    expect(watcherStalled({ running: false }, true, now)).toBe(false);
+  });
+});
 
 describe('looksEnglish (script-aware)', () => {
   it('keeps everyday English local', () => {

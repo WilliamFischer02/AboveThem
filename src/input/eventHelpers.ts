@@ -56,3 +56,33 @@ export function senderByIconColor(color: string | undefined, others: { id: strin
   const hit = others.filter(p => p.color === color);
   return hit.length === 1 ? hit[0].id : null;
 }
+
+// ---------------------------------------------------------------------------
+// Capture / watcher health (the 8-second poll in useGameEvents)
+// ---------------------------------------------------------------------------
+
+/** `capture_status` as Rust sends it (`started_ms` / `last_error` arrived in session 5). */
+export interface CaptureSnap { running: boolean; seq: number; age_ms: number; started_ms?: number; last_error?: string | null; title?: string | null; width?: number; height?: number }
+
+/** No new frame for this long while "running" = the session is dead in all but name (window re-created,
+ *  Graphics Capture stalled). A minimised game also stops frames; restarting it then is harmless. */
+export const CAPTURE_STALE_MS = 20_000;
+
+export function captureVerdict(st: CaptureSnap, now: number, staleMs = CAPTURE_STALE_MS): 'ok' | 'stale' | 'stopped' {
+  if (!st.running) return 'stopped';
+  if (st.seq === 0) return st.started_ms && now - st.started_ms > staleMs ? 'stale' : 'ok';
+  return st.age_ms > staleMs ? 'stale' : 'ok';
+}
+
+/** Watcher alive but not consuming frames while capture delivers them (stuck OCR, dead loop). */
+export function watcherStalled(w: { running: boolean; last_frame_ms?: number; started_ms?: number }, captureFresh: boolean, now: number, staleMs = CAPTURE_STALE_MS): boolean {
+  if (!w.running || !captureFresh) return false;
+  const last = w.last_frame_ms || w.started_ms || 0;
+  return last > 0 && now - last > staleMs;
+}
+
+/** "01:57" for the status line. */
+export function sinceLabel(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}

@@ -25,7 +25,7 @@ import { consolidate, NAME_MAX, isPlaceholderName, nameQuality, type Consolidate
 import { emptyBook, learnAlias, learnJunk, learnName, isJunk, resolve, snapList, prune, bestReading, type NameBook } from '../engine/nameBook';
 import { newId } from '../state/events';
 import { myRoomNow } from './useHotkeys';
-import { translationRequest, senderByIconColor, type ChatPayload } from './eventHelpers';
+import { translationRequest, senderByIconColor, captureVerdict, watcherStalled, type ChatPayload, type CaptureSnap } from './eventHelpers';
 import { inferMapFromLabels, mapIdFromText } from '../engine/map';
 import type { MapId, MyTask, Phase, Player, PlayerColor, PlayerId, Role } from '../types/game';
 
@@ -100,10 +100,36 @@ export function playedRounds(m: { phase: { phase: string; round: number }; obser
 // looksEnglish lives in ./eventHelpers (script-aware, tested); re-exported for old importers.
 export { looksEnglish } from './eventHelpers';
 
+/** Diagnostics raised while no match is open (capture failing before the game) wait here and are written
+ *  into the next match's NDJSON, so a log always explains how capture got there. */
+const diagQueue: Array<{ what: string; at: number; [k: string]: unknown }> = [];
+function logDiag(payload: { what: string; [k: string]: unknown }) {
+  const s = useMatch.getState();
+  if (s.match) { s.dispatch({ kind: 'diag', payload }); return; }
+  diagQueue.push({ ...payload, at: Date.now() });
+  if (diagQueue.length > 20) diagQueue.shift();
+}
+useMatch.subscribe((st, prev) => {
+  if (st.matchId && st.matchId !== prev.matchId && diagQueue.length) {
+    for (const d of diagQueue.splice(0)) st.dispatch({ kind: 'diag', payload: { ...d, queued: true } });
+  }
+});
+
+/** What the auto layer knows about its own health (AutoStatus shows it). Times are wall ms. */
+export interface AutoHealth {
+  /** Capture was working and then stopped / failed (null while fine or never started). */
+  captureLostAt: number | null;
+  captureError: string | null;
+  /** The watcher thread died / stalled (null while fine). */
+  watcherDownAt: number | null;
+  watcherProblem: string | null;
+}
+
 export function useGameEvents() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [watcher, setWatcher] = useState<WatcherStatus | null>(null);
   const [captureOk, setCaptureOk] = useState<boolean | null>(null);
+  const [health, setHealth] = useState<AutoHealth>({ captureLostAt: null, captureError: null, watcherDownAt: null, watcherProblem: null });
   const [meGuessed, setMeGuessed] = useState(false);
   const [lobbyCode, setLobbyCode] = useState<string | null>(null);
   const resetRosterRef = useRef<() => void>(() => {});
@@ -166,21 +192,61 @@ export function useGameEvents() {
   useEffect(() => {
     if (!isTauri() || !settings?.autoCapture) return;
     let stop = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Capture health across ticks: was it ever working, since when is it lost, last error logged.
+    let everOk = false;
+    let lostAt: number | null = null;
+    let lastErr: string | null = null;
+    let lastRestart = 0;
+    let watcherDown: number | null = null;
     const tick = async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const st = await invoke<{ running: boolean }>('capture_status');
-        if (!st.running) {
-          try { await invoke('capture_start', { title: 'Among Us', minIntervalMs: 200 }); setCaptureOk(true); }
-          catch { setCaptureOk(false); }
-        } else setCaptureOk(true);
-        const w = await invoke<WatcherStatus>('watcher_status');
-        if (!w.running) await invoke('watcher_start');
+        const now = Date.now();
+        const st = await invoke<CaptureSnap>('capture_status');
+        const verdict = captureVerdict(st, now);
+        let ok = verdict === 'ok';
+        // Running but no frames (window re-created by a resolution / borderless toggle, Graphics Capture stalled):
+        // restart it, at most every 30 s.
+        if (verdict === 'stale' && now - lastRestart > 30_000) {
+          lastRestart = now;
+          logDiag({ what: 'captureRestart', why: st.seq === 0 ? 'no frame since start' : 'no new frame', ageMs: st.age_ms, seq: st.seq });
+          await invoke('capture_stop').catch(() => {});
+        }
+        if (verdict !== 'ok') {
+          try {
+            const s2 = await invoke<CaptureSnap>('capture_start', { title: 'Among Us', minIntervalMs: 200 });
+            ok = true;
+            logDiag({ what: 'captureStart', title: s2.title ?? null, after: lostAt ? 'lost' : everOk ? 'restart' : 'first' });
+          } catch (err) {
+            ok = false;
+            const msg = String(err).slice(0, 200);
+            // Every new reason once (a missing window repeats every 8 s; don't flood the log).
+            if (msg !== lastErr) logDiag({ what: 'captureFailed', error: msg, wasRunning: everOk });
+            lastErr = msg;
+          }
+        }
+        if (ok) { everOk = true; lostAt = null; lastErr = null; }
+        else if (everOk && lostAt === null) lostAt = now;
+        setCaptureOk(ok);
+        const w = await invoke<WatcherStatus & { started_ms?: number; last_frame_ms?: number; stopped_ms?: number; last_panic?: string | null }>('watcher_status');
+        let problem: string | null = null;
+        if (!w.running) {
+          if (w.last_panic || w.stopped_ms) logDiag({ what: 'watcherRestart', panic: w.last_panic ?? null, stoppedMs: w.stopped_ms ?? null });
+          if (w.last_panic) problem = `crashed: ${w.last_panic.slice(0, 80)}`;
+          await invoke('watcher_start');
+        } else if (watcherStalled(w, ok && st.age_ms < 5_000, now)) {
+          problem = 'not reading frames';
+          if (watcherDown === null) logDiag({ what: 'watcherStalled', lastFrameMs: w.last_frame_ms ?? null });
+        }
+        watcherDown = problem ? (watcherDown ?? now) : null;
+        const h: AutoHealth = { captureLostAt: lostAt, captureError: ok ? null : lastErr, watcherDownAt: watcherDown, watcherProblem: problem };
+        setHealth(prev => (prev.captureLostAt === h.captureLostAt && prev.captureError === h.captureError && prev.watcherDownAt === h.watcherDownAt && prev.watcherProblem === h.watcherProblem ? prev : h));
       } catch { /* not in tauri */ }
-      if (!stop) setTimeout(tick, 8000);
+      if (!stop) timer = setTimeout(tick, 8000);
     };
     tick();
-    return () => { stop = true; };
+    return () => { stop = true; if (timer) clearTimeout(timer); };
   }, [settings?.autoCapture]);
 
   // Event wiring.
@@ -839,5 +905,5 @@ export function useGameEvents() {
   const learnRemoved = (name: string) => learn(b => learnJunk(b, name, Date.now(), true));
   const nameBook = () => bookRef.current;
 
-  return { settings, setSettings, watcher, captureOk, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster, learnRename, learnRemoved, nameBook };
+  return { settings, setSettings, watcher, captureOk, health, meGuessed, setMeGuessed, lobbyCode, rescanNames, resetRoster, learnRename, learnRemoved, nameBook };
 }
