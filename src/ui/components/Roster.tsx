@@ -22,14 +22,13 @@ import { userMarks } from '../../engine/rules';
 // MERGE: suspicion-core ships the real src/engine/marks.ts (same exports); this branch has a stub.
 import { CLEAR_REASONS, SUS_REASONS, markObservation, markToast, reasonInfo } from '../../engine/marks';
 import { usePref } from '../prefs';
+import { STRIP_MS, stripStep, type Strip, type StripEvent, type StripMode } from '../reasonStrip';
 
 type SusId = (typeof SUS_REASONS)[number]['id'];
 type ClearId = (typeof CLEAR_REASONS)[number]['id'];
 type Reason = SusId | ClearId;
-type StripMode = 'sus' | 'clear';
-interface Strip { player: PlayerId; mode: StripMode; plain: boolean; seq: number }
 
-export const STRIP_MS = 3000;
+export { STRIP_MS };
 export type RosterSort = 'sus' | 'grid';
 
 export function Roster({ scores }: { scores: SuspectScore[] }) {
@@ -50,30 +49,26 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
     observe(markObservation(player, mark, reason) as Parameters<typeof observe>[0], markToast(name, mark, reason));
   }, [observe]);
 
-  /** Close the strip; if it was a pending plain mark, log it. */
-  const settle = useCallback((commitPlain: boolean) => {
-    const s = stripRef.current;
-    if (!s) return;
-    if (commitPlain && s.plain) logMark(s.player, s.mode);
-    stripRef.current = null;
-    setStrip(null);
+  /** Feed one event through the pure strip machine (src/ui/reasonStrip.ts) and log what it says. */
+  const run = useCallback((ev: StripEvent<Reason>) => {
+    const r = stripStep<Reason>(stripRef.current, ev, seq.current + 1);
+    if (r.state && r.state !== stripRef.current) seq.current = r.state.seq;
+    stripRef.current = r.state;
+    setStrip(r.state);
+    for (const mk of r.marks) logMark(mk.player, mk.mark, mk.reason);
   }, [logMark]);
-
-  const openStrip = useCallback((player: PlayerId, mode: StripMode, plain: boolean) => {
-    const cur = stripRef.current;
-    if (cur && cur.player === player && cur.mode === mode) { settle(true); return; } // same button again = plain mark
-    if (cur) settle(cur.player !== player); // another card: the pending mark counts; same card, other button: it was a misclick
-    const next = { player, mode, plain, seq: ++seq.current };
-    stripRef.current = next;
-    setStrip(next);
-  }, [settle]);
+  const currentMark = (player: PlayerId): UserMark | undefined => {
+    const m = useMatch.getState().match;
+    return m ? userMarks(m).get(player)?.mark : undefined;
+  };
 
   // 3-second timeout → plain mark. Keyed on seq so a new strip restarts the clock.
   useEffect(() => {
     if (!strip) return;
-    const t = setTimeout(() => settle(true), STRIP_MS);
+    const s = strip.seq;
+    const t = setTimeout(() => run({ type: 'timeout', seq: s }), STRIP_MS);
     return () => clearTimeout(t);
-  }, [strip?.seq, settle]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [strip?.seq, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Enter = plain mark now; Esc = cancel; 1-9 = pick that reason.
   useEffect(() => {
@@ -82,17 +77,17 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
       if (e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-      if (e.key === 'Enter') { e.preventDefault(); settle(true); }
-      else if (e.key === 'Escape') { e.preventDefault(); settle(false); }
+      if (e.key === 'Enter') { e.preventDefault(); run({ type: 'enter' }); }
+      else if (e.key === 'Escape') { e.preventDefault(); run({ type: 'escape' }); }
       else if (/^[1-9]$/.test(e.key)) {
         const list = strip.mode === 'sus' ? SUS_REASONS : CLEAR_REASONS;
         const r = list[Number(e.key) - 1];
-        if (r) { e.preventDefault(); stripRef.current = null; setStrip(null); logMark(strip.player, strip.mode, r.id); }
+        if (r) { e.preventDefault(); run({ type: 'reason', reason: r.id, current: currentMark(strip.player) }); }
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [strip, settle, logMark]);
+  }, [strip, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match) return null;
 
@@ -148,14 +143,10 @@ export function Roster({ scores }: { scores: SuspectScore[] }) {
               open={open === p.id} onToggle={() => toggle(p.id)} onClose={close}
               prime={p.id === primeId} flashKey={flashFor(p.id)}
               strip={strip && strip.player === p.id ? strip : null}
-              onMarkButton={(mode) => {
-                const cur = mk?.mark;
-                const already = mode === 'sus' ? cur === 'sus' : cur === 'clear' || cur === 'hardClear';
-                openStrip(p.id, mode, !already);
-              }}
-              onReason={(r) => { const s = stripRef.current; stripRef.current = null; setStrip(null); if (s) logMark(s.player, s.mode === 'clear' && mk?.mark === 'hardClear' ? 'hardClear' : s.mode, r); }}
-              onHard={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'hardClear'); }}
-              onUnmark={() => { stripRef.current = null; setStrip(null); logMark(p.id, 'neutral'); }}
+              onMarkButton={(mode: StripMode) => run({ type: 'button', player: p.id, mode, current: mk?.mark })}
+              onReason={(r) => run({ type: 'reason', reason: r, current: mk?.mark })}
+              onHard={() => run({ type: 'hard' })}
+              onUnmark={() => run({ type: 'unmark' })}
             />
           );
         })}
