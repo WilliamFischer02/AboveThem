@@ -181,20 +181,24 @@ pub struct TranslateRes {
     pub provider: String,
 }
 
-/// Translate a chat line into `to`. Source language: the caller's `from`, else whatlang when the
-/// text is long enough, else the provider's own detection. Returns the original text unchanged when
-/// the detected language already is `to`, so the UI can tell "no translation needed" from "failed".
+/// Translate a chat line into `to`. Source language: the caller's `from`, else whatlang (ISO 639-1; on
+/// non-Latin script even for short text), else the provider's own detection. Returns the original text
+/// unchanged when the detected language already is `to`, so the UI can tell "no translation needed" from
+/// "failed". A provider error with an explicit source language is retried once with auto-detection.
 #[tauri::command]
 pub async fn translate_text(req: TranslateReq) -> Result<TranslateRes, String> {
-    let hint = req.from.clone().or_else(|| crate::translate::detect(&req.text));
+    let from = req.from.as_deref().map(str::trim).filter(|f| !f.is_empty() && *f != "auto")
+        .map(|f| crate::translate::iso639_1(f).map(str::to_string).unwrap_or_else(|| f.to_lowercase()));
+    let hint = from.or_else(|| crate::translate::detect(&req.text));
     if hint.as_deref() == Some(req.to.as_str()) {
         return Ok(TranslateRes { text: req.text, detected: hint, provider: "none".into() });
     }
     let provider = crate::translate::current();
-    let t = provider
-        .translate(&req.text, hint.as_deref().unwrap_or("auto"), &req.to)
-        .await
-        .map_err(|e| e.to_string())?;
+    let t = match provider.translate(&req.text, hint.as_deref().unwrap_or("auto"), &req.to).await {
+        Ok(t) => t,
+        Err(_) if hint.is_some() => provider.translate(&req.text, "auto", &req.to).await.map_err(|e| e.to_string())?,
+        Err(e) => return Err(e.to_string()),
+    };
     let detected = t.detected.or(hint);
     Ok(TranslateRes { text: t.text, detected, provider: provider.name().to_string() })
 }

@@ -160,4 +160,21 @@ mod tests {
         assert!(r.lines.is_empty());
         assert!(!available_languages().is_empty());
     }
+
+    /// Manual probe: `ABOVETHEM_OCR_PNG=path cargo test probe_png -- --ignored --nocapture`
+    /// prints what every installed OCR language reads from that image.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn probe_png() {
+        let Ok(path) = std::env::var("ABOVETHEM_OCR_PNG") else { return };
+        let img = image::open(&path).expect("png").to_rgba8();
+        let (w, h) = img.dimensions();
+        let mut bgra = img.into_raw();
+        for px in bgra.chunks_exact_mut(4) { px.swap(0, 2); }
+        for lang in available_languages() {
+            let r = ocr_bgra(&bgra, w, h, Some(&lang)).expect("ocr");
+            for l in &r.lines { println!("[{lang}] y={} h={} {:?}", l.y, l.h, l.text); }
+        }
+    }
 }

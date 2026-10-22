@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::capture::{crop_bgra, upscale_bgra, Frame, Latest};
 use crate::lobby::read_lobby;
-use crate::chat::{read_chat, ChatMsg};
+use crate::chat::{read_chat_detailed, ChatMsg};
 use crate::ocr::{fuzzy_best, ocr_bgra};
 use crate::phase::{Phase, PhaseDetector};
 use crate::regions::{dhash, hamming, Rect, Regions};
@@ -240,6 +240,9 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
     let mut impostor_buttons_seen = false;
     let mut chat_seen: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     let mut last_chat_read = Instant::now() - Duration::from_secs(60);
+    // Unreadable bubbles have no text to dedupe on: (sender, bubble pixel hash), confirmed by two reads.
+    let mut unreadable_seen: std::collections::VecDeque<(String, u64)> = std::collections::VecDeque::new();
+    let mut unreadable_pending: Vec<(String, u64)> = Vec::new();
     let mut me_dead_meeting: Option<u32> = None;
     let mut unknown_since: Option<Instant> = None;
     let mut ocr_calls = 0u64;
@@ -510,16 +513,30 @@ fn run_loop<R: Runtime>(app: AppHandle<R>, running: Arc<AtomicBool>, shared: Arc
                 if let Some((_, t)) = tracks.iter_mut().find(|(k, _)| k == "chat_panel") { t.dirty = false; }
                 let known = shared.lock().unwrap().known_names.clone();
                 let t0 = Instant::now();
-                if let Ok(msgs) = read_chat(&frame, &known) {
+                if let Ok(read) = read_chat_detailed(&frame, &known) {
                     ocr_calls += 1;
                     ocr_ms += t0.elapsed().as_millis() as u64;
-                    let fresh: Vec<ChatMsg> = msgs.into_iter().filter(|m| {
+                    let mut next_pending: Vec<(String, u64)> = Vec::new();
+                    let mut fresh: Vec<ChatMsg> = Vec::new();
+                    for m in read.msgs {
+                        if m.unreadable && m.text.is_empty() {
+                            let same = |(s, h): &(String, u64)| *s == m.sender && hamming(*h, m.bubble_hash) <= 10;
+                            if unreadable_seen.iter().any(same) { continue; }
+                            let confirmed = unreadable_pending.iter().any(same);
+                            next_pending.push((m.sender.clone(), m.bubble_hash));
+                            if !confirmed { continue; } // a bubble mid-scroll / mid-fade can look empty for one frame
+                            unreadable_seen.push_back((m.sender.clone(), m.bubble_hash));
+                            if unreadable_seen.len() > 30 { unreadable_seen.pop_front(); }
+                            fresh.push(m);
+                            continue;
+                        }
                         let key = format!("{}|{}|{}", m.sender, m.text.to_lowercase(), m.system);
-                        if chat_seen.contains(&key) { return false; }
+                        if chat_seen.contains(&key) { continue; }
                         chat_seen.push_back(key);
                         if chat_seen.len() > 60 { chat_seen.pop_front(); }
-                        true
-                    }).collect();
+                        fresh.push(m);
+                    }
+                    unreadable_pending = next_pending;
                     if !fresh.is_empty() { let _ = app.emit(EV_CHAT, fresh); }
                 }
             }
