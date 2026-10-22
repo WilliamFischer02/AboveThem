@@ -3,10 +3,11 @@
  * One small function per rule; each returns EvidenceItem[] with refs to the
  * observations it used. Weights come from data/tactics/weights.json.
  */
-import type { MatchState, EvidenceItem, BodyFoundObs, SightingObs, PlayerId } from '../types/game';
+import type { MatchState, EvidenceItem, BodyFoundObs, SightingObs, PlayerId, MarkReason } from '../types/game';
 import weightsJson from '../data/tactics/weights.json';
 import { isDeadEnd, reachableOnFoot, ventConnected } from './map';
 import { ev, fmt } from './evidence';
+import { markHistory, markLabel, markWeight } from './marks';
 
 const W = weightsJson;
 const roomName = (m: MatchState, r: string) => m.map.rooms.find(x => x.id === r)?.name ?? r;
@@ -19,23 +20,26 @@ const isAlone = (s: SightingObs) => s.alone ?? (!s.withPlayers || s.withPlayers.
 // Manual
 // ---------------------------------------------------------------------------
 
-/** The user's latest mark per player wins (toggling sus → clear → neutral replaces, never stacks). */
-export function userMarks(m: MatchState): Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }> {
-  const out = new Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number }>();
-  for (const o of m.observations) {
-    if (o.type !== 'manualMark') continue;
-    if (o.mark === 'neutral') out.delete(o.player); else out.set(o.player, { mark: o.mark, id: o.id, round: o.stamp.round });
+/** The user's latest mark per player (for the card's mark chip). Scoring uses every mark in force: `markHistory`. */
+export function userMarks(m: MatchState): Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number; reason?: MarkReason }> {
+  const out = new Map<PlayerId, { mark: 'sus' | 'clear' | 'hardClear'; id: string; round: number; reason?: MarkReason }>();
+  for (const [player, list] of markHistory(m)) {
+    const last = list[list.length - 1];
+    out.set(player, { mark: last.mark, id: last.id, round: last.round, reason: last.reason });
   }
   return out;
 }
 
+/** Sus / round-clear marks, one item per distinct reason in force (hard clears are hard facts in suspicion.ts). */
 export function ruleManualMarks(m: MatchState): EvidenceItem[] {
   const out: EvidenceItem[] = [];
-  for (const [player, { mark, id }] of userMarks(m)) {
-    if (mark === 'hardClear') continue; // handled as a hard fact in suspicion.ts
-    const o = m.observations.find(x => x.id === id);
-    const w = (o && o.type === 'manualMark' && o.weight) || (mark === 'sus' ? W.manual.sus : W.manual.clear);
-    out.push(ev(player, w, 'manual', mark === 'sus' ? 'Marked sus by you' : 'Round-cleared by you', [id]));
+  for (const [player, list] of markHistory(m)) {
+    for (const k of list) {
+      if (k.mark === 'hardClear') continue;
+      const e = ev(player, markWeight(k.mark, k.reason, k.weight), 'manual', markLabel(k.mark, k.reason), [k.id]);
+      e.round = k.round;
+      out.push(e);
+    }
   }
   return out;
 }
